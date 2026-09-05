@@ -1,0 +1,42 @@
+# Bí mật — TUYỆT ĐỐI không commit
+.env
+.env.local
+
+# Môi trường ảo Python
+venv/
+.venv/
+env/
+
+# Cache Python
+__pycache__/
+*.pyc
+*.pyo
+*.egg-info/
+
+# CSDL local
+*.db
+*.sqlite
+*.sqlite3
+
+# Cache pytest / ruff / mypy
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+.coverage
+htmlcov/
+
+# Rác sinh ra khi test tay lệnh biên dịch
+*.class
+*.o
+solution
+solution.exe
+
+# IDE / Editor
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Hệ điều hành
+.DS_Store
+Thumbs.db

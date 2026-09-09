@@ -18,10 +18,12 @@ jobs:
         with:
           python-version: "3.11"
       - run: pip install -r requirements.txt
+      - run: pip install -r requirements-dev.txt
+      - name: Lint
+        run: ruff check .
       - name: Kiểm tra app khởi động được
         run: python -c "from app.main import app; print('OK')"
       # TODO: bật lại khi có test thật trong tests
-      # - run: pip install -r requirements-dev.txt
       # - run: pytest
 
   frontend:

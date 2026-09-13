@@ -1,6 +1,10 @@
 from fastapi import FastAPI
 
-app = FastAPI(title="Chấm Code API")
+from app.routers import student
+
+app = FastAPI(title="Leet Code UTC2")
+
+app.include_router(student.router)
 
 @app.get("/")
 def health_check():

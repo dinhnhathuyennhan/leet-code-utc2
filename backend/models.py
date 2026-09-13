@@ -11,6 +11,7 @@ class User(SQLModel, table=True):
     hashed_password: str
     must_change_password: bool = Field(default=False)
     role_id: int  # 1: admin, 2: teacher, 3: student (tùy quy ước của bạn)
+    token_version: int = Field(default=0)
 
     # Quan hệ: 1 giáo viên "create" nhiều course
     created_courses: list["Course"] = Relationship(back_populates="creator")

@@ -35,7 +35,7 @@ target_metadata = SQLModel.metadata
 
 def get_url() -> str:
     return URL.create(
-        drivername="mssql+pymssql",
+        drivername="postgresql+psycopg",
         username=os.getenv("DB_USER"),
         password=os.getenv("DB_PASSWORD"),
         host=os.getenv("DB_SERVER"),

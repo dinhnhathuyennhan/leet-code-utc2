@@ -40,7 +40,9 @@ def get_current_user(
 def require_role(*allowed_role_ids: int):
     def dependency(user: User = Depends(get_current_user)) -> User:
         if user.role_id not in allowed_role_ids:
-            raise HTTPException(status_code=403, detail="Bạn không có quyền thực hiện hành động này")
+            raise HTTPException(
+                status_code=403, detail="Bạn không có quyền thực hiện hành động này"
+            )
         return user
 
     return dependency

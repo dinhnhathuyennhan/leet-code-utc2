@@ -2,6 +2,7 @@ import pytest
 from sqlmodel import Session, SQLModel, create_engine
 from sqlmodel.pool import StaticPool
 
+
 @pytest.fixture
 def session():
     engine = create_engine(

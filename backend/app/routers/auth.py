@@ -10,7 +10,11 @@ from app.services.auth_service import (
     InvalidCredentialsError,
     SamePasswordError,
     WrongCurrentPasswordError,
+)
+from app.services.auth_service import (
     change_password as change_password_service,
+)
+from app.services.auth_service import (
     login as login_service,
 )
 from models import User
@@ -32,7 +36,9 @@ def _set_refresh_token_cookie(response: Response, refresh_token: str) -> None:
 
 
 @router.post("/auth/login", response_model=LoginResponse)
-def login(data: LoginRequest, response: Response, session: Session = Depends(get_session)):
+def login(
+    data: LoginRequest, response: Response, session: Session = Depends(get_session)
+):
     try:
         result, refresh_token = login_service(session, data)
     except InvalidCredentialsError as err:

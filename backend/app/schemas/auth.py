@@ -15,7 +15,6 @@ class LoginRequest(BaseModel):
         return v
 
 
-
 class UserResponse(BaseModel):
     user_id: str
     full_name: str

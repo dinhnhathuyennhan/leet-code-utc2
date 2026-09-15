@@ -1,16 +1,12 @@
 import logging
 
-from fastapi import APIRouter, Depends, HTTPException, Response
+from fastapi import APIRouter, Depends, Response
 from sqlmodel import Session
 
 from app.db import get_session
 from app.dependencies import get_current_user
 from app.schemas.auth import ChangePasswordRequest, LoginRequest, LoginResponse
-from app.services.auth_service import (
-    InvalidCredentialsError,
-    SamePasswordError,
-    WrongCurrentPasswordError,
-)
+
 from app.services.auth_service import (
     change_password as change_password_service,
 )
@@ -39,11 +35,7 @@ def _set_refresh_token_cookie(response: Response, refresh_token: str) -> None:
 def login(
     data: LoginRequest, response: Response, session: Session = Depends(get_session)
 ):
-    try:
-        result, refresh_token = login_service(session, data)
-    except InvalidCredentialsError as err:
-        raise HTTPException(status_code=401, detail=str(err)) from err
-
+    result, refresh_token = login_service(session, data)
     _set_refresh_token_cookie(response, refresh_token)
     return result
 
@@ -55,12 +47,6 @@ def change_password(
     current_user: User = Depends(get_current_user),
     session: Session = Depends(get_session),
 ):
-    try:
-        result, refresh_token = change_password_service(session, current_user, data)
-    except WrongCurrentPasswordError as err:
-        raise HTTPException(status_code=401, detail=str(err)) from err
-    except SamePasswordError as err:
-        raise HTTPException(status_code=400, detail=str(err)) from err
-
+    result, refresh_token = change_password_service(session, current_user, data)
     _set_refresh_token_cookie(response, refresh_token)
     return result

@@ -6,7 +6,6 @@ from sqlmodel import Session
 from app.db import get_session
 from app.dependencies import get_current_user
 from app.schemas.auth import ChangePasswordRequest, LoginRequest, LoginResponse
-
 from app.services.auth_service import (
     change_password as change_password_service,
 )

@@ -11,6 +11,7 @@ from app.schemas.auth import (
 )
 from models import User
 
+
 # Định nghĩa một số Exception riêng cho domain auth
 class InvalidCredentialsError(AppError):
     status_code = 401

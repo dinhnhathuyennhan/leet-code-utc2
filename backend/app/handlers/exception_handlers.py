@@ -15,7 +15,7 @@ async def app_error_handler(request: Request, exc: AppError) -> JSONResponse:
     return JSONResponse(status_code=exc.status_code, content=body.model_dump())
 
 
-# error ngoài phạm vi các exception đã định nghĩa trước đó status_code 500 (INTERNAL_ERROR)
+# error ngoài phạm vi các exception đã định nghĩa trước đó
 async def unhandled_exception_handler(request: Request, exc: Exception) -> JSONResponse:
     # Log đầy đủ để debug nội bộ, không lộ chi tiết ra client
     logger.exception(f"Unhandled error at {request.url.path}")

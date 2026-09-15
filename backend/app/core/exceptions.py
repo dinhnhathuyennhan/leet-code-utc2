@@ -43,7 +43,8 @@ class NotFoundError(AppError):
 
 
 class ConflictError(AppError):
-    """Tài nguyên đã tồn tại hoặc xung đột trạng thái (email đã đăng ký, trùng dữ liệu...)."""
+    """Tài nguyên đã tồn tại hoặc xung đột trạng thái
+    (email đã đăng ký, trùng dữ liệu...)."""
     status_code = 409
     error_code = "CONFLICT"
 

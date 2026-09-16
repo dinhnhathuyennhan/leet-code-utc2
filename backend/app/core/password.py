@@ -1,4 +1,11 @@
+import secrets
+
 import bcrypt
+
+
+def generate_temporary_password(length: int = 12) -> str:
+    """Sinh mật khẩu tạm ngẫu nhiên, URL-safe, dùng cho tài khoản mới/reset."""
+    return secrets.token_urlsafe(length)
 
 
 def hash_password(password: str) -> str:

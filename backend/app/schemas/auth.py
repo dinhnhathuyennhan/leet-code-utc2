@@ -54,3 +54,7 @@ class ChangePasswordRequest(BaseModel):
         if "new_password" in info.data and v != info.data["new_password"]:
             raise PasswordMismatchError("Mật khẩu xác nhận không khớp với mật khẩu mới")
         return v
+
+class AccessTokenResponse(BaseModel):
+    access_token: str
+    token_type: str = "bearer"

@@ -5,6 +5,7 @@ from fastapi.responses import JSONResponse
 
 from app.core.exceptions import AppError
 from app.schemas.error import ErrorResponse
+from app.services.auth_service import SessionRevokedError
 
 logger = logging.getLogger(__name__)
 
@@ -25,8 +26,17 @@ async def unhandled_exception_handler(request: Request, exc: Exception) -> JSONR
     )
     return JSONResponse(status_code=500, content=body.model_dump())
 
+#xử lý riêng cho session revoked(refresh token hết hạn hoặc đã revoked)
+async def session_revoked_handler(
+        request: Request, exc: SessionRevokedError
+) -> JSONResponse:
+    body = ErrorResponse(error_code=exc.error_code, message=exc.message)
+    response = JSONResponse(status_code=exc.status_code, content=body.model_dump())
+    response.delete_cookie(key="refresh_token", path="/auth")
+    return response
 
 # đăng ký globalExceptionHandler tự định nghĩa bởi system với FastAPI (đăng ký tại main)
 def register_exception_handlers(app: FastAPI) -> None:
+    app.add_exception_handler(SessionRevokedError, session_revoked_handler)
     app.add_exception_handler(AppError, app_error_handler)
     app.add_exception_handler(Exception, unhandled_exception_handler)

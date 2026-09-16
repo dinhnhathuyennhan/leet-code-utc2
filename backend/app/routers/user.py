@@ -13,7 +13,7 @@ from app.services.user_service import (
 router = APIRouter()
 
 
-@router.post("/teachers")
+@router.post("users/teachers")
 def create_teacher_route(
     data: CreateTeacherRequest,
     session: Session = Depends(get_session),
@@ -27,7 +27,7 @@ def create_teacher_route(
         raise HTTPException(status_code=400, detail=str(e)) from e
 
 
-@router.post("/students")
+@router.post("users/students")
 def create_student_route(
     data: CreateStudentRequest,
     session: Session = Depends(get_session),

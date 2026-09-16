@@ -1,5 +1,6 @@
 from datetime import date
 
+
 def is_at_least_17(day: int, month: int, year: int) -> bool:
     try:
         birth_date = date(year, month, day)

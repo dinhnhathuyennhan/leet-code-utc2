@@ -1,5 +1,7 @@
-from pydantic import BaseModel, EmailStr, Field, model_validator
 from datetime import date
+
+from pydantic import BaseModel, EmailStr, Field, model_validator
+
 
 class CreateTeacherRequest(BaseModel):
     user_id: str

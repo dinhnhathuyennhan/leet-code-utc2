@@ -1,5 +1,4 @@
 import pytest
-
 from app.schemas.student import StudentCreate
 from app.services.student_service import EmailAlreadyExistsError, create_student
 

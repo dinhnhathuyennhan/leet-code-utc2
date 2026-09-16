@@ -2,7 +2,7 @@ from sqlmodel import Session, select
 
 from app.core.exceptions import AppError
 from app.core.password import hash_password, verify_password
-from app.core.token import create_access_token, create_refresh_token
+from app.core.token import create_access_token, create_refresh_token, decode_token
 from app.schemas.auth import (
     ChangePasswordRequest,
     LoginRequest,
@@ -26,6 +26,15 @@ class WrongCurrentPasswordError(AppError):
 class SamePasswordError(AppError):
     status_code = 400
     error_code = "SAME_PASSWORD"
+
+class SessionExpiredError(AppError):
+    status_code = 401
+    error_code = "SESSION_EXPIRED"
+
+
+class SessionRevokedError(AppError):
+    status_code = 401
+    error_code = "SESSION_REVOKED"
 
 def _build_login_response(user: User) -> tuple[LoginResponse, str]:
     access_token = create_access_token(
@@ -78,3 +87,18 @@ def change_password(
     session.refresh(user)
 
     return _build_login_response(user)
+
+def refresh_access_token(session: Session, refresh_token: str | None) -> str:
+    if not refresh_token:
+        raise SessionExpiredError("Phiên đăng nhập đã hết hạn")
+
+    payload = decode_token(refresh_token)
+    # try:
+    # except TokenError as err:
+    #     raise SessionExpiredError("Phiên đăng nhập đã hết hạn") from err
+
+    user = session.get(User, payload["sub"])
+    if user is None or user.token_version != payload["tv"]:
+        raise SessionRevokedError("Phiên đăng nhập không còn hợp lệ")
+
+    return create_access_token(user.user_id, user.role_id, user.token_version)

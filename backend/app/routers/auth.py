@@ -1,17 +1,22 @@
 import logging
 
-from fastapi import APIRouter, Depends, Response, Request
+from fastapi import APIRouter, Depends, Request, Response
 from sqlmodel import Session
 
 from app.db import get_session
 from app.dependencies import get_current_user
-from app.schemas.auth import ChangePasswordRequest, LoginRequest, LoginResponse, AccessTokenResponse
-from app.services.auth_service import (
-    change_password as change_password_service,
-    refresh_access_token as refresh_access_token_service
+from app.schemas.auth import (
+    AccessTokenResponse,
+    ChangePasswordRequest,
+    LoginRequest,
+    LoginResponse,
 )
+from app.services.auth_service import change_password as change_password_service
 from app.services.auth_service import (
     login as login_service,
+)
+from app.services.auth_service import (
+    refresh_access_token as refresh_access_token_service,
 )
 from models import User
 

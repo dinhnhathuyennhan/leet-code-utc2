@@ -1,5 +1,6 @@
 from sqlmodel import Session, select
 
+from app.core.exceptions import AppError
 from app.core.password import hash_password, verify_password
 from app.core.token import create_access_token, create_refresh_token
 from app.schemas.auth import (
@@ -11,17 +12,20 @@ from app.schemas.auth import (
 from models import User
 
 
-class InvalidCredentialsError(Exception):
-    """Email hoặc mật khẩu đăng nhập không đúng."""
+# Định nghĩa một số Exception riêng cho domain auth
+class InvalidCredentialsError(AppError):
+    status_code = 401
+    error_code = "INVALID_CREDENTIALS"
 
 
-class WrongCurrentPasswordError(Exception):
-    """Mật khẩu hiện tại không đúng."""
+class WrongCurrentPasswordError(AppError):
+    status_code = 401
+    error_code = "WRONG_PASSWORD"
 
 
-class SamePasswordError(Exception):
-    """Mật khẩu mới trùng mật khẩu hiện tại."""
-
+class SamePasswordError(AppError):
+    status_code = 400
+    error_code = "SAME_PASSWORD"
 
 def _build_login_response(user: User) -> tuple[LoginResponse, str]:
     access_token = create_access_token(

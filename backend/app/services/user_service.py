@@ -1,6 +1,6 @@
 from sqlmodel import Session, select
 
-from app.core.date import is_at_least_17
+from app.core.date import is_at_least_17, is_at_least_22
 from app.core.exceptions import AppError
 from app.core.password import hash_password
 from app.schemas.user import (
@@ -27,12 +27,12 @@ def create_teacher(session: Session, data: CreateTeacherRequest) -> User:
     if existing:
         raise EmailAlreadyExistsError("Email đã được đăng ký")
 
-    if not is_at_least_17(
+    if not is_at_least_22(
         data.date_of_birth.day,
         data.date_of_birth.month,
         data.date_of_birth.year,
     ):
-        raise DateOfBirthRequiredError("Người dùng phải đủ 17 tuổi")
+        raise DateOfBirthRequiredError("Người dùng phải đủ 22 tuổi")
 
     if data.password is None:
         password = password_from_date(data.date_of_birth)

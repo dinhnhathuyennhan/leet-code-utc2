@@ -1,41 +1,30 @@
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends
 from sqlmodel import Session
 
 from app.db import get_session
-from app.schemas.user import CreateStudentRequest, CreateTeacherRequest
+from app.schemas.user import CreateStudentRequest, CreateTeacherRequest, UserResponse
 from app.services.user_service import (
-    DateOfBirthRequiredError,
-    EmailAlreadyExistsError,
     create_student,
     create_teacher,
+    user_response,
 )
 
 router = APIRouter()
 
 
-@router.post("users/teachers")
+@router.post("/teachers", response_model=UserResponse)
 def create_teacher_route(
     data: CreateTeacherRequest,
     session: Session = Depends(get_session),
 ):
-    try:
-        teacher = create_teacher(session, data)
-        return {"message": "Teacher created successfully", "teacher": teacher}
-    except EmailAlreadyExistsError as e:
-        raise HTTPException(status_code=400, detail=str(e)) from e
-    except DateOfBirthRequiredError as e:
-        raise HTTPException(status_code=400, detail=str(e)) from e
+    teacher = create_teacher(session, data)
+    return user_response(teacher)
 
 
-@router.post("users/students")
+@router.post("/students", response_model=UserResponse)
 def create_student_route(
     data: CreateStudentRequest,
     session: Session = Depends(get_session),
 ):
-    try:
-        student = create_student(session, data)
-        return {"message": "Student created successfully", "student": student}
-    except EmailAlreadyExistsError as e:
-        raise HTTPException(status_code=400, detail=str(e)) from e
-    except DateOfBirthRequiredError as e:
-        raise HTTPException(status_code=400, detail=str(e)) from e
+    student = create_student(session, data)
+    return user_response(student)

@@ -5,7 +5,7 @@ from app.routers import auth, user
 
 app = FastAPI(title="Leet Code UTC2")
 
-app.include_router(user.router, prefix="/users", tags=["users"])
+app.include_router(user.router, tags=["users"])
 app.include_router(auth.router)
 
 register_exception_handlers(app)

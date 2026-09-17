@@ -7,7 +7,7 @@ from app.services.user_service import (
     UserNotFoundError,
     reset_password,
 )
-from models import User
+from models import Course, Enrollment, User
 
 
 def make_user(
@@ -60,6 +60,26 @@ def test_reset_password_teacher_can_reset_student(session):
         session, "student2", "student2@example.com", Role.STUDENT, password="abc12345"
     )
 
+    # Setup: tạo lớp do giáo viên quản lý và cho sinh viên vào lớp đó
+    from datetime import datetime, timedelta
+
+    course = Course(
+        course_id="course1",
+        course_name="Course 1",
+        created_by=teacher.user_id,
+        term="2026",
+        start_date=datetime.now(),
+        end_date=datetime.now() + timedelta(days=30),
+        total_number_student=1,
+    )
+    session.add(course)
+    session.commit()
+    session.refresh(course)
+
+    enrollment = Enrollment(course_id=course.course_id, student_id=student.user_id)
+    session.add(enrollment)
+    session.commit()
+
     _, temporary_password = reset_password(session, teacher, student.user_id)
 
     session.refresh(student)
@@ -106,3 +126,69 @@ def test_reset_password_increments_token_version_each_time(session):
     reset_password(session, admin, target.user_id)
     session.refresh(target)
     assert target.token_version == 2
+
+
+def test_reset_password_teacher_cannot_reset_student_outside_their_class(session):
+    """Giáo viên CHỈ được reset sinh viên trong lớp mình quản lý,
+    sinh viên ngoài lớp thì bị chặn."""
+    from datetime import datetime, timedelta
+
+    teacher = make_user(session, "teacher5", "teacher5@example.com", Role.TEACHER)
+    other_teacher = make_user(
+        session, "teacher6", "teacher6@example.com", Role.TEACHER
+    )
+    student = make_user(
+        session, "student4", "student4@example.com", Role.STUDENT, password="abc12345"
+    )
+
+    # Tạo lớp do giáo viên KHÁC quản lý, gán sinh viên vào đó
+    course = Course(
+        course_id="course-other",
+        course_name="Other Course",
+        created_by=other_teacher.user_id,
+        term="2026",
+        start_date=datetime.now(),
+        end_date=datetime.now() + timedelta(days=30),
+        total_number_student=1,
+    )
+    session.add(course)
+    session.commit()
+    session.refresh(course)
+
+    enrollment = Enrollment(course_id=course.course_id, student_id=student.user_id)
+    session.add(enrollment)
+    session.commit()
+
+    # teacher5 không quản lý lớp này → bị chặn
+    with pytest.raises(NotAllowedToResetError):
+        reset_password(session, teacher, student.user_id)
+
+
+def test_reset_password_student_is_blocked_completely(session):
+    """Sinh viên bị chặn hoàn toàn — không reset được bất kỳ ai."""
+    student_a = make_user(
+        session, "student_a", "student_a@example.com", Role.STUDENT
+    )
+    student_b = make_user(
+        session, "student_b", "student_b@example.com", Role.STUDENT
+    )
+    teacher = make_user(session, "teacher7", "teacher7@example.com", Role.TEACHER)
+    admin = make_user(session, "admin5", "admin5@example.com", Role.ADMIN)
+
+    # Sinh viên không reset được sinh viên khác
+    with pytest.raises(NotAllowedToResetError):
+        reset_password(session, student_a, student_b.user_id)
+    # Sinh viên không reset được giáo viên
+    with pytest.raises(NotAllowedToResetError):
+        reset_password(session, student_a, teacher.user_id)
+    # Sinh viên không reset được admin
+    with pytest.raises(NotAllowedToResetError):
+        reset_password(session, student_a, admin.user_id)
+
+
+def test_reset_password_teacher_cannot_reset_self(session):
+    """Giáo viên không được tự reset mật khẩu của mình."""
+    teacher = make_user(session, "teacher8", "teacher8@example.com", Role.TEACHER)
+
+    with pytest.raises(NotAllowedToResetError):
+        reset_password(session, teacher, teacher.user_id)

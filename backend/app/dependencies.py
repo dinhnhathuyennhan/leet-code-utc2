@@ -1,7 +1,8 @@
-from fastapi import Depends, HTTPException
+from fastapi import Depends
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from sqlmodel import Session
 
+from app.core.exceptions import ForbiddenError, UnauthorizedError
 from app.core.token import decode_token
 from app.db import get_session
 from models import User
@@ -22,17 +23,17 @@ def get_current_user(
     try:
         payload = decode_token(credentials.credentials)
     except Exception:
-        raise HTTPException(status_code=401, detail="Token không hợp lệ") from None
+        raise UnauthorizedError("Token không hợp lệ") from None
 
     if payload.get("type") != "access":
-        raise HTTPException(status_code=401, detail="Token không hợp lệ")
+        raise UnauthorizedError("Token không hợp lệ")
 
     user = session.get(User, payload.get("sub"))
     if user is None:
-        raise HTTPException(status_code=401, detail="Token không hợp lệ")
+        raise UnauthorizedError("Token không hợp lệ")
 
     if payload.get("tv") != user.token_version:
-        raise HTTPException(status_code=401, detail="Phiên đăng nhập đã hết hạn")
+        raise UnauthorizedError("Phiên đăng nhập đã hết hạn")
 
     return user
 
@@ -40,7 +41,7 @@ def get_current_user(
 def require_role(*allowed_role_ids: int):
     def dependency(user: User = Depends(get_current_user)) -> User:
         if user.role_id not in allowed_role_ids:
-            raise HTTPException(status_code=403, detail="Bạn không có quyền thực hiện hành động này")
+            raise ForbiddenError("Bạn không có quyền thực hiện hành động này")
         return user
 
     return dependency

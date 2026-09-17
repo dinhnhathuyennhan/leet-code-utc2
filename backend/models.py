@@ -7,6 +7,8 @@ from sqlmodel import Field, Relationship, SQLModel
 class User(SQLModel, table=True):
     user_id: str = Field(primary_key=True, max_length=50)
     full_name: str
+    avt_link: str | None = Field(default=None, max_length=2048)
+    date_of_birth: date | None = None
     email: str = Field(unique=True, index=True, max_length=255)
     hashed_password: str
     must_change_password: bool = Field(default=False)
@@ -25,6 +27,7 @@ class User(SQLModel, table=True):
 class Course(SQLModel, table=True):
     course_id: str = Field(primary_key=True, max_length=50)
     course_name: str
+    avt_link: str | None = Field(default=None, max_length=2048)
     created_by: str = Field(foreign_key="user.user_id", max_length=50)
     term: str
     start_date: datetime

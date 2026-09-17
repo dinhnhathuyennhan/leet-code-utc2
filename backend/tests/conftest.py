@@ -2,6 +2,8 @@ import pytest
 from sqlmodel import Session, SQLModel, create_engine
 from sqlmodel.pool import StaticPool
 
+import models  # noqa: F401
+
 
 @pytest.fixture
 def session():

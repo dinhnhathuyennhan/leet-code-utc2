@@ -1,4 +1,4 @@
-# Thiết kế API
+# Thiết kế API — Auth & Quản lý tài khoản
 
 ## POST /teachers — Cấp phát tài khoản Giáo viên
 

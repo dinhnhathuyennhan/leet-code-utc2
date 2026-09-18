@@ -1,9 +1,9 @@
 import os
 from datetime import UTC, datetime, timedelta
-from pathlib import Path #mới thêm
+from pathlib import Path  # mới thêm
 
 import jwt
-from dotenv import load_dotenv #mới thêm
+from dotenv import load_dotenv  # mới thêm
 
 load_dotenv(Path(__file__).resolve().parents[2] / ".env") #mới thêm
 JWT_SECRET_KEY = os.getenv("JWT_SECRET_KEY")

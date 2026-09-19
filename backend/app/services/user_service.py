@@ -1,6 +1,6 @@
 from sqlmodel import Session, select
 
-from app.core.date import is_at_least_17, is_at_least_22
+from app.core.date import age_calculation
 from app.core.exceptions import AppError
 from app.core.password import hash_password
 from app.schemas.user import (
@@ -27,23 +27,20 @@ def create_teacher(session: Session, data: CreateTeacherRequest) -> User:
     if existing:
         raise EmailAlreadyExistsError("Email đã được đăng ký")
 
-    if not is_at_least_22(
+    age = age_calculation(
         data.date_of_birth.day,
         data.date_of_birth.month,
         data.date_of_birth.year,
-    ):
-        raise DateOfBirthRequiredError("Người dùng phải đủ 22 tuổi")
+    )
 
-    if data.password is None:
-        password = password_from_date(data.date_of_birth)
-    else:
-        password = data.password
+    if age < 22:
+        raise DateOfBirthRequiredError("Người dùng phải đủ 22 tuổi")
 
     teacher = User(
         user_id=data.user_id,
         full_name=data.full_name,
         email=data.email,
-        hashed_password=hash_password(password),
+        hashed_password=hash_password(password_from_date(data.date_of_birth)),
         must_change_password=True,
         date_of_birth=data.date_of_birth,
         avt_link=data.avt_link,
@@ -60,24 +57,20 @@ def create_student(session: Session, data: CreateStudentRequest) -> User:
     if existing:
         raise EmailAlreadyExistsError("Email đã được đăng ký")
 
-    if not is_at_least_17(
+    age = age_calculation(
         data.date_of_birth.day,
         data.date_of_birth.month,
         data.date_of_birth.year,
-    ):
+    )
+
+    if age < 17:
         raise DateOfBirthRequiredError("Người dùng phải đủ 17 tuổi")
-
-    if data.password is None:
-
-        password = password_from_date(data.date_of_birth)
-    else:
-        password = data.password
 
     student = User(
         user_id=data.user_id,
         full_name=data.full_name,
         email=data.email,
-        hashed_password=hash_password(password),
+        hashed_password=hash_password(password_from_date(data.date_of_birth)),
         must_change_password=True,
         date_of_birth=data.date_of_birth,
         avt_link=data.avt_link,

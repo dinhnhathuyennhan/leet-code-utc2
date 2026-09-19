@@ -3,10 +3,8 @@ from datetime import date, datetime
 from pydantic import (
     BaseModel,
     EmailStr,
-    Field,
     field_serializer,
     field_validator,
-    model_validator,
 )
 
 
@@ -33,7 +31,6 @@ class CreateTeacherRequest(BaseModel):
     date_of_birth: date
     email: EmailStr
     avt_link: str | None = None
-    password: str | None = Field(default=None, min_length=8)
 
     @field_validator("date_of_birth", mode="before")
     @classmethod
@@ -47,19 +44,11 @@ class CreateStudentRequest(BaseModel):
     date_of_birth: date
     email: EmailStr
     avt_link: str | None = None
-    password: str | None = None
 
     @field_validator("date_of_birth", mode="before")
     @classmethod
     def validate_date_of_birth(cls, value: date | str) -> date:
         return parse_date_of_birth(value)
-
-    @model_validator(mode="after")
-    def create_password(self):
-        if self.password is None:
-            self.password = password_from_date(self.date_of_birth)
-        return self
-
 
 class UserResponse(BaseModel):
     user_id: str

@@ -61,3 +61,10 @@ class UserResponse(BaseModel):
     def serialize_date_of_birth(self, value: date) -> str:
         return value.strftime("%d/%m/%Y")
 
+
+class UserResetPasswordResponse(BaseModel):
+    """Response cho API đặt lại mật khẩu của một tài khoản."""
+
+    user_id: str
+    temporary_password: str
+

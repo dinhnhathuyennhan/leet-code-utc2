@@ -29,8 +29,8 @@ jobs:
         run: ruff check .
       - name: Kiểm tra app khởi động được
         run: python -c "from app.main import app; print('OK')"
-      # TODO: bật lại khi có test thật trong tests
-      # - run: pytest
+      - name: Chạy pytest
+        run: pytest
 
   frontend:
     runs-on: ubuntu-latest

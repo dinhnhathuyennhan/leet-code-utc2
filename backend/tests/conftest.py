@@ -1,6 +1,11 @@
+import sys
+from pathlib import Path
+
 import pytest
 from sqlmodel import Session, SQLModel, create_engine
 from sqlmodel.pool import StaticPool
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 import models  # noqa: F401
 

@@ -1,11 +1,15 @@
-from fastapi import FastAPI
+from dotenv import load_dotenv
 
-from app.handlers.exception_handlers import register_exception_handlers
-from app.routers import auth, user
+load_dotenv()
 
-app = FastAPI(title="Leet Code UTC2")
+from fastapi import FastAPI  # noqa: E402
 
-app.include_router(user.router, prefix="/users", tags=["users"])
+from app.handlers.exception_handlers import register_exception_handlers  # noqa: E402
+from app.routers import auth, user  # noqa: E402
+
+app = FastAPI()
+
+app.include_router(user.router)
 app.include_router(auth.router)
 
 register_exception_handlers(app)

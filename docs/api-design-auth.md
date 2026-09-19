@@ -1,4 +1,4 @@
-# Thiết kế API
+# Thiết kế API — Auth & Quản lý tài khoản
 
 ## POST /teachers — Cấp phát tài khoản Giáo viên
 
@@ -6,8 +6,11 @@
 
 | Field | Kiểu | Bắt buộc | Ghi chú |
 |---|---|---|---|
+| user_id | string | có | |
 | full_name | string | có | |
+| date_of_birth | date | có | định dạng `dd/mm/yyyy` hoặc `yyyy-mm-dd` |
 | email | string (email) | có | phải đúng định dạng email |
+| avt_link | string | không | |
 
 **Response 201 Created**
 
@@ -17,6 +20,7 @@
 | full_name | string | |
 | email | string | |
 | role_id | int | luôn = 2 |
+| date_of_birth | date | |
 | temporary_password | string | mật khẩu tạm, chỉ trả về đúng 1 lần lúc tạo |
 
 **Response lỗi**
@@ -24,13 +28,15 @@
 | Status | Khi nào | Body |
 |---|---|---|
 | 422 | Sai định dạng email / thiếu field | (FastAPI tự sinh) |
+| 422 | Chưa đủ tuổi theo `date_of_birth` (use-case bước 5a) | `{"detail": "Người dùng phải đủ 17 tuổi"}` |
 | 400 | Email đã tồn tại (use-case bước 6a) | `{"detail": "Email đã tồn tại"}` |
 
 **Quy tắc nghiệp vụ** (từ Basic flow use-case)
 
 - `role_id` luôn cố định = 2, không nhận từ client.
 - `must_change_password` luôn = true khi tạo.
-- Mật khẩu tạm sinh ngẫu nhiên phía server, không cho client truyền vào.
+- Người được cấp tài khoản phải đủ 17 tuổi trở lên, tính từ `date_of_birth`.
+- Mật khẩu tạm sinh hoàn toàn phía server theo ngày sinh, định dạng `ddmmyyyy` (ví dụ `date_of_birth = 15/05/1990` → mật khẩu tạm `15051990`). Client không truyền và không thể ghi đè mật khẩu.
 - Không trả `hashed_password` trong response.
 - **Yêu cầu quyền**: chỉ Admin (khi Auth hoàn thiện, endpoint này cần `require_role(Role.ADMIN)`).
 
@@ -40,8 +46,11 @@
 
 | Field | Kiểu | Bắt buộc | Ghi chú |
 |---|---|---|---|
+| user_id | string | có | |
 | full_name | string | có | |
+| date_of_birth | date | có | định dạng `dd/mm/yyyy` hoặc `yyyy-mm-dd` |
 | email | string (email) | có | phải đúng định dạng email |
+| avt_link | string | không | |
 
 **Response 201 Created**
 
@@ -51,6 +60,7 @@
 | full_name | string | |
 | email | string | |
 | role_id | int | luôn = 3 |
+| date_of_birth | date | |
 | temporary_password | string | mật khẩu tạm, chỉ trả về đúng 1 lần lúc tạo |
 
 **Response lỗi**
@@ -58,13 +68,15 @@
 | Status | Khi nào | Body |
 |---|---|---|
 | 422 | Sai định dạng email / thiếu field | (FastAPI tự sinh) |
+| 422 | Chưa đủ tuổi theo `date_of_birth` (use-case bước 5a) | `{"detail": "Người dùng phải đủ 17 tuổi"}` |
 | 400 | Email đã tồn tại (use-case bước 6a) | `{"detail": "Email đã tồn tại"}` |
 
 **Quy tắc nghiệp vụ**
 
 - `role_id` luôn cố định = 3, không nhận từ client.
 - `must_change_password` luôn = true khi tạo.
-- Mật khẩu tạm sinh ngẫu nhiên phía server.
+- Người được cấp tài khoản phải đủ 17 tuổi trở lên, tính từ `date_of_birth`.
+- Mật khẩu tạm sinh hoàn toàn phía server theo ngày sinh, định dạng `ddmmyyyy` (ví dụ `date_of_birth = 15/05/1990` → mật khẩu tạm `15051990`). Client không truyền và không thể ghi đè mật khẩu.
 - Không trả `hashed_password` trong response.
 - **Yêu cầu quyền**: Admin hoặc Teacher (`require_role(Role.ADMIN, Role.TEACHER)`).
 
@@ -74,7 +86,7 @@
 
 | Field | Kiểu | Bắt buộc | Ghi chú |
 |---|---|---|---|
-| file | file (.xlsx) | có | đúng cấu trúc mẫu: cột `full_name`, `email` |
+| file | file (.xlsx) | có | đúng cấu trúc mẫu: cột `full_name`, `date_of_birth`, `email` |
 
 **Response 201 Created** — tổng hợp kết quả xử lý từng dòng
 
@@ -93,7 +105,7 @@
 **Quy tắc nghiệp vụ**
 
 - Xử lý "best-effort": dòng hợp lệ vẫn tạo tài khoản, dòng lỗi bị bỏ qua và liệt kê lại trong `errors` — không trả lỗi HTTP cho toàn bộ request chỉ vì có dòng lỗi (kể cả khi `created` rỗng toàn bộ, vẫn trả 201 kèm `errors` đầy đủ, đúng use-case E1 "không có tài khoản nào được tạo" — không coi là lỗi request).
-- Mỗi dòng hợp lệ: `role_id = 3`, `must_change_password = true`, sinh mật khẩu tạm riêng.
+- Mỗi dòng hợp lệ: `role_id = 3`, `must_change_password = true`, mật khẩu tạm sinh theo ngày sinh (`date_of_birth`) của chính dòng đó, định dạng `ddmmyyyy`.
 - **Yêu cầu quyền**: Admin hoặc Teacher.
 
 ## POST /users/{user_id}/reset-password — Đặt lại mật khẩu
@@ -116,6 +128,7 @@
 
 **Quy tắc nghiệp vụ**
 
+- Mật khẩu tạm mới sinh lại theo `date_of_birth` hiện có của tài khoản mục tiêu (định dạng `ddmmyyyy`), không sinh ngẫu nhiên.
 - Đặt `must_change_password = true`, tăng `token_version` (vô hiệu hoá toàn bộ token cũ của tài khoản mục tiêu).
 - **Yêu cầu quyền**: Admin (mọi tài khoản) hoặc Teacher (chỉ tài khoản `role_id = 3`).
 
@@ -147,7 +160,7 @@
 
 **Quy tắc nghiệp vụ**
 
-- `access_token`/`refresh_token` đều nhúng claim `tv` (token_version hiện tại của tài khoản).
+- `access_token`/`refresh_token` đều nhúng claim `tv` (token_version hiện tại của tài khoản) và claim `type` (`"access"` hoặc `"refresh"`) để phân biệt 2 loại token — server phải kiểm tra đúng `type` tương ứng ở từng endpoint, không chấp nhận lẫn loại token.
 - Client dựa vào `user.must_change_password` để tự điều hướng sang trang đổi mật khẩu.
 - **Yêu cầu quyền**: không (public, ai cũng gọi được).
 
@@ -208,9 +221,10 @@ Cookie `refresh_token` giữ nguyên (không rotate).
 | Status | Khi nào | Body |
 |---|---|---|
 | 401 | Cookie thiếu, sai chữ ký hoặc hết hạn (use-case 2a) | `{"detail": "Phiên đăng nhập đã hết hạn"}` |
-| 401 | `token_version` trong token không khớp database — đã bị thu hồi (use-case 3a) | `{"detail": "Phiên đăng nhập không còn hợp lệ"}`, đồng thời xoá cookie hiện tại |
+| 401 | `token_version` trong token không khớp database — đã bị thu hồi, hoặc claim `type` trong token không phải `"refresh"` (ví dụ truyền nhầm access token) (use-case 3a) | `{"detail": "Phiên đăng nhập không còn hợp lệ"}`, đồng thời xoá cookie hiện tại |
 
 **Quy tắc nghiệp vụ**
 
 - Không rotate refresh token — chỉ cấp access token mới.
+- Server phải kiểm tra claim `type` của token trong cookie `refresh_token` đúng là `"refresh"` trước khi cấp access token mới — không chấp nhận access token (`type = "access"`) dùng thay refresh token.
 - **Yêu cầu quyền**: cookie `refresh_token` hợp lệ (không cần access token).

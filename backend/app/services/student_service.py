@@ -13,6 +13,8 @@ Hiện tại gồm:
       (xem ``app.schemas.user.password_from_date``).
 """
 
+from datetime import date as _date
+from datetime import datetime as _datetime
 from io import BytesIO
 
 from openpyxl import load_workbook
@@ -127,33 +129,49 @@ def _parse_excel(
     parsed: list[tuple[int, str, str, str, str]] = []
     for row_index, row in enumerate(data_rows, start=2):
         user_id_value = (
-            str(row[column_indexes["user_id"]]).strip()
+            _cell_to_string(row[column_indexes["user_id"]])
             if column_indexes["user_id"] < len(row)
-            and row[column_indexes["user_id"]] is not None
             else ""
         )
         full_name_value = (
-            str(row[column_indexes["full_name"]]).strip()
+            _cell_to_string(row[column_indexes["full_name"]])
             if column_indexes["full_name"] < len(row)
-            and row[column_indexes["full_name"]] is not None
             else ""
         )
         date_value = (
-            str(row[column_indexes["date_of_birth"]]).strip()
+            _cell_to_string(row[column_indexes["date_of_birth"]])
             if column_indexes["date_of_birth"] < len(row)
-            and row[column_indexes["date_of_birth"]] is not None
             else ""
         )
         email_value = (
-            str(row[column_indexes["email"]]).strip()
+            _cell_to_string(row[column_indexes["email"]])
             if column_indexes["email"] < len(row)
-            and row[column_indexes["email"]] is not None
             else ""
         )
         parsed.append(
             (row_index, user_id_value, full_name_value, date_value, email_value)
         )
     return parsed
+
+
+def _cell_to_string(cell_value) -> str:
+    """Chuẩn hoá một ô Excel thành chuỗi để truyền cho các bước validate.
+
+    openpyxl trả về kiểu dữ liệu phụ thuộc vào định dạng ô:
+        - Ô format ``Date``: trả về ``datetime.datetime`` hoặc ``datetime.date``.
+          ``str(datetime)`` cho ra ``"yyyy-mm-dd hh:mm:ss"`` không khớp với
+          ``parse_date_of_birth`` (chỉ nhận ``dd/mm/yyyy`` hoặc ``yyyy-mm-dd``),
+          nên ta phải gọi ``.date().isoformat()`` để ra đúng ``yyyy-mm-dd``.
+        - Ô text / số: trả về chuỗi ``str(value).strip()`` như cũ.
+        - Ô rỗng (``None``): trả về ``""``.
+    """
+    if cell_value is None:
+        return ""
+    if isinstance(cell_value, _datetime):
+        return cell_value.date().isoformat()
+    if isinstance(cell_value, _date):
+        return cell_value.isoformat()
+    return str(cell_value).strip()
 
 
 def _validate_row(

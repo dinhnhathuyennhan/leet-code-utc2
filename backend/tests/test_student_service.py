@@ -80,6 +80,66 @@ def test_import_students_accepts_iso_date_of_birth(session):
     assert response.created[0].temporary_password == "31082005"
 
 
+def _build_xlsx_with_typed_cells(
+    rows: list[tuple[object, object, object, object]],
+    header: tuple[str, ...] = ("user_id", "full_name", "date_of_birth", "email"),
+) -> bytes:
+    """Tạo file .xlsx cho phép truyền cell với kiểu dữ liệu tuỳ ý."""
+    wb = Workbook()
+    ws = wb.active
+    ws.append(list(header))
+    for row in rows:
+        ws.append(list(row))
+    from io import BytesIO
+
+    buffer = BytesIO()
+    wb.save(buffer)
+    return buffer.getvalue()
+
+
+def test_import_students_accepts_excel_date_cell_format(session):
+    """Khi cột date_of_birth được định dạng kiểu Date trong Excel, openpyxl trả về
+    ``datetime.date`` thay vì chuỗi — service vẫn phải parse đúng và sinh
+    mật khẩu ddmmyyyy."""
+    from datetime import date as _date
+
+    contents = _build_xlsx_with_typed_cells(
+        [
+            ("sv_dt", "Nguyen Van Date", _date(2005, 8, 31), "sv_dt@st.utc2.edu.vn"),
+        ]
+    )
+
+    response = import_students(session, contents, "students.xlsx")
+
+    assert response.errors == []
+    assert len(response.created) == 1
+    assert response.created[0].temporary_password == "31082005"
+
+
+def test_import_students_accepts_excel_datetime_cell_format(session):
+    """Khi cột date_of_birth là ô ``Date`` có giờ phút giây, openpyxl trả về
+    ``datetime.datetime``. Nếu chỉ ``str()`` thì ra ``"yyyy-mm-dd hh:mm:ss"``
+    và bị ``parse_date_of_birth`` reject — service phải convert về ISO date."""
+    from datetime import datetime as _datetime
+
+    contents = _build_xlsx_with_typed_cells(
+        [
+            (
+                "sv_dt2",
+                "Nguyen Van Datetime",
+                _datetime(2005, 8, 31, 14, 30, 0),
+                "sv_dt2@st.utc2.edu.vn",
+            ),
+        ]
+    )
+
+    response = import_students(session, contents, "students.xlsx")
+
+    assert response.errors == []
+    assert len(response.created) == 1
+    assert response.created[0].temporary_password == "31082005"
+
+
 def test_import_students_does_not_block_other_rows_when_one_fails(session):
     """Một dòng lỗi không được rollback các dòng đã tạo thành công trước đó."""
     contents = _build_xlsx(

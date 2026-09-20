@@ -1,5 +1,5 @@
 "use client";
-
+//dùng để lưu trữ và quản lý trạng thái đăng nhập, đăng xuất và thông tin người dùng trên toàn bộ ứng dụng.
 import {
   createContext,
   useCallback,
@@ -27,8 +27,8 @@ import { decodeAccessToken } from "@/lib/auth/decode-jwt";
 import { setAccessToken } from "@/lib/auth/token-store";
 
 type AuthState =
-  | { status: "loading" }
-  | { status: "unauthenticated" }
+  | { status: "loading"; user?: undefined }
+  | { status: "unauthenticated"; user?: undefined }
   | { status: "authenticated"; user: UserResponse };
 
 type AuthContextValue = AuthState & {

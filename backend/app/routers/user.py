@@ -10,7 +10,7 @@ from app.services.user_service import (
     user_response,
 )
 
-router = APIRouter()
+router = APIRouter(tags=["user"])
 
 
 @router.post("/teachers", response_model=UserResponse)

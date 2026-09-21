@@ -1,7 +1,8 @@
 import pytest
 
+from app.core.exceptions import ConflictError
 from app.schemas.user import CreateStudentRequest
-from app.services.user_service import EmailAlreadyExistsError, create_student
+from app.services.user_service import create_student
 
 
 def test_create_student_success(session):
@@ -29,5 +30,5 @@ def test_create_student_dupicate_email_raises(session):
     )
     create_student(session, data)
 
-    with pytest.raises(EmailAlreadyExistsError):
+    with pytest.raises(ConflictError):
         create_student(session, data)

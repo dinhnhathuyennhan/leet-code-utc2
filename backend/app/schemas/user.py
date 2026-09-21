@@ -14,26 +14,32 @@ from app.core.Validator import AppEmailStr
 def parse_date_of_birth(value: date | str) -> date:
     if isinstance(value, date):
         return value
-    if isinstance(value, str):
-        if len(value) == 10 and value[2] == "/" and value[5] == "/":
-            day_text, month_text, year_text = value.split("/")
-        elif len(value) == 10 and value[4] == "-" and value[7] == "-":
-            year_text, month_text, day_text = value.split("-")
-        else:
-            raise InvalidFormatError(
-                "Ngày sinh phải có định dạng yyyy-mm-dd"
-            )
 
-        if not (day_text.isdigit() and month_text.isdigit() and year_text.isdigit()):
-            raise InvalidFormatError(
-                "Ngày sinh phải có định dạng yyyy-mm-dd"
-            )
+    if not isinstance(value, str):
+        raise InvalidFormatError(
+            "Ngày sinh phải có định dạng dd/MM/yyyy hoặc dd-MM-yyyy"
+        )
 
-        return build_date(int(day_text), int(month_text), int(year_text))
+    if len(value) != 10:
+        raise InvalidFormatError(
+            "Ngày sinh phải có định dạng dd/MM/yyyy hoặc dd-MM-yyyy"
+        )
 
-    raise InvalidFormatError(
-        "Ngày sinh phải có định dạng yyyy-mm-dd"
-    )
+    if value[2] == "/" and value[5] == "/":
+        day_text, month_text, year_text = value.split("/")
+    elif value[2] == "-" and value[5] == "-":
+        day_text, month_text, year_text = value.split("-")
+    else:
+        raise InvalidFormatError(
+            "Ngày sinh phải có định dạng dd/MM/yyyy hoặc dd-MM-yyyy"
+        )
+
+    if not (day_text.isdigit() and month_text.isdigit() and year_text.isdigit()):
+        raise InvalidFormatError(
+            "Ngày sinh phải có định dạng dd/MM/yyyy hoặc dd-MM-yyyy"
+        )
+
+    return build_date(int(day_text), int(month_text), int(year_text))
 
 
 def password_from_date(value: date) -> str:

@@ -9,7 +9,7 @@ from app.routers import auth, user  # noqa: E402
 
 app = FastAPI()
 
-app.include_router(user.router, prefix="/users", tags=["users"])
+app.include_router(user.router)
 app.include_router(auth.router)
 
 register_exception_handlers(app)

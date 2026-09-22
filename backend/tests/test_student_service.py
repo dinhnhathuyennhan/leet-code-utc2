@@ -1,10 +1,17 @@
 import pytest
-from app.schemas.student import StudentCreate
-from app.services.student_service import EmailAlreadyExistsError, create_student
+
+from app.core.exceptions import ConflictError
+from app.schemas.user import CreateStudentRequest
+from app.services.user_service import create_student
 
 
 def test_create_student_success(session):
-    data = StudentCreate(full_name="Nguyễn Văn A", email="a@example.com")
+    data = CreateStudentRequest(
+        user_id="student-001",
+        full_name="Nguyễn Văn A",
+        email="a@example.com",
+        date_of_birth="01/01/2000",
+    )
 
     student = create_student(session, data)
 
@@ -15,8 +22,13 @@ def test_create_student_success(session):
 
 
 def test_create_student_dupicate_email_raises(session):
-    data = StudentCreate(full_name="Nguyễn Văn A", email="a@example.com")
+    data = CreateStudentRequest(
+        user_id="student-001",
+        full_name="Nguyễn Văn A",
+        email="a@example.com",
+        date_of_birth="01/01/2000",
+    )
     create_student(session, data)
 
-    with pytest.raises(EmailAlreadyExistsError):
+    with pytest.raises(ConflictError):
         create_student(session, data)

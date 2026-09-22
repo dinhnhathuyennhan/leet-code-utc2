@@ -26,7 +26,7 @@ class User(SQLModel, table=True):
         default=None, foreign_key="class.class_id", max_length=50
     )
 
-    class_: "Class | None" = Relationship(back_populates="students")
+    class_: Class | None = Relationship(back_populates="students")
     # Quan hệ: 1 giáo viên "create" nhiều course
     created_courses: list["Course"] = Relationship(back_populates="creator")
     # Quan hệ: 1 sinh viên "participate" nhiều enrollment

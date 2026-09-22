@@ -1,7 +1,7 @@
 from sqlmodel import Session, select
 
 from app.core.date import age_calculation
-from app.core.exceptions import AppError
+from app.core.exceptions import AppError, ConflictError
 from app.core.password import hash_password
 from app.dependencies import Role
 from app.schemas.user import (
@@ -11,11 +11,6 @@ from app.schemas.user import (
     password_from_date,
 )
 from models import Course, Enrollment, User
-
-
-class EmailAlreadyExistsError(AppError):
-    status_code = 409
-    error_code = "EMAIL_ALREADY_EXISTS"
 
 
 class DateOfBirthRequiredError(AppError):
@@ -36,7 +31,7 @@ class NotAllowedToResetError(AppError):
 def create_teacher(session: Session, data: CreateTeacherRequest) -> User:
     existing = session.exec(select(User).where(User.email == data.email)).first()
     if existing:
-        raise EmailAlreadyExistsError("Email đã được đăng ký")
+        raise ConflictError("Email đã được đăng ký")
 
     age = age_calculation(
         data.date_of_birth.day,
@@ -66,7 +61,7 @@ def create_teacher(session: Session, data: CreateTeacherRequest) -> User:
 def create_student(session: Session, data: CreateStudentRequest) -> User:
     existing = session.exec(select(User).where(User.email == data.email)).first()
     if existing:
-        raise EmailAlreadyExistsError("Email đã được đăng ký")
+        raise ConflictError("Email đã được đăng ký")
 
     age = age_calculation(
         data.date_of_birth.day,
@@ -91,6 +86,7 @@ def create_student(session: Session, data: CreateStudentRequest) -> User:
     session.commit()
     session.refresh(student)
     return student
+
 
 def user_response(user: User) -> UserResponse:
     return UserResponse(

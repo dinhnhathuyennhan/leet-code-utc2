@@ -109,7 +109,9 @@ def test_import_students_accepts_excel_date_cell_format(session):
         ]
     )
 
-    response = import_students(session, contents, "students.xlsx")
+from app.core.exceptions import ConflictError
+from app.schemas.user import CreateStudentRequest
+from app.services.user_service import create_student
 
     assert response.errors == []
     assert len(response.created) == 1
@@ -233,7 +235,5 @@ def test_import_students_rejects_duplicate_with_existing_db(session):
         ]
     )
 
-    response = import_students(session, contents, "students.xlsx")
-    assert response.created == []
-    assert len(response.errors) == 1
-    assert "user_id" in response.errors[0].reason.lower()
+with pytest.raises(ConflictError):
+    create_student(session, data)

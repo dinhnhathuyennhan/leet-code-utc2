@@ -42,9 +42,14 @@ async def http_exception_handler(
 async def request_validation_exception_handler(
     request: Request, exc: RequestValidationError
 ) -> JSONResponse:
+    errors = exc.errors()
+    message = errors[0].get("msg") if errors else None
+    if message and message.startswith("Value error, "):
+        message = message.removeprefix("Value error, ")
+
     body = ErrorResponse(
         error_code="VALIDATION_ERROR",
-        message="Dữ liệu đầu vào không hợp lệ.",
+        message=message or "Dữ liệu đầu vào không hợp lệ.",
     )
     return JSONResponse(status_code=422, content=body.model_dump())
 

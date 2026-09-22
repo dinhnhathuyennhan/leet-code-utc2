@@ -113,7 +113,7 @@
 |---|---|---|
 | 404 | `course_id` không tồn tại, hoặc `student_id` không tồn tại/không phải Sinh viên (use-case bước 4a) | `{"detail": "Không tìm thấy sinh viên"}` |
 | 403 | Teacher không phải chủ lớp (use-case bước 3a) | `{"detail": "Bạn không có quyền thêm sinh viên vào lớp này"}` |
-| 400 | Sinh viên đã có trong lớp học (use-case bước 5a) | `{"detail": "Sinh viên đã có trong lớp học"}` |
+| 409 | Sinh viên đã có trong lớp học (use-case bước 5a) | `{"detail": "Sinh viên đã có trong lớp học"}` |
 
 **Quy tắc nghiệp vụ**
 

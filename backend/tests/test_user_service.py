@@ -2,12 +2,14 @@ from datetime import date
 
 import pytest
 
-from app.core.exceptions import ConflictError, InvalidFormatError
+from app.core.exceptions import ConflictError
 from app.core.password import hash_password, verify_password
 from app.dependencies import Role
 from app.schemas.user import CreateStudentRequest, CreateTeacherRequest
 from app.services.user_service import (
     DateOfBirthRequiredError,
+    NotAllowedToResetError,
+    UserNotFoundError,
     create_student,
     create_teacher,
     reset_password,
@@ -70,14 +72,14 @@ def test_create_student_accepts_dd_mm_yyyy_and_normalizes_to_date_object(session
     assert student.date_of_birth == date(2000, 6, 5)
 
 
-def test_create_student_rejects_iso_date_format(session):
-    with pytest.raises(InvalidFormatError):
-        CreateStudentRequest(
-            user_id="6451071057",
-            full_name="Nguyễn Văn B",
-            date_of_birth="2000-06-05",
-            email="6451071057@st.utc2.edu.vn",
-        )
+def test_create_student_accepts_iso_date_format(session):
+    student = CreateStudentRequest(
+        user_id="6451071057",
+        full_name="Nguyễn Văn B",
+        date_of_birth="2000-06-05",
+        email="6451071057@st.utc2.edu.vn",
+    )
+    assert student.date_of_birth == date(2000, 6, 5)
 
 
 def test_create_student_duplicate_email_raises(session):

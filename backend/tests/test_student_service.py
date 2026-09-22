@@ -109,9 +109,7 @@ def test_import_students_accepts_excel_date_cell_format(session):
         ]
     )
 
-from app.core.exceptions import ConflictError
-from app.schemas.user import CreateStudentRequest
-from app.services.user_service import create_student
+    response = import_students(session, contents, "students.xlsx")
 
     assert response.errors == []
     assert len(response.created) == 1
@@ -196,8 +194,9 @@ def test_import_students_rejects_missing_required_columns(session):
 
 
 def test_import_students_rejects_invalid_date_of_birth(session):
+    """Ngày không đúng 3 format dd/MM/yyyy, dd-MM-yyyy, yyyy-mm-dd bị reject."""
     contents = _build_xlsx(
-        [("sv004", "Nguyen Van D", "31-08-2005", "sv004@st.utc2.edu.vn")]
+        [("sv004", "Nguyen Van D", "31/08/05", "sv004@st.utc2.edu.vn")]
     )
 
     response = import_students(session, contents, "students.xlsx")
@@ -235,5 +234,8 @@ def test_import_students_rejects_duplicate_with_existing_db(session):
         ]
     )
 
-with pytest.raises(ConflictError):
-    create_student(session, data)
+    response = import_students(session, contents, "students.xlsx")
+
+    assert response.created == []
+    assert len(response.errors) == 1
+    assert "đã tồn tại" in response.errors[0].reason.lower()

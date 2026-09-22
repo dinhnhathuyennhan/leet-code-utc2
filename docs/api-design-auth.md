@@ -21,24 +21,23 @@
 | email | string | |
 | role_id | int | luôn = 2 |
 | date_of_birth | date | |
-| temporary_password | string | mật khẩu tạm, chỉ trả về đúng 1 lần lúc tạo |
 
 **Response lỗi**
 
 | Status | Khi nào | Body |
 |---|---|---|
-| 422 | Sai định dạng email / thiếu field | (FastAPI tự sinh) |
-| 422 | Chưa đủ tuổi theo `date_of_birth` (use-case bước 5a) | `{"detail": "Người dùng phải đủ 17 tuổi"}` |
-| 400 | Email đã tồn tại (use-case bước 6a) | `{"detail": "Email đã tồn tại"}` |
+| 422 | Sai định dạng email / thiếu field | `{"error_code": "VALIDATION_ERROR", "message": "..."}` |
+| 422 | Chưa đủ tuổi theo `date_of_birth` | `{"error_code": "DATE_OF_BIRTH_INVALID", "message": "Người dùng phải đủ 22 tuổi"}` |
+| 400 | Email đã tồn tại | `{"error_code": "CONFLICT", "message": "Email đã được đăng ký"}` |
 
 **Quy tắc nghiệp vụ** (từ Basic flow use-case)
 
 - `role_id` luôn cố định = 2, không nhận từ client.
 - `must_change_password` luôn = true khi tạo.
-- Người được cấp tài khoản phải đủ 17 tuổi trở lên, tính từ `date_of_birth`.
+- Người được cấp tài khoản phải đủ **22 tuổi** trở lên, tính từ `date_of_birth`.
 - Mật khẩu tạm sinh hoàn toàn phía server theo ngày sinh, định dạng `ddmmyyyy` (ví dụ `date_of_birth = 15/05/1990` → mật khẩu tạm `15051990`). Client không truyền và không thể ghi đè mật khẩu.
 - Không trả `hashed_password` trong response.
-- **Yêu cầu quyền**: chỉ Admin (khi Auth hoàn thiện, endpoint này cần `require_role(Role.ADMIN)`).
+- **Yêu cầu quyền**: chỉ Admin (`require_role(Role.ADMIN)`).
 
 ## POST /students — Cấp phát tài khoản Sinh viên
 
@@ -61,15 +60,14 @@
 | email | string | |
 | role_id | int | luôn = 3 |
 | date_of_birth | date | |
-| temporary_password | string | mật khẩu tạm, chỉ trả về đúng 1 lần lúc tạo |
 
 **Response lỗi**
 
 | Status | Khi nào | Body |
 |---|---|---|
-| 422 | Sai định dạng email / thiếu field | (FastAPI tự sinh) |
-| 422 | Chưa đủ tuổi theo `date_of_birth` (use-case bước 5a) | `{"detail": "Người dùng phải đủ 17 tuổi"}` |
-| 400 | Email đã tồn tại (use-case bước 6a) | `{"detail": "Email đã tồn tại"}` |
+| 422 | Sai định dạng email / thiếu field | `{"error_code": "VALIDATION_ERROR", "message": "..."}` |
+| 422 | Chưa đủ tuổi theo `date_of_birth` | `{"error_code": "DATE_OF_BIRTH_INVALID", "message": "Người dùng phải đủ 17 tuổi"}` |
+| 400 | Email đã tồn tại | `{"error_code": "CONFLICT", "message": "Email đã được đăng ký"}` |
 
 **Quy tắc nghiệp vụ**
 
@@ -86,21 +84,22 @@
 
 | Field | Kiểu | Bắt buộc | Ghi chú |
 |---|---|---|---|
-| file | file (.xlsx) | có | đúng cấu trúc mẫu: cột `full_name`, `date_of_birth`, `email` |
+| file | file (.xlsx) | có | đúng cấu trúc mẫu: cột `user_id`, `full_name`, `date_of_birth`, `email` |
 
 **Response 201 Created** — tổng hợp kết quả xử lý từng dòng
 
 | Field | Kiểu | Ghi chú |
 |---|---|---|
-| created | array of object | mỗi phần tử: `user_id`, `full_name`, `email`, `temporary_password` |
-| errors | array of object | mỗi phần tử: `row` (số dòng trong file), `email`, `reason` (lý do lỗi) |
+| created | array of object | mỗi phần tử: `user_id`, `full_name`, `email`, `date_of_birth`, `temporary_password` |
+| errors | array of object | mỗi phần tử: `row` (số dòng trong file), `email`, `date_of_birth`, `reason` (lý do lỗi) |
 
 **Response lỗi**
 
 | Status | Khi nào | Body |
 |---|---|---|
-| 422 | Sai định dạng file (không phải .xlsx, sai cấu trúc cột) | (use-case 5a) |
-| 400 | File rỗng hoặc vượt quá số dòng cho phép | (use-case E2) |
+| 422 | File không có phần mở rộng `.xlsx`, không đọc được, hoặc thiếu cột bắt buộc | `{"error_code": "INVALID_EXCEL_FORMAT", "message": "..."}` |
+| 400 | File không có dữ liệu | `{"error_code": "EMPTY_EXCEL_FILE", "message": "File không có dữ liệu"}` |
+| 400 | Vượt quá 500 dòng cho phép | `{"error_code": "EXCEL_FILE_TOO_LARGE", "message": "..."}` |
 
 **Quy tắc nghiệp vụ**
 
@@ -123,14 +122,17 @@
 
 | Status | Khi nào | Body |
 |---|---|---|
-| 404 | `user_id` không tồn tại | `{"detail": "Không tìm thấy tài khoản"}` |
-| 403 | Người gọi là Teacher nhưng tài khoản mục tiêu không phải Student (use-case 7a) | `{"detail": "Bạn không có quyền đặt lại mật khẩu cho tài khoản này"}` |
+| 404 | `user_id` không tồn tại | `{"error_code": "USER_NOT_FOUND", "message": "Không tìm thấy tài khoản"}` |
+| 403 | Người gọi là Student (bị chặn hoàn toàn, kể cả tự reset chính mình) | `{"error_code": "NOT_ALLOWED_TO_RESET", "message": "Bạn không có quyền đặt lại mật khẩu cho tài khoản này"}` |
+| 403 | Người gọi là Teacher nhưng tài khoản mục tiêu không phải Student | `{"error_code": "NOT_ALLOWED_TO_RESET", "message": "Bạn không có quyền đặt lại mật khẩu cho tài khoản này"}` |
+| 403 | Người gọi là Teacher, mục tiêu là Student nhưng không học khoá nào do Teacher này tạo | `{"error_code": "NOT_ALLOWED_TO_RESET", "message": "Bạn không có quyền đặt lại mật khẩu cho tài khoản này"}` |
+| 422 | Tài khoản mục tiêu chưa có `date_of_birth` (không thể sinh mật khẩu tạm) | `{"error_code": "DATE_OF_BIRTH_INVALID", "message": "Tài khoản chưa có ngày sinh để tạo mật khẩu tạm thời"}` |
 
 **Quy tắc nghiệp vụ**
 
 - Mật khẩu tạm mới sinh lại theo `date_of_birth` hiện có của tài khoản mục tiêu (định dạng `ddmmyyyy`), không sinh ngẫu nhiên.
 - Đặt `must_change_password = true`, tăng `token_version` (vô hiệu hoá toàn bộ token cũ của tài khoản mục tiêu).
-- **Yêu cầu quyền**: Admin (mọi tài khoản) hoặc Teacher (chỉ tài khoản `role_id = 3`).
+- **Yêu cầu quyền**: Admin (mọi tài khoản) hoặc Teacher — nhưng Teacher chỉ được reset cho Student đang học **ít nhất một khoá học do chính Teacher đó tạo** (`Course.created_by = current_user.user_id`), không phải cứ `role_id = 3` là được; Student không được reset cho bất kỳ ai. Endpoint không dùng `require_role` ở router — toàn bộ logic phân quyền nằm trong service (`backend/app/services/user_service.py::reset_password`).
 
 ## POST /auth/login — Đăng nhập
 
@@ -155,8 +157,8 @@
 
 | Status | Khi nào | Body |
 |---|---|---|
-| 422 | Sai định dạng email/thiếu field | (FastAPI tự sinh) |
-| 401 | Email hoặc mật khẩu sai (use-case 5a) | `{"detail": "Email hoặc mật khẩu không đúng"}` (thông báo chung, không tiết lộ sai cái nào) |
+| 422 | Sai định dạng email/thiếu field | `{"error_code": "VALIDATION_ERROR", "message": "..."}` |
+| 401 | Email hoặc mật khẩu sai | `{"error_code": "INVALID_CREDENTIALS", "message": "Email hoặc mật khẩu không đúng"}` (thông báo chung, không tiết lộ sai cái nào) |
 
 **Quy tắc nghiệp vụ**
 
@@ -180,9 +182,9 @@
 
 | Status | Khi nào | Body |
 |---|---|---|
-| 422 | `new_password` không khớp `confirm_password` hoặc không đủ độ mạnh (use-case 4a) | (chi tiết lỗi field) |
-| 401 | `current_password` sai (use-case 5a) | `{"detail": "Mật khẩu hiện tại không đúng"}` |
-| 400 | `new_password` trùng `current_password` (use-case 6a) | `{"detail": "Mật khẩu mới phải khác mật khẩu hiện tại"}` |
+| 422 | `new_password` không khớp `confirm_password` hoặc không đủ độ mạnh | `{"error_code": "PASSWORD_MISMATCH" \| "WEAK_PASSWORD", "message": "..."}` |
+| 401 | `current_password` sai | `{"error_code": "WRONG_PASSWORD", "message": "Mật khẩu hiện tại không đúng"}` |
+| 400 | `new_password` trùng `current_password` | `{"error_code": "SAME_PASSWORD", "message": "Mật khẩu mới phải khác mật khẩu hiện tại"}` |
 
 **Quy tắc nghiệp vụ**
 
@@ -203,7 +205,7 @@
 - Không thay đổi `token_version` (không ảnh hưởng tới các thiết bị khác đang đăng nhập).
 - **Yêu cầu quyền**: không bắt buộc (hoạt động kể cả khi access token đã hết hạn, vì mục đích chỉ là xoá cookie).
 
-## POST /auth/refresh — Làm mới phiên đăng nhập
+## POST /auth/refresh-access-token — Làm mới phiên đăng nhập
 
 **Request body**: không có (đọc cookie `refresh_token`)
 
@@ -220,11 +222,11 @@ Cookie `refresh_token` giữ nguyên (không rotate).
 
 | Status | Khi nào | Body |
 |---|---|---|
-| 401 | Cookie thiếu, sai chữ ký hoặc hết hạn (use-case 2a) | `{"detail": "Phiên đăng nhập đã hết hạn"}` |
-| 401 | `token_version` trong token không khớp database — đã bị thu hồi, hoặc claim `type` trong token không phải `"refresh"` (ví dụ truyền nhầm access token) (use-case 3a) | `{"detail": "Phiên đăng nhập không còn hợp lệ"}`, đồng thời xoá cookie hiện tại |
+| 401 | Cookie `refresh_token` thiếu | `{"error_code": "SESSION_EXPIRED", "message": "Phiên đăng nhập đã hết hạn"}` |
+| 401 | `token_version` trong token không khớp database (đã bị thu hồi do đổi mật khẩu/reset ở nơi khác) | `{"error_code": "SESSION_REVOKED", "message": "Phiên đăng nhập không còn hợp lệ"}` |
 
 **Quy tắc nghiệp vụ**
 
 - Không rotate refresh token — chỉ cấp access token mới.
-- Server phải kiểm tra claim `type` của token trong cookie `refresh_token` đúng là `"refresh"` trước khi cấp access token mới — không chấp nhận access token (`type = "access"`) dùng thay refresh token.
+- Server không kiểm tra claim `type` của token trong cookie `refresh_token` trước khi cấp access token mới — chỉ kiểm tra `token_version` khớp với database (`backend/app/services/auth_service.py::refresh_access_token`, `backend/app/core/token.py::decode_token`).
 - **Yêu cầu quyền**: cookie `refresh_token` hợp lệ (không cần access token).

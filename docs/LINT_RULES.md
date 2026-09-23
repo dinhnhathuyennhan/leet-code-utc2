@@ -155,7 +155,7 @@ Nguồn: `select` tuỳ chỉnh trong [backend/pyproject.toml](backend/pyproject
 | `E101` | Thụt lề lẫn lộn giữa space và tab |
 | `E401` | Khai báo nhiều import trên cùng một dòng |
 | `E402` | Import ở cấp module không nằm ở đầu file |
-| `E501` | Dòng quá dài ({width} > {limit}) |
+| `E501` | Dòng quá dài ({width} > {limit}) — **đang tắt** (`ignore` trong `backend/pyproject.toml`) |
 | `E701` | Nhiều statement trên cùng một dòng (dùng dấu `:`) |
 | `E702` | Nhiều statement trên cùng một dòng (dùng dấu `;`) |
 | `E703` | Statement kết thúc bằng dấu `;` không cần thiết |
@@ -235,7 +235,7 @@ Nguồn: `select` tuỳ chỉnh trong [backend/pyproject.toml](backend/pyproject
 
 | Code | Giải thích |
 |---|---|
-| `I001` | Khối import chưa được sắp xếp hoặc định dạng đúng chuẩn |
+| `I001` | Khối import chưa được sắp xếp hoặc định dạng đúng chuẩn — **đang tắt** (`ignore` trong `backend/pyproject.toml`) |
 | `I002` | Thiếu import bắt buộc: `{name}` |
 
 ### `UP` — pyupgrade (47 rule)
@@ -300,7 +300,7 @@ Nguồn: `select` tuỳ chỉnh trong [backend/pyproject.toml](backend/pyproject
 | `B005` | Dùng `.strip()` với chuỗi nhiều ký tự dễ gây hiểu nhầm (strip theo từng ký tự, không phải chuỗi con) |
 | `B006` | Không dùng cấu trúc dữ liệu mutable làm giá trị mặc định cho tham số |
 | `B007` | Biến điều khiển vòng lặp `{name}` không được dùng trong thân vòng lặp |
-| `B008` | Không gọi hàm `{name}` ngay trong giá trị mặc định của tham số |
+| `B008` | Không gọi hàm `{name}` ngay trong giá trị mặc định của tham số — **đang tắt** (`ignore` trong `backend/pyproject.toml`, vì FastAPI dùng `Depends()` làm giá trị mặc định) |
 | `B009` | Không gọi `getattr` với tên thuộc tính là hằng số |
 | `B010` | Không gọi `setattr` với tên thuộc tính là hằng số |
 | `B011` | Không dùng `assert False` (bị loại bỏ khi chạy `python -O`), nên `raise AssertionError()` |

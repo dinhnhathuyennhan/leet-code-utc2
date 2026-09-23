@@ -1,11 +1,11 @@
-from contextlib import asynccontextmanager
 import os
+from contextlib import asynccontextmanager
 
 from dotenv import load_dotenv
 
-from app.seed_data import seed_users
-
 load_dotenv()
+
+from app.seed_data import seed_users
 
 from fastapi import FastAPI  # noqa: E402
 from fastapi.middleware.cors import CORSMiddleware  # noqa: E402

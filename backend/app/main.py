@@ -5,17 +5,20 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
-from app.seed_data import seed_users
-
 from fastapi import FastAPI  # noqa: E402
 from fastapi.middleware.cors import CORSMiddleware  # noqa: E402
+
 from app.handlers.exception_handlers import register_exception_handlers  # noqa: E402
-from app.routers import auth, student, course, user  # noqa: E402
+from app.routers import auth, course, student, user  # noqa: E402
+from app.seed_data import seed_users  # noqa: E402
+
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     seed_users()
     yield
+
+
 app = FastAPI(lifespan=lifespan)
 
 app.add_middleware(

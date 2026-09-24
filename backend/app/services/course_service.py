@@ -1,6 +1,14 @@
+from datetime import UTC, datetime
+
 from sqlmodel import Session, select
 
-from app.core.exceptions import ConflictError, ForbiddenError, NotFoundError
+from app.core.exceptions import (
+    ConflictError,
+    ForbiddenError,
+    InvalidFormatError,
+    NotFoundError,
+)
+from app.dependencies import Role
 from app.schemas.course import (
     AddStudentToCourseResponse,
     CourseResponse,
@@ -16,7 +24,10 @@ def _get_manageable_course(
     course = session.get(Course, course_id)
     if not course:
         raise NotFoundError("Không tìm thấy lớp học")
-    if current_user.role_id != 1 and course.created_by != current_user.user_id:
+    if (
+        current_user.role_id != Role.ADMIN
+        and course.created_by != current_user.user_id
+    ):
         raise ForbiddenError(forbidden_message)
     return course
 
@@ -119,6 +130,17 @@ def create_course(
     return _to_response(course)
 
 
+def _normalize_to_utc(dt: datetime) -> datetime:
+    """Đưa datetime về timezone-aware UTC để so sánh an toàn.
+
+    SQLite lưu naive datetime; Postgres trả về tz-aware.
+    Chuẩn hoá cả hai về UTC trước mọi phép so sánh.
+    """
+    if dt.tzinfo is None:
+        return dt.replace(tzinfo=UTC)
+    return dt.astimezone(UTC)
+
+
 def update_course(
     course_id: str,
     data: UpdateCourseRequest,
@@ -129,20 +151,39 @@ def update_course(
 
     Quy tắc nghiệp vụ (theo api-design-course.md):
     - Không cho sửa `course_id`, `created_by`, `total_number_student`.
-    - Chỉ field nào client gửi mới được cập nhật (partial update).
-    - Nếu thay đổi `start_date` hoặc `end_date` thì phải bảo đảm
-      `start_date < end_date` (đã validate ở schema).
+    - Chỉ field nào client gửi (và không null) mới được cập nhật.
+    - Nếu thay đổi ngày, phải bảo đảm `start_date < end_date` khi đối chiếu
+      với giá trị đang lưu trong DB (kể cả khi client chỉ gửi một trong hai).
     - Quyền: Admin mọi lớp, hoặc Teacher là chủ lớp (`created_by`).
     """
-    course = session.get(Course, course_id)
-    if not course:
-        raise NotFoundError("Không tìm thấy lớp học")
+    course = _get_manageable_course(
+        course_id, session, current_user,
+        "Bạn không có quyền thực hiện hành động này",
+    )
 
-    if current_user.role_id != 1 and course.created_by != current_user.user_id:
-        raise ForbiddenError("Bạn không có quyền thực hiện hành động này")
+    # `exclude_unset=True` chỉ chứa các field client thực sự gửi trong body.
+    # Tuy nhiên nếu client gửi field=null thì key vẫn xuất hiện trong dict
+    # với giá trị None — ta phải loại None để tránh ghi đè cột NOT NULL.
+    update_fields = {
+        key: value
+        for key, value in data.model_dump(exclude_unset=True).items()
+        if value is not None
+    }
 
-    # Chỉ set các field client thực sự gửi — tránh ghi đè None lên giá trị cũ.
-    update_fields = data.model_dump(exclude_unset=True)
+    if not update_fields:
+        # Body trống hoặc toàn null → no-op, trả về trạng thái hiện tại.
+        return _to_response(course)
+
+    # Validate khoảng ngày khi có thay đổi, đối chiếu với giá trị đang lưu
+    # trong DB để bắt cả trường hợp client chỉ gửi một trong hai ngày.
+    # Chuẩn hoá giá trị DB về UTC trước khi so sánh (SQLite: naive, Postgres: aware).
+    db_start = _normalize_to_utc(course.start_date)
+    db_end = _normalize_to_utc(course.end_date)
+    new_start = update_fields.get("start_date", db_start)
+    new_end = update_fields.get("end_date", db_end)
+    if new_start >= new_end:
+        raise InvalidFormatError("start_date phải trước end_date")
+
     for field, value in update_fields.items():
         setattr(course, field, value)
 

@@ -5,7 +5,7 @@ from sqlmodel import Session
 from starlette import status
 
 from app.db import get_session
-from app.dependencies import require_role
+from app.dependencies import Role, require_role
 from app.schemas.course import (
     AddStudentToCourseRequest,
     AddStudentToCourseResponse,
@@ -33,7 +33,7 @@ logger = logging.getLogger(__name__)
 def create_course_route(
     data: CreateCourseRequest,
     session: Session = Depends(get_session),
-    current_user: User = Depends(require_role(1, 2)),
+    current_user: User = Depends(require_role(Role.ADMIN, Role.TEACHER)),
 ) -> CourseResponse:
     return _create_course(
         data=data,
@@ -50,7 +50,7 @@ def update_course_route(
     course_id: str,
     data: UpdateCourseRequest,
     session: Session = Depends(get_session),
-    current_user: User = Depends(require_role(1, 2)),
+    current_user: User = Depends(require_role(Role.ADMIN, Role.TEACHER)),
 ) -> CourseResponse:
     return _update_course(
         course_id=course_id,
@@ -69,7 +69,7 @@ def add_student_to_course(
     data: AddStudentToCourseRequest,
     course_id: str,
     session: Session = Depends(get_session),
-    current_user: User = Depends(require_role(1, 2)),
+    current_user: User = Depends(require_role(Role.ADMIN, Role.TEACHER)),
 ) -> AddStudentToCourseResponse:
     return _add_student_to_course(
         student_id=data.student_id,
@@ -87,7 +87,7 @@ def delete_student_from_course(
     student_id: str,
     course_id: str,
     session: Session = Depends(get_session),
-    current_user: User = Depends(require_role(1, 2)),
+    current_user: User = Depends(require_role(Role.ADMIN, Role.TEACHER)),
 ):
     _delete_student_from_course(
         student_id=student_id,

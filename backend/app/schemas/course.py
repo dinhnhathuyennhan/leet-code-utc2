@@ -1,6 +1,7 @@
 from pydantic import BaseModel, field_validator
 
 from app.core.exceptions import EmptyFieldError
+from app.core.Validator import AppEmailStr
 
 
 class AddStudentToCourseResponse(BaseModel):
@@ -17,3 +18,9 @@ class AddStudentToCourseRequest(BaseModel):
         if v is None:
             raise EmptyFieldError("user_id is required")
         return v
+
+class GetStudentListResponse(BaseModel):
+    enrollment_id: int
+    student_id: str
+    full_name: str
+    email: AppEmailStr

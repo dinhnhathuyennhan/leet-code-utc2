@@ -6,7 +6,9 @@ from sqlmodel import Field, Relationship, SQLModel
 # ==================== CLASS ====================
 class Class(SQLModel, table=True):
     class_id: str = Field(primary_key=True, max_length=50)
-    class_name: str
+    type: str
+    course_number: int
+    department: str
 
     students: list["User"] = Relationship(back_populates="class_")
 

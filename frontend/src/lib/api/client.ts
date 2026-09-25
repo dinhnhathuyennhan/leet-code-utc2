@@ -146,3 +146,74 @@ export async function apiFetch<T>(path: string, init: ApiFetchInit = {}): Promis
 
   return (await parseJsonSafely(response)) as T;
 }
+
+
+//Bản test
+// Fetch wrapper dùng chung: gắn JWT, gửi cookie refresh, chuẩn hoá lỗi (mục 3.2).
+// Mọi request của frontend phải đi qua file này — không gọi `fetch` trần ở nơi khác.
+
+// import { getAccessToken } from "@/lib/auth/token";
+
+// const BASE_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
+
+// /** Lỗi đã chuẩn hoá để tầng UI chỉ cần đọc `status` + `message`. */
+// export class ApiError extends Error {
+//   /** 0 = không gọi tới được server (mất mạng / CORS / server chết). */
+//   readonly status: number;
+//   readonly detail?: unknown;
+
+//   constructor(status: number, message: string, detail?: unknown) {
+//     super(message);
+//     this.name = "ApiError";
+//     this.status = status;
+//     this.detail = detail;
+//   }
+
+//   /** Exception flow E1 của mọi use-case: mất kết nối hoặc server lỗi. */
+//   get isConnectionError(): boolean {
+//     return this.status === 0 || this.status >= 500;
+//   }
+// }
+
+// interface RequestOptions extends Omit<RequestInit, "body"> {
+//   body?: unknown;
+//   /** Bỏ qua việc gắn Authorization header (dùng cho /auth/login). */
+//   skipAuth?: boolean;
+// }
+
+// export async function request<T>(path: string, options: RequestOptions = {}): Promise<T> {
+//   const { body, skipAuth, headers, ...init } = options;
+//   const token = skipAuth ? null : getAccessToken();
+
+//   let response: Response;
+//   try {
+//     response = await fetch(`${BASE_URL}${path}`, {
+//       ...init,
+//       // Cookie refresh token là HttpOnly → luôn phải gửi kèm credentials.
+//       credentials: "include",
+//       headers: {
+//         "Content-Type": "application/json",
+//         ...(token ? { Authorization: `Bearer ${token}` } : {}),
+//         ...headers,
+//       },
+//       body: body === undefined ? undefined : JSON.stringify(body),
+//     });
+//   } catch (error) {
+//     // fetch chỉ throw khi không tới được server → coi là lỗi kết nối.
+//     throw new ApiError(0, "Lỗi kết nối từ server", error);
+//   }
+
+//   if (response.status === 204) {
+//     return undefined as T;
+//   }
+
+//   const payload = await response.json().catch(() => null);
+
+//   if (!response.ok) {
+//     const message =
+//       (payload as { detail?: string } | null)?.detail ?? "Đã có lỗi xảy ra, vui lòng thử lại";
+//     throw new ApiError(response.status, message, payload);
+//   }
+
+//   return payload as T;
+// }

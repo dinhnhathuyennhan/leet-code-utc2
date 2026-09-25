@@ -29,14 +29,16 @@ def parse_date_of_birth(value: date | str) -> date:
         day_text, month_text, year_text = value.split("/")
     elif value[2] == "-" and value[5] == "-":
         day_text, month_text, year_text = value.split("-")
+    elif value[4] == "-" and value[7] == "-":
+        year_text, month_text, day_text = value.split("-")
     else:
         raise InvalidFormatError(
-            "Ngày sinh phải có định dạng dd/MM/yyyy hoặc dd-MM-yyyy"
+            "Ngày sinh phải có định dạng dd/MM/yyyy, dd-MM-yyyy hoặc yyyy-mm-dd"
         )
 
     if not (day_text.isdigit() and month_text.isdigit() and year_text.isdigit()):
         raise InvalidFormatError(
-            "Ngày sinh phải có định dạng dd/MM/yyyy hoặc dd-MM-yyyy"
+            "Ngày sinh phải có định dạng dd/MM/yyyy, dd-MM-yyyy hoặc yyyy-mm-dd"
         )
 
     return build_date(int(day_text), int(month_text), int(year_text))
@@ -64,6 +66,7 @@ class CreateStudentRequest(BaseModel):
     full_name: str
     date_of_birth: date
     email: AppEmailStr
+    class_id: str
     avt_link: str | None = None
 
     @field_validator("date_of_birth", mode="before")
@@ -78,8 +81,16 @@ class UserResponse(BaseModel):
     email: AppEmailStr
     role_id: int
     date_of_birth: date
+    class_id: str | None = None
 
     @field_serializer("date_of_birth")
     def serialize_date_of_birth(self, value: date) -> str:
         return value.strftime("%d/%m/%Y")
+
+
+class UserResetPasswordResponse(BaseModel):
+    """Response cho API đặt lại mật khẩu của một tài khoản."""
+
+    user_id: str
+    temporary_password: str
 

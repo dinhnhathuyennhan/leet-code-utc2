@@ -1,20 +1,31 @@
 from sqlmodel import Session, select
 
 from app.core.date import age_calculation
-from app.core.exceptions import AppError, ConflictError
+from app.core.exceptions import AppError, ConflictError, NotFoundError
 from app.core.password import hash_password
+from app.dependencies import Role
 from app.schemas.user import (
     CreateStudentRequest,
     CreateTeacherRequest,
     UserResponse,
     password_from_date,
 )
-from models import User
+from models import Class, Course, Enrollment, User
 
 
 class DateOfBirthRequiredError(AppError):
     status_code = 422
     error_code = "DATE_OF_BIRTH_INVALID"
+
+
+class UserNotFoundError(AppError):
+    status_code = 404
+    error_code = "USER_NOT_FOUND"
+
+
+class NotAllowedToResetError(AppError):
+    status_code = 403
+    error_code = "NOT_ALLOWED_TO_RESET"
 
 
 def create_teacher(session: Session, data: CreateTeacherRequest) -> User:
@@ -52,6 +63,10 @@ def create_student(session: Session, data: CreateStudentRequest) -> User:
     if existing:
         raise ConflictError("Email đã được đăng ký")
 
+    db_class = session.get(Class, data.class_id)
+    if not db_class:
+        raise NotFoundError(f"Không tìm thấy lớp học có ID: {data.class_id}")
+
     age = age_calculation(
         data.date_of_birth.day,
         data.date_of_birth.month,
@@ -70,6 +85,7 @@ def create_student(session: Session, data: CreateStudentRequest) -> User:
         date_of_birth=data.date_of_birth,
         avt_link=data.avt_link,
         role_id=3,  # 1: admin, 2: teacher, 3: student
+        class_id=data.class_id,
     )
     session.add(student)
     session.commit()
@@ -84,5 +100,78 @@ def user_response(user: User) -> UserResponse:
         email=user.email,
         role_id=user.role_id,
         date_of_birth=user.date_of_birth,
+        class_id=user.class_id if user.role_id == Role.STUDENT else None,
     )
+
+
+def reset_password(
+    session: Session, current_user: User, target_user_id: str
+) -> tuple[str, str]:
+    """Đặt lại mật khẩu cho tài khoản mục tiêu.
+
+    Mật khẩu tạm thời được sinh từ ngày sinh của tài khoản mục tiêu
+    theo định dạng ddmmyyyy (xem ``password_from_date``).
+
+    Quyền:
+        - ADMIN: đặt lại mật khẩu bất kỳ tài khoản nào.
+        - TEACHER: chỉ được đặt lại mật khẩu sinh viên thuộc lớp mình quản lý.
+        - STUDENT: không được phép đặt lại mật khẩu ai.
+
+    Returns:
+        tuple ``(user_id, temporary_password)`` để router trả về response.
+
+    Raises:
+        UserNotFoundError: không tìm thấy tài khoản mục tiêu.
+        NotAllowedToResetError: người gọi không đủ quyền.
+        DateOfBirthRequiredError: tài khoản mục tiêu chưa có ngày sinh hợp lệ.
+    """
+    target = session.get(User, target_user_id)
+    if target is None:
+        raise UserNotFoundError("Không tìm thấy tài khoản")
+
+    # STUDENT bị chặn hoàn toàn (kể cả tự reset chính mình)
+    if current_user.role_id == Role.STUDENT:
+        raise NotAllowedToResetError(
+            "Bạn không có quyền đặt lại mật khẩu cho tài khoản này"
+        )
+
+    # TEACHER chỉ được reset sinh viên thuộc lớp do mình tạo
+    if current_user.role_id == Role.TEACHER:
+        if target.role_id != Role.STUDENT:
+            raise NotAllowedToResetError(
+                "Bạn không có quyền đặt lại mật khẩu cho tài khoản này"
+            )
+        teacher_courses = session.exec(
+            select(Course.course_id).where(Course.created_by == current_user.user_id)
+        ).all()
+        if not teacher_courses:
+            raise NotAllowedToResetError(
+                "Bạn không có quyền đặt lại mật khẩu cho tài khoản này"
+            )
+        enrolled = session.exec(
+            select(Enrollment).where(
+                Enrollment.student_id == target_user_id,
+                Enrollment.course_id.in_(teacher_courses),
+            )
+        ).first()
+        if enrolled is None:
+            raise NotAllowedToResetError(
+                "Bạn không có quyền đặt lại mật khẩu cho tài khoản này"
+            )
+
+    # Tài khoản mục tiêu phải có ngày sinh để sinh mật khẩu tạm thời
+    if target.date_of_birth is None:
+        raise DateOfBirthRequiredError(
+            "Tài khoản chưa có ngày sinh để tạo mật khẩu tạm thời"
+        )
+
+    temporary_password = password_from_date(target.date_of_birth)
+    target.hashed_password = hash_password(temporary_password)
+    target.must_change_password = True
+    target.token_version += 1
+
+    session.add(target)
+    session.commit()
+    session.refresh(target)
+    return target.user_id, temporary_password
 

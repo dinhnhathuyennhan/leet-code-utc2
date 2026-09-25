@@ -3,6 +3,16 @@ from datetime import date, datetime
 from sqlmodel import Field, Relationship, SQLModel
 
 
+# ==================== CLASS ====================
+class Class(SQLModel, table=True):
+    class_id: str = Field(primary_key=True, max_length=50)
+    type: str
+    course_number: int
+    department: str
+
+    students: list["User"] = Relationship(back_populates="class_")
+
+
 # ==================== USER ====================
 class User(SQLModel, table=True):
     user_id: str = Field(primary_key=True, max_length=50)
@@ -14,7 +24,11 @@ class User(SQLModel, table=True):
     must_change_password: bool = Field(default=False)
     role_id: int  # 1: admin, 2: teacher, 3: student (tùy quy ước của bạn)
     token_version: int = Field(default=0)
+    class_id: str | None = Field(
+        default=None, foreign_key="class.class_id", max_length=50
+    )
 
+    class_: Class | None = Relationship(back_populates="students")
     # Quan hệ: 1 giáo viên "create" nhiều course
     created_courses: list["Course"] = Relationship(back_populates="creator")
     # Quan hệ: 1 sinh viên "participate" nhiều enrollment

@@ -28,7 +28,7 @@ logger = logging.getLogger(__name__)
 @router.post(
     "/courses/{course_id}/enrollments",
         response_model=AddStudentToCourseResponse,
-        status_code=status.HTTP_404_NOT_FOUND
+        status_code=status.HTTP_201_CREATED
 )
 def add_student_to_course(
         data: AddStudentToCourseRequest,

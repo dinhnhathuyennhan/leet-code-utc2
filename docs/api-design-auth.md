@@ -28,7 +28,7 @@
 |---|---|---|
 | 422 | Sai định dạng email / thiếu field | `{"error_code": "VALIDATION_ERROR", "message": "..."}` |
 | 422 | Chưa đủ tuổi theo `date_of_birth` | `{"error_code": "DATE_OF_BIRTH_INVALID", "message": "Người dùng phải đủ 22 tuổi"}` |
-| 400 | Email đã tồn tại | `{"error_code": "CONFLICT", "message": "Email đã được đăng ký"}` |
+| 409 | Email đã tồn tại | `{"error_code": "CONFLICT", "message": "Email đã được đăng ký"}` |
 
 **Quy tắc nghiệp vụ** (từ Basic flow use-case)
 
@@ -67,7 +67,7 @@
 |---|---|---|
 | 422 | Sai định dạng email / thiếu field | `{"error_code": "VALIDATION_ERROR", "message": "..."}` |
 | 422 | Chưa đủ tuổi theo `date_of_birth` | `{"error_code": "DATE_OF_BIRTH_INVALID", "message": "Người dùng phải đủ 17 tuổi"}` |
-| 400 | Email đã tồn tại | `{"error_code": "CONFLICT", "message": "Email đã được đăng ký"}` |
+| 409 | Email đã tồn tại | `{"error_code": "CONFLICT", "message": "Email đã được đăng ký"}` |
 
 **Quy tắc nghiệp vụ**
 

@@ -30,8 +30,11 @@
 
 | Status | Khi nào | Body |
 |---|---|---|
-| 422 | Thiếu field / `start_date` không trước `end_date` (use-case bước 5a) | (chi tiết lỗi field) |
-| 400 | `course_id` đã tồn tại (use-case bước 6a) | `{"detail": "Mã lớp học đã tồn tại"}` |
+| 422 | Thiếu field / sai kiểu dữ liệu (use-case bước 5a) | `{"error_code": "VALIDATION_ERROR", "message": "..."}` |
+| 422 | `course_id` / `course_name` / `term` rỗng hoặc chỉ chứa khoảng trắng (use-case bước 5a) | `{"error_code": "EMPTY_FIELD", "message": "<field> không được để trống"}` |
+| 422 | `start_date` không trước `end_date` (use-case bước 5a) | `{"error_code": "INVALID_FORMAT", "message": "start_date phải trước end_date"}` |
+| 403 | Người gọi không phải Admin/Teacher | `{"error_code": "FORBIDDEN", "message": "Bạn không có quyền thực hiện hành động này"}` |
+| 409 | `course_id` đã tồn tại (use-case bước 6a) | `{"error_code": "CONFLICT", "message": "Mã lớp học đã tồn tại"}` |
 
 **Quy tắc nghiệp vụ**
 
@@ -56,8 +59,8 @@
 
 | Status | Khi nào | Body |
 |---|---|---|
-| 404 | `course_id` không tồn tại | `{"detail": "Không tìm thấy lớp học"}` |
-| 403 | Teacher không phải chủ lớp, hoặc Student chưa được thêm vào lớp (use-case "Xem danh sách sinh viên" bước 2a/2b) | `{"detail": "Bạn không có quyền xem lớp học này"}` |
+| 404 | `course_id` không tồn tại | `{"error_code": "NOT_FOUND", "message": "Không tìm thấy lớp học"}` |
+| 403 | Teacher không phải chủ lớp, hoặc Student chưa được thêm vào lớp (use-case "Xem danh sách sinh viên" bước 2a/2b) | `{"error_code": "FORBIDDEN", "message": "Bạn không có quyền xem lớp học này"}` |
 
 **Quy tắc nghiệp vụ**
 
@@ -82,9 +85,11 @@
 
 | Status | Khi nào | Body |
 |---|---|---|
-| 404 | `course_id` không tồn tại | `{"detail": "Không tìm thấy lớp học"}` |
-| 403 | Teacher không phải chủ lớp | `{"detail": "Bạn không có quyền thực hiện hành động này"}` |
-| 422 | Sai định dạng field | (chi tiết lỗi field) |
+| 404 | `course_id` không tồn tại | `{"error_code": "NOT_FOUND", "message": "Không tìm thấy lớp học"}` |
+| 403 | Người gọi không phải Admin/Teacher, hoặc Teacher không phải chủ lớp | `{"error_code": "FORBIDDEN", "message": "Bạn không có quyền thực hiện hành động này"}` |
+| 422 | Sai kiểu dữ liệu | `{"error_code": "VALIDATION_ERROR", "message": "..."}` |
+| 422 | `course_name` / `term` được truyền nhưng rỗng hoặc chỉ chứa khoảng trắng | `{"error_code": "EMPTY_FIELD", "message": "<field> không được để trống"}` |
+| 422 | `start_date` không trước `end_date` | `{"error_code": "INVALID_FORMAT", "message": "start_date phải trước end_date"}` |
 
 **Quy tắc nghiệp vụ**
 
@@ -111,9 +116,10 @@
 
 | Status | Khi nào | Body |
 |---|---|---|
-| 404 | `course_id` không tồn tại, hoặc `student_id` không tồn tại/không phải Sinh viên (use-case bước 4a) | `{"detail": "Không tìm thấy sinh viên"}` |
-| 403 | Teacher không phải chủ lớp (use-case bước 3a) | `{"detail": "Bạn không có quyền thêm sinh viên vào lớp này"}` |
-| 409 | Sinh viên đã có trong lớp học (use-case bước 5a) | `{"detail": "Sinh viên đã có trong lớp học"}` |
+| 404 | `course_id` không tồn tại | `{"error_code": "NOT_FOUND", "message": "Không tìm thấy lớp học"}` |
+| 404 | `student_id` không tồn tại/không phải Sinh viên (use-case bước 4a) | `{"error_code": "NOT_FOUND", "message": "Không tìm thấy sinh viên"}` |
+| 403 | Teacher không phải chủ lớp (use-case bước 3a) | `{"error_code": "FORBIDDEN", "message": "Bạn không có quyền thêm sinh viên vào lớp này"}` |
+| 409 | Sinh viên đã có trong lớp học (use-case bước 5a) | `{"error_code": "CONFLICT", "message": "Sinh viên đã có trong lớp học"}` |
 
 **Quy tắc nghiệp vụ**
 
@@ -132,8 +138,8 @@
 
 | Status | Khi nào | Body |
 |---|---|---|
-| 404 | `course_id` không tồn tại | `{"detail": "Không tìm thấy lớp học"}` |
-| 403 | Teacher không phải chủ lớp, hoặc Student không thuộc lớp này (use-case bước 2a/2b) | `{"detail": "Bạn không có quyền xem lớp học này"}` |
+| 404 | `course_id` không tồn tại | `{"error_code": "NOT_FOUND", "message": "Không tìm thấy lớp học"}` |
+| 403 | Teacher không phải chủ lớp, hoặc Student không thuộc lớp này (use-case bước 2a/2b) | `{"error_code": "FORBIDDEN", "message": "Bạn không có quyền xem lớp học này"}` |
 
 **Quy tắc nghiệp vụ**
 
@@ -150,8 +156,9 @@
 
 | Status | Khi nào | Body |
 |---|---|---|
-| 404 | `course_id` không tồn tại, hoặc `student_id` không có `Enrollment` trong lớp này (use-case bước 5a) | `{"detail": "Sinh viên không thuộc lớp học này"}` |
-| 403 | Teacher không phải chủ lớp (use-case bước 4a) | `{"detail": "Bạn không có quyền thực hiện hành động này"}` |
+| 404 | `course_id` không tồn tại | `{"error_code": "NOT_FOUND", "message": "Không tìm thấy lớp học"}` |
+| 404 | `student_id` không có `Enrollment` trong lớp này (use-case bước 5a) | `{"error_code": "NOT_FOUND", "message": "Sinh viên không thuộc lớp học này"}` |
+| 403 | Teacher không phải chủ lớp (use-case bước 4a) | `{"error_code": "FORBIDDEN", "message": "Bạn không có quyền thực hiện hành động này"}` |
 
 **Quy tắc nghiệp vụ**
 

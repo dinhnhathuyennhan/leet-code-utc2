@@ -8,6 +8,7 @@ class AddStudentToCourseResponse(BaseModel):
     course_id: str
     student_id: str
 
+
 class AddStudentToCourseRequest(BaseModel):
     student_id: str
 

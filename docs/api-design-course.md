@@ -1,17 +1,25 @@
 # Thiết kế API — Quản lý lớp học (Course)
 
+## Quy ước thời gian (`start_date`, `end_date`)
+
+- Client gửi **giờ Việt Nam, không kèm offset** (vd: `"2026-09-07T00:00:00"`). Server lưu và trả về nguyên giá trị đó (`"2026-09-07T00:00:00"`).
+- Nếu client gửi kèm offset (vd: `"2026-09-07T00:00:00+07:00"` hoặc hậu tố `Z`), server quy đổi về UTC và trả về **không kèm offset** (`"2026-09-06T17:00:00"`) → hiển thị sẽ lệch. Vì vậy không gửi kèm offset.
+- Lý do: cột DB đang là `timestamp without time zone`. Sẽ chuyển sang `timestamptz` trước khi làm các tính năng có so sánh với giờ server (hạn nộp bài của Lesson/Submission).
+
 ## POST /courses — Tạo lớp học
 
 **Request body**
 
 | Field | Kiểu | Bắt buộc | Ghi chú |
 |---|---|---|---|
-| course_id | string | có | mã lớp học, duy nhất |
-| course_name | string | có | |
-| term | string | có | học kỳ |
-| start_date | datetime | có | phải trước `end_date` |
+| course_id | string | có | mã lớp học, duy nhất, tối đa 50 ký tự |
+| course_name | string | có | tối đa 255 ký tự |
+| term | string | có | học kỳ, tối đa 255 ký tự |
+| start_date | datetime | có | phải trước `end_date`, xem [Quy ước thời gian](#quy-ước-thời-gian-start_date-end_date) |
 | end_date | datetime | có | |
-| avt_link | string | không | |
+| avt_link | string | không | tối đa 2048 ký tự |
+
+`course_id`, `course_name`, `term` được tự động trim khoảng trắng hai đầu trước khi lưu (`avt_link` giữ nguyên).
 
 **Response 201 Created**
 
@@ -30,8 +38,8 @@
 
 | Status | Khi nào | Body |
 |---|---|---|
-| 422 | Thiếu field / sai kiểu dữ liệu (use-case bước 5a) | `{"error_code": "VALIDATION_ERROR", "message": "..."}` |
-| 422 | `course_id` / `course_name` / `term` rỗng hoặc chỉ chứa khoảng trắng (use-case bước 5a) | `{"error_code": "EMPTY_FIELD", "message": "<field> không được để trống"}` |
+| 422 | Thiếu field, field bắt buộc = `null`, sai kiểu dữ liệu, vượt quá độ dài tối đa, hoặc `course_id` / `course_name` / `term` là chuỗi rỗng `""` (use-case bước 5a) | `{"error_code": "VALIDATION_ERROR", "message": "..."}` (message của pydantic, tiếng Anh) |
+| 422 | `course_id` / `course_name` / `term` chỉ chứa khoảng trắng, vd `"   "` (use-case bước 5a) | `{"error_code": "EMPTY_FIELD", "message": "<field> không được để trống"}` |
 | 422 | `start_date` không trước `end_date` (use-case bước 5a) | `{"error_code": "INVALID_FORMAT", "message": "start_date phải trước end_date"}` |
 | 403 | Người gọi không phải Admin/Teacher | `{"error_code": "FORBIDDEN", "message": "Bạn không có quyền thực hiện hành động này"}` |
 | 409 | `course_id` đã tồn tại (use-case bước 6a) | `{"error_code": "CONFLICT", "message": "Mã lớp học đã tồn tại"}` |
@@ -73,13 +81,15 @@
 
 | Field | Kiểu | Bắt buộc | Ghi chú |
 |---|---|---|---|
-| course_name | string | không | |
-| term | string | không | |
-| start_date | datetime | không | |
+| course_name | string | không | tối đa 255 ký tự |
+| term | string | không | tối đa 255 ký tự |
+| start_date | datetime | không | xem [Quy ước thời gian](#quy-ước-thời-gian-start_date-end_date) |
 | end_date | datetime | không | |
-| avt_link | string | không | |
+| avt_link | string | không | tối đa 2048 ký tự. Không gỡ được ảnh: gửi `null` sẽ bị bỏ qua |
 
-**Response 200 OK**: object giống response của `POST /courses`.
+Field gửi lên với giá trị `null` sẽ bị **bỏ qua** (giữ nguyên giá trị cũ), không phải xoá giá trị.
+
+**Response 200 OK**: object giống response của `POST /courses`. Body rỗng `{}` hoặc toàn `null` → không cập nhật gì, trả 200 với dữ liệu hiện tại.
 
 **Response lỗi**
 
@@ -87,13 +97,13 @@
 |---|---|---|
 | 404 | `course_id` không tồn tại | `{"error_code": "NOT_FOUND", "message": "Không tìm thấy lớp học"}` |
 | 403 | Người gọi không phải Admin/Teacher, hoặc Teacher không phải chủ lớp | `{"error_code": "FORBIDDEN", "message": "Bạn không có quyền thực hiện hành động này"}` |
-| 422 | Sai kiểu dữ liệu | `{"error_code": "VALIDATION_ERROR", "message": "..."}` |
+| 422 | Sai kiểu dữ liệu, vượt quá độ dài tối đa | `{"error_code": "VALIDATION_ERROR", "message": "..."}` |
 | 422 | `course_name` / `term` được truyền nhưng rỗng hoặc chỉ chứa khoảng trắng | `{"error_code": "EMPTY_FIELD", "message": "<field> không được để trống"}` |
-| 422 | `start_date` không trước `end_date` | `{"error_code": "INVALID_FORMAT", "message": "start_date phải trước end_date"}` |
+| 422 | `start_date` không trước `end_date` (nếu chỉ gửi một trong hai, so với giá trị đang lưu trong DB) | `{"error_code": "INVALID_FORMAT", "message": "start_date phải trước end_date"}` |
 
 **Quy tắc nghiệp vụ**
 
-- Không cho sửa `course_id`, `created_by`, `total_number_student` qua endpoint này.
+- Không cho sửa `course_id`, `created_by`, `total_number_student` qua endpoint này (field lạ trong body bị bỏ qua).
 - **Yêu cầu quyền**: Admin, hoặc Teacher chủ lớp (`created_by == current_user.user_id`).
 
 ## POST /courses/{course_id}/enrollments — Thêm sinh viên vào lớp

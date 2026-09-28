@@ -336,7 +336,7 @@ class TestGetCourseEnrollments:
         result = get_course_enrollments(session, course.course_id, owner_teacher)
 
         assert result == []
-        
+
 # ============================== CREATE / UPDATE COURSE ==============================
 
 VALID_START = datetime(2026, 9, 7)

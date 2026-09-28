@@ -1,5 +1,5 @@
 import { Skeleton } from "@/components/ui/skeleton";
-import type { TeacherOverview } from "@/lib/dashboard";
+import type { TeacherOverview } from "@/lib/types/dashboard";
 import { cn } from "@/lib/utils";
 
 // clip-path là phần đặc thù (hình mũi tên) nên viết bằng style — Tailwind không có utility tương đương.

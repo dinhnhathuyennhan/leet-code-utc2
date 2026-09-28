@@ -4,7 +4,7 @@ import { ArrowRight, FileSearch, TriangleAlert } from "lucide-react";
 import { ErrorState } from "@/components/shared/page-state";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
-import type { PlagiarismAlert } from "@/lib/dashboard";
+import type { PlagiarismAlert } from "@/lib/types/dashboard";
 
 interface PlagiarismAlertListProps {
   alerts?: PlagiarismAlert[];

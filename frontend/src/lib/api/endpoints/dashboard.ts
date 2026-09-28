@@ -5,7 +5,7 @@ import type {
   PendingSubmissionsResponse,
   PlagiarismAlert,
   TeacherOverview,
-} from "@/lib/dashboard";
+} from "@/lib/types/dashboard";
 
 // Dashboard endpoints are kept together so query hooks share one typed API contract.
 

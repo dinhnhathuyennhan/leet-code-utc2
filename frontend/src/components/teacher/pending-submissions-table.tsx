@@ -2,7 +2,7 @@ import Link from "next/link";
 
 import { Button } from "@/components/ui/button";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import type { JudgeKind, PendingSubmission } from "@/lib/dashboard";
+import type { JudgeKind, PendingSubmission } from "@/lib/types/dashboard";
 import { cn } from "@/lib/utils";
 
 const JUDGE_STYLES: Record<JudgeKind, string> = {

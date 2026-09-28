@@ -1,9 +1,9 @@
 import type { UserResponse } from "@/lib/api/types";
 
 const HOME_BY_ROLE: Record<number, string> = {
-  1: "/admin-dashboard",
-  2: "/teacher-dashboard",
-  3: "/student-dashboard",
+  1: "/admin/dashboard",
+  2: "/teacher",
+  3: "/student/classes",
 };
 
 export function getHomePath(user: UserResponse): string {

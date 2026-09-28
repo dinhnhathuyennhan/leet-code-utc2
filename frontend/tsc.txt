@@ -1,0 +1,24 @@
+﻿src/app/(dashboard)/teacher/courses/[id]/page.tsx(11,34): error TS1261: Already included file name 'D:/Projects/LeetCode/leet-code-utc2/frontend/src/components/teacher/course-header-Card.tsx' differs from file name 'D:/Projects/LeetCode/leet-code-utc2/frontend/src/components/teacher/course-header-card.tsx' only in casing.
+  The file is in the program because:
+    Imported via "@/components/teacher/course-header-Card" from file 'D:/Projects/LeetCode/leet-code-utc2/frontend/src/app/(dashboard)/teacher/courses/[id]/page.tsx'
+    Matched by include pattern '**/*.tsx' in 'D:/Projects/LeetCode/leet-code-utc2/frontend/tsconfig.json'
+src/app/(dashboard)/teacher/page.tsx(7,58): error TS2307: Cannot find module '@/components/teacher/DashboardBanner' or its corresponding type declarations.
+src/app/(dashboard)/teacher/page.tsx(8,41): error TS2307: Cannot find module '@/components/teacher/PendingSubmissionsPanel' or its corresponding type declarations.
+src/app/(dashboard)/teacher/page.tsx(9,37): error TS2307: Cannot find module '@/components/teacher/PlagiarismAlertList' or its corresponding type declarations.
+src/app/(dashboard)/teacher/page.tsx(10,54): error TS2307: Cannot find module '@/components/teacher/RecentCourses' or its corresponding type declarations.
+src/app/(dashboard)/teacher/page.tsx(38,92): error TS7006: Parameter 'c' implicitly has an 'any' type.
+src/components/shared/course-grid.tsx(1,28): error TS2307: Cannot find module '@/components/shared/CourseCard' or its corresponding type declarations.
+src/components/shared/top-bar.tsx(6,29): error TS1261: Already included file name 'D:/Projects/LeetCode/leet-code-utc2/frontend/src/components/shared/Breadcrumbs.tsx' differs from file name 'D:/Projects/LeetCode/leet-code-utc2/frontend/src/components/shared/breadcrumbs.tsx' only in casing.
+  The file is in the program because:
+    Imported via "@/components/shared/Breadcrumbs" from file 'D:/Projects/LeetCode/leet-code-utc2/frontend/src/components/shared/top-bar.tsx'
+    Matched by include pattern '**/*.tsx' in 'D:/Projects/LeetCode/leet-code-utc2/frontend/tsconfig.json'
+src/components/teacher/dashboard-banner.tsx(2,38): error TS2307: Cannot find module '@/lib/dashboard' or its corresponding type declarations.
+src/components/teacher/pending-submissions-table.tsx(5,51): error TS2307: Cannot find module '@/lib/dashboard' or its corresponding type declarations.
+src/components/teacher/plagiarism-alert-list.tsx(7,38): error TS2307: Cannot find module '@/lib/dashboard' or its corresponding type declarations.
+src/components/teacher/session-cards.tsx(4,30): error TS2307: Cannot find module '@/components/teacher/ProblemTable' or its corresponding type declarations.
+src/components/teacher/session-cards.tsx(5,54): error TS2307: Cannot find module '@/components/teacher/SessionMeta' or its corresponding type declarations.
+src/components/teacher/session-list.tsx(7,36): error TS2307: Cannot find module '@/components/teacher/SessionAlertBanner' or its corresponding type declarations.
+src/components/teacher/session-list.tsx(8,73): error TS2307: Cannot find module '@/components/teacher/SessionCards' or its corresponding type declarations.
+src/lib/api/endpoints/dashboard.ts(8,8): error TS2307: Cannot find module '@/lib/dashboard' or its corresponding type declarations.
+src/lib/types/course.ts(14,8): error TS2307: Cannot find module '@/lib/course' or its corresponding type declarations.
+src/lib/types/dashboard.ts(9,8): error TS2307: Cannot find module '@/lib/dashboard' or its corresponding type declarations.

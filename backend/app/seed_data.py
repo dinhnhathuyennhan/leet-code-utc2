@@ -12,21 +12,23 @@ logger = logging.getLogger("uvicorn.error")
 
 SEED_USERS = [
     {
-        "user_id": "6451071000",
-        "full_name": "ADMIN",
-        "email": "admin@example.com",
-        "role_id": 1
+        "user_id": "6451071003",
+        "full_name": "TEACHER NEW",
+        "email": "teacher.new@st.utc2.edu.vn",
+        "role_id": 2,
+        "must_change_password": True
     },
     {
-        "user_id": "6451071001",
-        "full_name": "TEACHER",
-        "email": "teacher@example.com",
-        "role_id": 2
+        "user_id": "6451071004",
+        "full_name": "STUDENT NEW",
+        "email": "student.new@st.utc2.edu.vn",
+        "role_id": 3,
+        "must_change_password": True
     },
     {
-        "user_id": "6451071002",
-        "full_name": "STUDENT",
-        "email": "student@example.com",
+        "user_id": "6451071005",
+        "full_name": "STUDENT TOKEN",
+        "email": "student.token@st.utc2.edu.vn",
         "role_id": 3
     },
 ]

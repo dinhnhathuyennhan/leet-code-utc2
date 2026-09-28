@@ -1,90 +1,144 @@
 // lib/axios.ts
-import axios, { AxiosError, InternalAxiosRequestConfig } from "axios";
-import { tokenStore } from "./token-store";
+// Axios instance duy nhất dùng cho toàn bộ API calls.
+// - Request interceptor  : gắn Bearer token (bỏ qua khi skipAuth = true)
+// - Response interceptor : tự động refresh khi 401, retry request gốc,
+//                          gọi onSessionExpired() khi refresh cũng thất bại.
 
-const axiosInstance = axios.create({
-  baseURL: process.env.NEXT_PUBLIC_API_URL,
-  timeout: 10000,
-  headers: {
-    "Content-Type": "application/json",
-  },
-  withCredentials: true, // BẮT BUỘC — để trình duyệt tự gửi cookie chứa refresh token
+import axios, {
+  type AxiosError,
+  type AxiosResponse,
+  type InternalAxiosRequestConfig,
+} from "axios";
+
+import { getAccessToken, setAccessToken } from "@/lib/auth/token-store";
+import type { RefreshResponse } from "@/lib/api/types";
+
+// ─── Module augmentation — thêm skipAuth vào axios config ────────────────────
+// Khai báo trên cả AxiosRequestConfig (dùng khi gọi .post/.get/.patch v.v.)
+// lẫn InternalAxiosRequestConfig (dùng trong interceptors).
+declare module "axios" {
+  interface AxiosRequestConfig {
+    /** Khi true: request interceptor sẽ không gắn Authorization header. */
+    skipAuth?: boolean;
+  }
+  interface InternalAxiosRequestConfig {
+    /** Khi true: request interceptor sẽ không gắn Authorization header. */
+    skipAuth?: boolean;
+  }
+}
+
+// ─── Instance ─────────────────────────────────────────────────────────────────
+
+const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
+
+export const axiosInstance = axios.create({
+  baseURL: API_URL,
+  timeout: 10_000,
+  headers: { "Content-Type": "application/json" },
+  // BẮT BUỘC — để trình duyệt tự gửi cookie chứa refresh_token
+  withCredentials: true,
 });
 
-// Request interceptor — gắn access token từ memory
+// ─── Session-expired handler (AuthProvider đăng ký lúc mount) ─────────────────
+
+type SessionExpiredHandler = () => void;
+let onSessionExpired: SessionExpiredHandler | null = null;
+
+/** AuthProvider gọi hàm này khi mount để nhận callback logout. */
+export function setSessionExpiredHandler(handler: SessionExpiredHandler | null): void {
+  onSessionExpired = handler;
+}
+
+// ─── Request interceptor — gắn access token ──────────────────────────────────
+
 axiosInstance.interceptors.request.use(
   (config: InternalAxiosRequestConfig) => {
-    const token = tokenStore.getAccessToken();
-    if (token) {
-      config.headers.Authorization = `Bearer ${token}`;
+    // skipAuth = true → public endpoint (login, logout…) → không gắn token
+    if (!config.skipAuth) {
+      const token = getAccessToken();
+      if (token) {
+        config.headers.Authorization = `Bearer ${token}`;
+      }
     }
     return config;
   },
-  (error) => Promise.reject(error)
+  (error: unknown) => Promise.reject(error),
 );
 
-// Response interceptor — refresh khi 401
-let isRefreshing = false;
-let refreshSubscribers: ((token: string) => void)[] = [];
-const REFRESH_EXEMPT_PATHS = new Set(["/auth/login", "/auth/change-password"]);
+// ─── Refresh logic ────────────────────────────────────────────────────────────
 
-function subscribeTokenRefresh(cb: (token: string) => void) {
-  refreshSubscribers.push(cb);
+/**
+ * Các path này KHÔNG trigger vòng refresh-and-retry:
+ *  /auth/login           → 401 = sai credentials
+ *  /auth/refresh         → 401 = refresh token hết hạn → logout ngay
+ *  /auth/change-password → 401 = sai mật khẩu hiện tại (business error,
+ *    xem backend/app/services/auth_service.py::WrongCurrentPasswordError)
+ */
+const REFRESH_EXEMPT_PATHS = new Set([
+  "/auth/login",
+  "/auth/refresh-access-token",
+  "/auth/change-password",
+]);
+
+let refreshPromise: Promise<string | null> | null = null;
+
+/**
+ * POST /auth/refresh-access-token — cookie refresh_token tự đi kèm nhờ withCredentials.
+ * Nhiều request 401 đồng thời dùng chung 1 lần gọi refresh duy nhất.
+ */
+export function refreshAccessToken(): Promise<string | null> {
+  if (refreshPromise) return refreshPromise;
+
+  refreshPromise = (async () => {
+    try {
+      // Dùng axios.post thuần — tránh kích hoạt lại response interceptor
+      const response = await axios.post<RefreshResponse>(
+        `${API_URL}/auth/refresh-access-token`,
+        {},
+        { withCredentials: true },
+      );
+      const newToken = response.data.access_token;
+      setAccessToken(newToken);
+      return newToken;
+    } catch {
+      setAccessToken(null);
+      return null;
+    } finally {
+      refreshPromise = null;
+    }
+  })();
+
+  return refreshPromise;
 }
 
-function onRefreshed(token: string) {
-  refreshSubscribers.forEach((cb) => cb(token));
-  refreshSubscribers = [];
-}
+// ─── Response interceptor — xử lý 401 ───────────────────────────────────────
 
 axiosInstance.interceptors.response.use(
-  (response) => response,
+  (response: AxiosResponse) => response,
   async (error: AxiosError) => {
     const originalRequest = error.config as InternalAxiosRequestConfig & {
       _retry?: boolean;
     };
 
-    if (error.response?.status === 401 &&
-      !originalRequest._retry &&
-      !REFRESH_EXEMPT_PATHS.has(originalRequest.url ?? "")) {
-      // Nếu đang có 1 request refresh chạy rồi, các request khác chờ chung kết quả
-      if (isRefreshing) {
-        return new Promise((resolve) => {
-          subscribeTokenRefresh((newToken) => {
-            originalRequest.headers.Authorization = `Bearer ${newToken}`;
-            resolve(axiosInstance(originalRequest));
-          });
-        });
-      }
+    const path = originalRequest?.url ?? "";
+    const isExempt = REFRESH_EXEMPT_PATHS.has(path);
 
+    if (error.response?.status === 401 && !originalRequest._retry && !isExempt) {
       originalRequest._retry = true;
-      isRefreshing = true;
 
-      try {
-        // Không cần gửi refreshToken trong body — cookie tự đi kèm nhờ withCredentials
-        const { data } = await axios.post(
-          `${process.env.NEXT_PUBLIC_API_URL}/auth/refresh-access-token`,
-          {},
-          { withCredentials: true }
-        );
+      const newToken = await refreshAccessToken();
 
-        tokenStore.setAccessToken(data.access_token);
-        onRefreshed(data.access_token);
-        isRefreshing = false;
-
-        originalRequest.headers.Authorization = `Bearer ${data.access_token}`;
+      if (newToken) {
+        originalRequest.headers.Authorization = `Bearer ${newToken}`;
         return axiosInstance(originalRequest);
-      } catch (refreshError) {
-        isRefreshing = false;
-        tokenStore.clear();
-        // eslint-disable-next-line @next/next/no-location-assign-relative-destination -- axios.ts là module thuần, không phải component nên không gọi được useRouter(); cố ý full-reload để xoá sạch state client khi session hết hạn
-        window.location.href = "/login";
-        return Promise.reject(refreshError);
       }
+
+      // Refresh thất bại → session hết hạn
+      onSessionExpired?.();
     }
 
     return Promise.reject(error);
-  }
+  },
 );
 
 export default axiosInstance;

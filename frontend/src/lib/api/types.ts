@@ -34,7 +34,7 @@ export interface ChangePasswordRequest {
   confirm_password: string;
 }
 
-/** POST /auth/refresh only returns a fresh access token (no user object). */
+/** POST /auth/refresh-access-token only returns a fresh access token (no user object). */
 export interface RefreshResponse {
   access_token: string;
   token_type: string;

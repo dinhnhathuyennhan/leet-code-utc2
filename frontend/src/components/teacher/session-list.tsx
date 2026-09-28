@@ -4,9 +4,9 @@ import { useMemo } from "react";
 import { CalendarPlus } from "lucide-react";
 
 import { EmptyState } from "@/components/shared/page-state";
-import { SessionAlertBanner } from "@/components/teacher/SessionAlertBanner";
-import { ClosedSessionCard, OpenSessionCard, UpcomingSessionCard } from "@/components/teacher/SessionCards";
+import { ClosedSessionCard, OpenSessionCard, UpcomingSessionCard } from "@/components/teacher/session-cards";
 import type { CourseSession } from "@/lib/types/course";
+import { SessionAlertBanner } from "./session-alert-banner";
 
 interface SessionListProps {
   sessions: CourseSession[];

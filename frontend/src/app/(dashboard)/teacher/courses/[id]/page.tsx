@@ -12,7 +12,7 @@ import { SessionList } from "@/components/teacher/session-list";
 import { ApiError } from "@/lib/api/error";
 import { formatUpdatedAt } from "@/lib/helpers/format";
 import { useCourse } from "@/lib/hooks/use-courses";
-import { CourseHeaderCard } from "@/components/teacher/course-header-Card";
+import { CourseHeaderCard } from "@/components/teacher/course-header-card";
 
 export default function TeacherCourseDetailPage() {
   const { id } = useParams<{ id: string }>();

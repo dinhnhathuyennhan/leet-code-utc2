@@ -52,7 +52,13 @@
 
 ## GET /courses — Danh sách lớp học
 
-**Response 200 OK**: mảng object giống response của `POST /courses`.
+**Response 200 OK**: mảng object giống response của `POST /courses`, sắp xếp theo `course_id`. Không có lớp nào → `[]`.
+
+**Response lỗi**
+
+| Status | Khi nào | Body |
+|---|---|---|
+| 403 | Role của người gọi không thuộc Admin/Teacher/Student | `{"error_code": "FORBIDDEN", "message": "Bạn không có quyền thực hiện hành động này"}` |
 
 **Quy tắc nghiệp vụ**
 
@@ -68,7 +74,7 @@
 | Status | Khi nào | Body |
 |---|---|---|
 | 404 | `course_id` không tồn tại | `{"error_code": "NOT_FOUND", "message": "Không tìm thấy lớp học"}` |
-| 403 | Teacher không phải chủ lớp, hoặc Student chưa được thêm vào lớp (use-case "Xem danh sách sinh viên" bước 2a/2b) | `{"error_code": "FORBIDDEN", "message": "Bạn không có quyền xem lớp học này"}` |
+| 403 | Teacher không phải chủ lớp, Student chưa được thêm vào lớp (use-case "Xem danh sách sinh viên" bước 2a/2b), hoặc role không thuộc Admin/Teacher/Student | `{"error_code": "FORBIDDEN", "message": "Bạn không có quyền xem lớp học này"}` |
 
 **Quy tắc nghiệp vụ**
 

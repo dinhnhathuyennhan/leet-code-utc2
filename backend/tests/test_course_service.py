@@ -20,8 +20,10 @@ from app.services.course_service import (
     add_student_to_course,
     create_course,
     delete_student_from_course,
+    get_course,
     get_course_enrollments,
-    update_course
+    get_courses,
+    update_course,
 )
 from models import Course, Enrollment, User
 
@@ -32,6 +34,7 @@ Sử dụng SQLite in-memory thao tác nhanh, không cần Postgres.
 
 
 # ============================== FIXTURES ==============================
+
 
 @pytest.fixture(name="session")
 def session_fixture() -> Iterator[Session]:
@@ -133,8 +136,8 @@ def enroll_directly(session: Session, course: Course, student: User) -> None:
 
 # ============================== ADD / REMOVE STUDENT ==============================
 
-class TestAddStudentToCourse:
 
+class TestAddStudentToCourse:
     # giảng viên chủ khóa học thêm sinh viên và tăng total_number_student
     def test_owner_teacher_adds_student_and_increments_counter(
         self, session, course, owner_teacher, student
@@ -163,8 +166,7 @@ class TestAddStudentToCourse:
         self, session, course, other_teacher, student
     ):
         with pytest.raises(
-            ForbiddenError,
-            match="Bạn không có quyền thêm sinh viên vào lớp này"
+            ForbiddenError, match="Bạn không có quyền thêm sinh viên vào lớp này"
         ):
             add_student_to_course(
                 student.user_id, course.course_id, session, other_teacher
@@ -177,12 +179,8 @@ class TestAddStudentToCourse:
     def test_raises_not_found_when_student_id_does_not_exist(
         self, session, course, owner_teacher
     ):
-        with pytest.raises(
-            NotFoundError, match="Không tìm thấy sinh viên"
-        ):
-            add_student_to_course(
-                "KHONG_CO", course.course_id, session, owner_teacher
-            )
+        with pytest.raises(NotFoundError, match="Không tìm thấy sinh viên"):
+            add_student_to_course("KHONG_CO", course.course_id, session, owner_teacher)
 
         assert counter_of(session, course) == 0
 
@@ -190,9 +188,7 @@ class TestAddStudentToCourse:
     def test_raises_not_found_when_target_user_is_not_a_student(
         self, session, course, owner_teacher, other_teacher
     ):
-        with pytest.raises(
-            NotFoundError, match="Không tìm thấy sinh viên"
-        ):
+        with pytest.raises(NotFoundError, match="Không tìm thấy sinh viên"):
             add_student_to_course(
                 other_teacher.user_id, course.course_id, session, owner_teacher
             )
@@ -205,9 +201,7 @@ class TestAddStudentToCourse:
     ):
         add_student_to_course(student.user_id, course.course_id, session, owner_teacher)
 
-        with pytest.raises(
-            ConflictError, match="Sinh viên đã có trong lớp học"
-        ):
+        with pytest.raises(ConflictError, match="Sinh viên đã có trong lớp học"):
             add_student_to_course(
                 student.user_id, course.course_id, session, owner_teacher
             )
@@ -218,7 +212,6 @@ class TestAddStudentToCourse:
 
 
 class TestDeleteStudentFromCourse:
-
     # giảng viên chủ khóa học xóa sinh viên khỏi khóa và giảm total_number_student
     def test_owner_teacher_removes_student_and_decrements_counter(
         self, session, course, owner_teacher, student
@@ -232,7 +225,7 @@ class TestDeleteStudentFromCourse:
         assert enrollments_of(session, course.course_id) == []
         assert counter_of(session, course) == 0
 
-    #raise forbidden khi giảng không phải chủ khóa học
+    # raise forbidden khi giảng không phải chủ khóa học
     def test_raises_forbidden_when_teacher_does_not_own_course(
         self, session, course, other_teacher, student
     ):
@@ -253,9 +246,7 @@ class TestDeleteStudentFromCourse:
     def test_raises_not_found_when_student_is_not_in_course(
         self, session, course, owner_teacher, student
     ):
-        with pytest.raises(
-            NotFoundError, match="Sinh viên không thuộc lớp học này"
-        ):
+        with pytest.raises(NotFoundError, match="Sinh viên không thuộc lớp học này"):
             delete_student_from_course(
                 student.user_id, course.course_id, session, owner_teacher
             )
@@ -263,12 +254,10 @@ class TestDeleteStudentFromCourse:
         # counter không được âm khi xoá người không có trong lớp
         assert counter_of(session, course) == 0
 
-class TestGetCourseEnrollments:
 
+class TestGetCourseEnrollments:
     # admin xem được danh sách
-    def test_admin_can_get_student_list(
-        self, session, course, admin, student
-    ):
+    def test_admin_can_get_student_list(self, session, course, admin, student):
         enroll_directly(session, course, student)
 
         result = get_course_enrollments(session, course.course_id, admin)
@@ -293,15 +282,11 @@ class TestGetCourseEnrollments:
     def test_raises_forbidden_when_teacher_does_not_own_course(
         self, session, course, other_teacher
     ):
-        with pytest.raises(
-            ForbiddenError, match="Bạn không có quyền xem lớp học này"
-        ):
+        with pytest.raises(ForbiddenError, match="Bạn không có quyền xem lớp học này"):
             get_course_enrollments(session, course.course_id, other_teacher)
 
     # student có trong lớp xem được
-    def test_student_in_course_can_get_student_list(
-        self, session, course, student
-    ):
+    def test_student_in_course_can_get_student_list(self, session, course, student):
         enroll_directly(session, course, student)
 
         result = get_course_enrollments(session, course.course_id, student)
@@ -310,23 +295,15 @@ class TestGetCourseEnrollments:
         assert result[0].student_id == student.user_id
 
     # student không có trong lớp nhận 403
-    def test_raises_forbidden_when_student_not_in_course(
-        self, session, course
-    ):
+    def test_raises_forbidden_when_student_not_in_course(self, session, course):
         other_student = make_user(session, "SV002", 3)
 
-        with pytest.raises(
-            ForbiddenError, match="Bạn không có quyền xem lớp học này"
-        ):
+        with pytest.raises(ForbiddenError, match="Bạn không có quyền xem lớp học này"):
             get_course_enrollments(session, course.course_id, other_student)
 
     # course_id không tồn tại nhận 404
-    def test_raises_not_found_when_course_id_does_not_exist(
-        self, session, admin
-    ):
-        with pytest.raises(
-            NotFoundError, match="Không tìm thấy lớp học"
-        ):
+    def test_raises_not_found_when_course_id_does_not_exist(self, session, admin):
+        with pytest.raises(NotFoundError, match="Không tìm thấy lớp học"):
             get_course_enrollments(session, "KHONG_EXIST", admin)
 
     # lớp chưa có sinh viên trả []
@@ -336,6 +313,7 @@ class TestGetCourseEnrollments:
         result = get_course_enrollments(session, course.course_id, owner_teacher)
 
         assert result == []
+
 
 # ============================== CREATE / UPDATE COURSE ==============================
 
@@ -360,7 +338,6 @@ def _make_create_request(
 
 
 class TestCreateCourse:
-
     # Teacher tạo lớp — created_by và total_number_student do server set
     def test_teacher_creates_course_with_server_side_fields(
         self, session, owner_teacher
@@ -392,9 +369,7 @@ class TestCreateCourse:
             create_course(_make_create_request(), session, owner_teacher)
 
     # start_date phải trước end_date — validation tại schema layer
-    def test_raises_invalid_format_when_start_after_end(
-        self, session, owner_teacher
-    ):
+    def test_raises_invalid_format_when_start_after_end(self, session, owner_teacher):
         with pytest.raises(InvalidFormatError, match="start_date phải trước end_date"):
             CreateCourseRequest(
                 course_id="CS303",
@@ -405,9 +380,7 @@ class TestCreateCourse:
             )
 
     # start_date bằng end_date cũng reject — validation tại schema layer
-    def test_raises_invalid_format_when_start_equals_end(
-        self, session, owner_teacher
-    ):
+    def test_raises_invalid_format_when_start_equals_end(self, session, owner_teacher):
         same_day = datetime(2026, 9, 7)
         with pytest.raises(InvalidFormatError, match="start_date phải trước end_date"):
             CreateCourseRequest(
@@ -419,9 +392,7 @@ class TestCreateCourse:
             )
 
     # field bắt buộc bị rỗng → validation tại schema layer
-    def test_raises_empty_field_when_course_name_blank(
-        self, session, owner_teacher
-    ):
+    def test_raises_empty_field_when_course_name_blank(self, session, owner_teacher):
         with pytest.raises(EmptyFieldError, match="course_name"):
             CreateCourseRequest(
                 course_id="CS305",
@@ -432,9 +403,7 @@ class TestCreateCourse:
             )
 
     # course_id dài quá 50 ký tự → 422 (giới hạn cột DB)
-    def test_raises_error_when_course_id_too_long(
-        self, session, owner_teacher
-    ):
+    def test_raises_error_when_course_id_too_long(self, session, owner_teacher):
         from pydantic import ValidationError
 
         too_long = "C" * 51
@@ -450,9 +419,7 @@ class TestCreateCourse:
             )
 
     # avt_link dài quá 2048 ký tự → 422 (giới hạn cột DB)
-    def test_raises_error_when_avt_link_too_long(
-        self, session, owner_teacher
-    ):
+    def test_raises_error_when_avt_link_too_long(self, session, owner_teacher):
         from pydantic import ValidationError
 
         too_long = "https://x.com/" + ("a" * 2048)
@@ -486,7 +453,6 @@ class TestCreateCourse:
 
 
 class TestUpdateCourse:
-
     # Teacher chủ lớp cập nhật 1 vài field — các field không gửi phải giữ nguyên
     def test_owner_teacher_updates_only_sent_fields(
         self, session, course, owner_teacher
@@ -561,7 +527,9 @@ class TestUpdateCourse:
 
     # PATCH body rỗng → no-op, trả về 200 với dữ liệu hiện tại
     def test_empty_body_is_noop(self, session, course, owner_teacher):
-        result = update_course(course.course_id, UpdateCourseRequest(), session, owner_teacher)
+        result = update_course(
+            course.course_id, UpdateCourseRequest(), session, owner_teacher
+        )
 
         assert result.course_id == course.course_id
         assert result.course_name == course.course_name
@@ -640,14 +608,14 @@ class TestCourseRoutes:
 
     def _make_stub_require_role(self, user: User):
         """Tạo dependency function trả về user cố định, bỏ qua kiểm tra role."""
+
         def stub():
             return user
+
         return stub
 
     # POST /courses — happy path trả về 201 với body đúng shape
-    def test_post_courses_returns_201(
-        self, client, session, owner_teacher
-    ):
+    def test_post_courses_returns_201(self, client, session, owner_teacher):
         from app.dependencies import get_current_user
 
         app.dependency_overrides[get_current_user] = lambda: owner_teacher
@@ -752,9 +720,7 @@ class TestCourseRoutes:
         app.dependency_overrides.clear()
 
     # PATCH /courses/{id} — body rỗng → 200 no-op
-    def test_patch_courses_empty_body_is_noop(
-        self, client, course, owner_teacher
-    ):
+    def test_patch_courses_empty_body_is_noop(self, client, course, owner_teacher):
         from app.dependencies import get_current_user
 
         app.dependency_overrides[get_current_user] = lambda: owner_teacher
@@ -765,9 +731,7 @@ class TestCourseRoutes:
         app.dependency_overrides.clear()
 
     # PATCH /courses/{id} — gửi field=null phải bị bỏ qua → 200
-    def test_patch_courses_null_field_is_ignored(
-        self, client, course, owner_teacher
-    ):
+    def test_patch_courses_null_field_is_ignored(self, client, course, owner_teacher):
         from app.dependencies import get_current_user
 
         app.dependency_overrides[get_current_user] = lambda: owner_teacher
@@ -796,4 +760,215 @@ class TestCourseRoutes:
             json={"start_date": "2027-01-01T00:00:00"},  # sau end_date DB
         )
         assert response.status_code == 422
+        app.dependency_overrides.clear()
+
+
+# ============================== GET COURSES ==============================
+
+def make_course(session: Session, course_id: str, owner: User) -> Course:
+    """Tạo thêm lớp học cho test cần nhiều hơn 1 lớp."""
+    course = Course(
+        course_id=course_id,
+        course_name=f"Lớp {course_id}",
+        created_by=owner.user_id,
+        term="HK1 2026-2027",
+        start_date=datetime(2026, 9, 7),
+        end_date=datetime(2026, 12, 27),
+        total_number_student=0,
+    )
+    session.add(course)
+    session.commit()
+    session.refresh(course)
+    return course
+
+
+class TestGetCourses:
+
+    # admin thấy tất cả lớp, kể cả lớp của teacher khác
+    def test_admin_sees_all_courses(
+        self, session, course, admin, other_teacher
+    ):
+        make_course(session, "CS102", other_teacher)
+
+        result = get_courses(session, admin)
+
+        assert [c.course_id for c in result] == ["CS101", "CS102"]
+
+    # role lạ (không phải 1/2/3) → 403, không được lọt vào nhánh nào
+    def test_raises_forbidden_for_unknown_role(self, session, course):
+        stranger = make_user(session, "XX001", 99)
+
+        with pytest.raises(ForbiddenError):
+            get_courses(session, stranger)
+
+    # teacher chỉ thấy lớp mình tạo, không thấy lớp của teacher khác
+    def test_teacher_only_sees_own_courses(
+        self, session, course, owner_teacher, other_teacher
+    ):
+        make_course(session, "CS102", other_teacher)
+
+        result = get_courses(session, owner_teacher)
+
+        assert [c.course_id for c in result] == ["CS101"]
+
+    # teacher chưa tạo lớp nào trả []
+    def test_teacher_without_courses_gets_empty_list(
+        self, session, course, other_teacher
+    ):
+        result = get_courses(session, other_teacher)
+
+        assert result == []
+
+    # student chỉ thấy lớp mình có Enrollment
+    def test_student_only_sees_enrolled_courses(
+        self, session, course, student, other_teacher
+    ):
+        enroll_directly(session, course, student)
+        make_course(session, "CS102", other_teacher)
+
+        result = get_courses(session, student)
+
+        assert [c.course_id for c in result] == ["CS101"]
+
+    # student chưa được thêm vào lớp nào trả []
+    def test_student_without_enrollment_gets_empty_list(
+        self, session, course, student
+    ):
+        result = get_courses(session, student)
+
+        assert result == []
+
+    # admin khi hệ thống chưa có lớp nào trả []
+    def test_admin_gets_empty_list_when_no_courses(self, session, admin):
+        result = get_courses(session, admin)
+
+        assert result == []
+
+
+class TestGetCourse:
+
+    # teacher chủ lớp xem được chi tiết
+    def test_owner_teacher_can_get_course(
+        self, session, course, owner_teacher
+    ):
+        result = get_course(session, course.course_id, owner_teacher)
+
+        assert result.course_id == "CS101"
+        assert result.created_by == owner_teacher.user_id
+
+    # admin xem được lớp bất kỳ
+    def test_admin_can_get_any_course(self, session, course, admin):
+        result = get_course(session, course.course_id, admin)
+
+        assert result.course_id == course.course_id
+
+    # student đã được thêm vào lớp xem được chi tiết
+    def test_enrolled_student_can_get_course(self, session, course, student):
+        enroll_directly(session, course, student)
+
+        result = get_course(session, course.course_id, student)
+
+        assert result.course_id == course.course_id
+        assert result.total_number_student == 1
+
+    # teacher không phải chủ lớp nhận 403
+    def test_raises_forbidden_when_teacher_does_not_own_course(
+        self, session, course, other_teacher
+    ):
+        with pytest.raises(ForbiddenError, match="Bạn không có quyền xem lớp học này"):
+            get_course(session, course.course_id, other_teacher)
+
+    # student chưa được thêm vào lớp nhận 403
+    def test_raises_forbidden_when_student_not_in_course(
+        self, session, course, student
+    ):
+        with pytest.raises(ForbiddenError, match="Bạn không có quyền xem lớp học này"):
+            get_course(session, course.course_id, student)
+
+    # role lạ (không phải 1/2/3) nhận 403
+    def test_raises_forbidden_for_unknown_role(self, session, course):
+        stranger = make_user(session, "XX001", 99)
+
+        with pytest.raises(ForbiddenError, match="Bạn không có quyền xem lớp học này"):
+            get_course(session, course.course_id, stranger)
+
+    # course_id không tồn tại nhận 404
+    def test_raises_not_found_when_course_id_does_not_exist(self, session, admin):
+        with pytest.raises(NotFoundError, match="Không tìm thấy lớp học"):
+            get_course(session, "KHONG_CO", admin)
+
+
+class TestGetCourseRoutes:
+    """Test HTTP cho GET /courses và GET /courses/{course_id}."""
+
+    # GET /courses — teacher nhận 200, chỉ có lớp của mình
+    def test_get_courses_returns_200(
+        self, client, session, course, owner_teacher, other_teacher
+    ):
+        from app.dependencies import get_current_user
+
+        make_course(session, "CS102", other_teacher)
+        app.dependency_overrides[get_current_user] = lambda: owner_teacher
+
+        response = client.get("/courses")
+
+        assert response.status_code == 200, response.text
+        body = response.json()
+        assert len(body) == 1
+        assert body[0]["course_id"] == "CS101"
+        assert body[0]["created_by"] == owner_teacher.user_id
+        app.dependency_overrides.clear()
+
+    # GET /courses — role lạ nhận 403 qua Global Exception Handler
+    def test_get_courses_unknown_role_returns_403(self, client, session, course):
+        from app.dependencies import get_current_user
+
+        stranger = make_user(session, "XX001", 99)
+        app.dependency_overrides[get_current_user] = lambda: stranger
+
+        response = client.get("/courses")
+
+        assert response.status_code == 403
+        assert response.json()["error_code"] == "FORBIDDEN"
+        app.dependency_overrides.clear()
+
+    # GET /courses/{id} — chủ lớp nhận 200 với body đúng shape
+    def test_get_course_owner_returns_200(self, client, course, owner_teacher):
+        from app.dependencies import get_current_user
+
+        app.dependency_overrides[get_current_user] = lambda: owner_teacher
+
+        response = client.get(f"/courses/{course.course_id}")
+
+        assert response.status_code == 200, response.text
+        body = response.json()
+        assert body["course_id"] == course.course_id
+        assert body["course_name"] == course.course_name
+        assert body["total_number_student"] == 0
+        app.dependency_overrides.clear()
+
+    # GET /courses/{id} — student ngoài lớp nhận 403
+    def test_get_course_student_not_enrolled_returns_403(
+        self, client, course, student
+    ):
+        from app.dependencies import get_current_user
+
+        app.dependency_overrides[get_current_user] = lambda: student
+
+        response = client.get(f"/courses/{course.course_id}")
+
+        assert response.status_code == 403
+        assert response.json()["error_code"] == "FORBIDDEN"
+        app.dependency_overrides.clear()
+
+    # GET /courses/{id} — course_id không tồn tại nhận 404
+    def test_get_course_missing_returns_404(self, client, admin):
+        from app.dependencies import get_current_user
+
+        app.dependency_overrides[get_current_user] = lambda: admin
+
+        response = client.get("/courses/KHONG_CO")
+
+        assert response.status_code == 404
+        assert response.json()["error_code"] == "NOT_FOUND"
         app.dependency_overrides.clear()

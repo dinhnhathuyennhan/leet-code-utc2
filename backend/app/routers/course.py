@@ -18,7 +18,9 @@ from app.services.course_service import (
     add_student_to_course as _add_student_to_course,
     create_course as _create_course,
     delete_student_from_course as _delete_student_from_course,
+    get_course as _get_course,
     get_course_enrollments,
+    get_courses as _get_courses,
     update_course as _update_course,
 )
 from models import User
@@ -42,6 +44,29 @@ def create_course_route(
         session=session,
         current_user=current_user,
     )
+
+
+@router.get(
+    "/courses",
+    response_model=list[CourseResponse],
+)
+def get_courses_route(
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+) -> list[CourseResponse]:
+    return _get_courses(session=session, current_user=current_user)
+
+
+@router.get(
+    "/courses/{course_id}",
+    response_model=CourseResponse,
+)
+def get_course_route(
+    course_id: str,
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+) -> CourseResponse:
+    return _get_course(session=session, course_id=course_id, current_user=current_user)
 
 
 @router.patch(
@@ -97,6 +122,7 @@ def delete_student_from_course(
         session=session,
         current_user=current_user,
     )
+
 
 @router.get(
     "/courses/{course_id}/enrollments",

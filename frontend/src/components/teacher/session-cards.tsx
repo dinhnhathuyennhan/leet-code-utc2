@@ -1,11 +1,11 @@
 import { Clock, Flag, Pencil, Plus, ClipboardList } from "lucide-react";
 
 import { ActionMenu } from "@/components/teacher/action-menu";
-import { ProblemTable } from "@/components/teacher/ProblemTable";
-import { DateChip, SESSION_MENU, SessionTitle } from "@/components/teacher/SessionMeta";
 import { Button } from "@/components/ui/button";
 import { formatDeadline } from "@/lib/helpers/format";
 import type { CourseSession } from "@/lib/types/course";
+import { DateChip, SESSION_MENU, SessionTitle } from "./session-meta";
+import { ProblemTable } from "./problem-table";
 
 const PRIMARY = "bg-indigo-900 text-white hover:bg-indigo-800";
 

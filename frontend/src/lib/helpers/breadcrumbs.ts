@@ -23,7 +23,7 @@ export function buildBreadcrumbs(pathname: string, dynamicLabel?: string | null)
   let href = "";
   segments.forEach((segment, index) => {
     href += `/${segment}`;
-    if (segment === "teacher") return;
+    if (segment === "teacher" || segment === "student") return;
     const isLast = index === segments.length - 1;
     crumbs.push({
       label: SEGMENT_LABELS[segment] ?? dynamicLabel ?? "…",

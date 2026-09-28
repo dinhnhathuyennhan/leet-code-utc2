@@ -65,7 +65,7 @@ class GetStudentListResponse(BaseModel):
     student_id: str
     full_name: str
     email: AppEmailStr
-      
+
 class CourseResponse(BaseModel):
     """Response chuẩn cho mọi endpoint thuộc module Course.
 

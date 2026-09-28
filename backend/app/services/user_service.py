@@ -1,7 +1,7 @@
 from sqlmodel import Session, select
 
 from app.core.date import age_calculation
-from app.core.exceptions import AppError, ConflictError
+from app.core.exceptions import AppError, ConflictError, NotFoundError
 from app.core.password import hash_password
 from app.dependencies import Role
 from app.schemas.user import (
@@ -10,7 +10,7 @@ from app.schemas.user import (
     UserResponse,
     password_from_date,
 )
-from models import Course, Enrollment, User
+from models import Class, Course, Enrollment, User
 
 
 class DateOfBirthRequiredError(AppError):
@@ -63,6 +63,10 @@ def create_student(session: Session, data: CreateStudentRequest) -> User:
     if existing:
         raise ConflictError("Email đã được đăng ký")
 
+    db_class = session.get(Class, data.class_id)
+    if not db_class:
+        raise NotFoundError(f"Không tìm thấy lớp học có ID: {data.class_id}")
+
     age = age_calculation(
         data.date_of_birth.day,
         data.date_of_birth.month,
@@ -81,6 +85,7 @@ def create_student(session: Session, data: CreateStudentRequest) -> User:
         date_of_birth=data.date_of_birth,
         avt_link=data.avt_link,
         role_id=3,  # 1: admin, 2: teacher, 3: student
+        class_id=data.class_id,
     )
     session.add(student)
     session.commit()
@@ -95,6 +100,7 @@ def user_response(user: User) -> UserResponse:
         email=user.email,
         role_id=user.role_id,
         date_of_birth=user.date_of_birth,
+        class_id=user.class_id if user.role_id == Role.STUDENT else None,
     )
 
 

@@ -20,7 +20,7 @@ from app.services.auth_service import (
 )
 from models import User
 
-router = APIRouter()
+router = APIRouter(tags=["auth"])
 logger = logging.getLogger(__name__)
 
 REFRESH_TOKEN_MAX_AGE_SECONDS = 7 * 24 * 60 * 60  # khớp REFRESH_TOKEN_EXPIRE_DAYS

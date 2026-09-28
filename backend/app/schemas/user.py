@@ -66,6 +66,7 @@ class CreateStudentRequest(BaseModel):
     full_name: str
     date_of_birth: date
     email: AppEmailStr
+    class_id: str
     avt_link: str | None = None
 
     @field_validator("date_of_birth", mode="before")
@@ -80,6 +81,7 @@ class UserResponse(BaseModel):
     email: AppEmailStr
     role_id: int
     date_of_birth: date
+    class_id: str | None = None
 
     @field_serializer("date_of_birth")
     def serialize_date_of_birth(self, value: date) -> str:

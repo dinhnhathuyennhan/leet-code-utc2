@@ -3,6 +3,7 @@ from datetime import UTC, datetime
 from pydantic import BaseModel, Field, field_validator, model_validator
 
 from app.core.exceptions import EmptyFieldError, InvalidFormatError
+from app.core.Validator import AppEmailStr
 
 
 # ----- hằng số giới hạn độ dài (khớp với column max_length trong models.py) -----
@@ -59,6 +60,11 @@ class AddStudentToCourseRequest(BaseModel):
             raise EmptyFieldError("user_id is required")
         return v
 
+class GetStudentListResponse(BaseModel):
+    enrollment_id: int
+    student_id: str
+    full_name: str
+    email: AppEmailStr
 
 class CourseResponse(BaseModel):
     """Response chuẩn cho mọi endpoint thuộc module Course.

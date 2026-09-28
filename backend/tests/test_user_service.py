@@ -2,7 +2,7 @@ from datetime import date
 
 import pytest
 
-from app.core.exceptions import ConflictError
+from app.core.exceptions import ConflictError, NotFoundError
 from app.core.password import hash_password, verify_password
 from app.dependencies import Role
 from app.schemas.user import CreateStudentRequest, CreateTeacherRequest
@@ -14,7 +14,15 @@ from app.services.user_service import (
     create_teacher,
     reset_password,
 )
-from models import Course, Enrollment, User
+from models import Class, Course, Enrollment, User
+
+
+def _make_class(session, class_id: str = "CQ.64.CNTT"):
+    c = Class(class_id=class_id, type="CQ", course_number=64, department="CNTT")
+    session.add(c)
+    session.commit()
+    session.refresh(c)
+    return c
 
 
 def _make_user(
@@ -44,11 +52,13 @@ def _make_user(
 # region Test create_student
 
 def test_create_student_success(session):
+    _make_class(session, "CQ.64.CNTT")
     data = CreateStudentRequest(
         user_id="6451071055",
         full_name="Đinh Nhật Huyền Nhân",
         date_of_birth="31/08/2005",
         email="6451071055@st.utc2.edu.vn",
+        class_id="CQ.64.CNTT",
     )
     student = create_student(session, data)
 
@@ -56,16 +66,19 @@ def test_create_student_success(session):
     assert student.full_name == "Đinh Nhật Huyền Nhân"
     assert student.email == "6451071055@st.utc2.edu.vn"
     assert student.role_id == 3
+    assert student.class_id == "CQ.64.CNTT"
     assert student.must_change_password is True
     assert student.date_of_birth == date(2005, 8, 31)
 
 
 def test_create_student_accepts_dd_mm_yyyy_and_normalizes_to_date_object(session):
+    _make_class(session, "CQ.64.CNTT")
     data = CreateStudentRequest(
         user_id="6451071056",
         full_name="Nguyễn Văn A",
         date_of_birth="05-06-2000",
         email="6451071056@st.utc2.edu.vn",
+        class_id="CQ.64.CNTT",
     )
     student = create_student(session, data)
 
@@ -73,21 +86,25 @@ def test_create_student_accepts_dd_mm_yyyy_and_normalizes_to_date_object(session
 
 
 def test_create_student_accepts_iso_date_format(session):
-    student = CreateStudentRequest(
+    _make_class(session, "CQ.64.CNTT")
+    student_req = CreateStudentRequest(
         user_id="6451071057",
         full_name="Nguyễn Văn B",
         date_of_birth="2000-06-05",
         email="6451071057@st.utc2.edu.vn",
+        class_id="CQ.64.CNTT",
     )
-    assert student.date_of_birth == date(2000, 6, 5)
+    assert student_req.date_of_birth == date(2000, 6, 5)
 
 
 def test_create_student_duplicate_email_raises(session):
+    _make_class(session, "CQ.64.CNTT")
     data = CreateStudentRequest(
         user_id="6451071055",
         full_name="Đinh Nhật Huyền Nhân",
         date_of_birth="31/08/2005",
         email="6451071055@st.utc2.edu.vn",
+        class_id="CQ.64.CNTT",
     )
 
     create_student(session, data)
@@ -97,14 +114,29 @@ def test_create_student_duplicate_email_raises(session):
 
 
 def test_create_student_invalid_age_raises(session):
+    _make_class(session, "CQ.64.CNTT")
     data = CreateStudentRequest(
         user_id="6451071055",
         full_name="Đinh Nhật Huyền Nhân",
         date_of_birth="31/08/2020",
         email="6451071055@st.utc2.edu.vn",
+        class_id="CQ.64.CNTT",
     )
 
     with pytest.raises(DateOfBirthRequiredError):
+        create_student(session, data)
+
+
+def test_create_student_class_not_found_raises(session):
+    data = CreateStudentRequest(
+        user_id="6451071058",
+        full_name="Nguyễn Văn C",
+        date_of_birth="31/08/2005",
+        email="6451071058@st.utc2.edu.vn",
+        class_id="CLASS_NON_EXISTENT",
+    )
+
+    with pytest.raises(NotFoundError):
         create_student(session, data)
 
 

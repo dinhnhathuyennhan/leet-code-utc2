@@ -17,7 +17,7 @@ from app.services.user_service import (
 )
 from models import User
 
-router = APIRouter()
+router = APIRouter(tags=["user"])
 
 
 @router.post("/teachers", response_model=UserResponse)

@@ -5,23 +5,25 @@ from sqlmodel import Session
 from starlette import status
 
 from app.db import get_session
-from app.dependencies import Role, require_role
+from app.dependencies import Role, get_current_user, require_role
 from app.schemas.course import (
     AddStudentToCourseRequest,
     AddStudentToCourseResponse,
     CourseResponse,
     CreateCourseRequest,
+    GetStudentListResponse,
     UpdateCourseRequest,
 )
-from app.services.course_service import add_student_to_course as _add_student_to_course
-from app.services.course_service import create_course as _create_course
 from app.services.course_service import (
+    add_student_to_course as _add_student_to_course,
+    create_course as _create_course,
     delete_student_from_course as _delete_student_from_course,
+    get_course_enrollments,
+    update_course as _update_course,
 )
-from app.services.course_service import update_course as _update_course
 from models import User
 
-router = APIRouter()
+router = APIRouter(tags=["course"])
 logger = logging.getLogger(__name__)
 
 
@@ -95,3 +97,14 @@ def delete_student_from_course(
         session=session,
         current_user=current_user,
     )
+
+@router.get(
+    "/courses/{course_id}/enrollments",
+    response_model=list[GetStudentListResponse],
+)
+def get_course_enrollments_route(
+    course_id: str,
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+):
+    return get_course_enrollments(session, course_id, current_user)

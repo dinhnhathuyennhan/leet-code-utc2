@@ -20,7 +20,8 @@ from app.services.course_service import (
     add_student_to_course,
     create_course,
     delete_student_from_course,
-    update_course,
+    get_course_enrollments,
+    update_course
 )
 from models import Course, Enrollment, User
 
@@ -262,6 +263,79 @@ class TestDeleteStudentFromCourse:
         # counter không được âm khi xoá người không có trong lớp
         assert counter_of(session, course) == 0
 
+class TestGetCourseEnrollments:
+
+    # admin xem được danh sách
+    def test_admin_can_get_student_list(
+        self, session, course, admin, student
+    ):
+        enroll_directly(session, course, student)
+
+        result = get_course_enrollments(session, course.course_id, admin)
+
+        assert len(result) == 1
+        assert result[0].student_id == student.user_id
+        assert result[0].full_name == student.full_name
+        assert result[0].email == student.email
+
+    # teacher chủ lớp xem được
+    def test_owner_teacher_can_get_student_list(
+        self, session, course, owner_teacher, student
+    ):
+        enroll_directly(session, course, student)
+
+        result = get_course_enrollments(session, course.course_id, owner_teacher)
+
+        assert len(result) == 1
+        assert result[0].student_id == student.user_id
+
+    # teacher không phải chủ lớp nhận 403
+    def test_raises_forbidden_when_teacher_does_not_own_course(
+        self, session, course, other_teacher
+    ):
+        with pytest.raises(
+            ForbiddenError, match="Bạn không có quyền xem lớp học này"
+        ):
+            get_course_enrollments(session, course.course_id, other_teacher)
+
+    # student có trong lớp xem được
+    def test_student_in_course_can_get_student_list(
+        self, session, course, student
+    ):
+        enroll_directly(session, course, student)
+
+        result = get_course_enrollments(session, course.course_id, student)
+
+        assert len(result) == 1
+        assert result[0].student_id == student.user_id
+
+    # student không có trong lớp nhận 403
+    def test_raises_forbidden_when_student_not_in_course(
+        self, session, course
+    ):
+        other_student = make_user(session, "SV002", 3)
+
+        with pytest.raises(
+            ForbiddenError, match="Bạn không có quyền xem lớp học này"
+        ):
+            get_course_enrollments(session, course.course_id, other_student)
+
+    # course_id không tồn tại nhận 404
+    def test_raises_not_found_when_course_id_does_not_exist(
+        self, session, admin
+    ):
+        with pytest.raises(
+            NotFoundError, match="Không tìm thấy lớp học"
+        ):
+            get_course_enrollments(session, "KHONG_EXIST", admin)
+
+    # lớp chưa có sinh viên trả []
+    def test_returns_empty_list_when_course_has_no_students(
+        self, session, course, owner_teacher
+    ):
+        result = get_course_enrollments(session, course.course_id, owner_teacher)
+
+        assert result == []
 
 # ============================== CREATE / UPDATE COURSE ==============================
 

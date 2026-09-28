@@ -17,5 +17,7 @@ select = [
 ]
 
 ignore = [
-  "B008"
+  "B008",
+  "I001",  # import không đúng thứ tự
+  "E501",  # dòng code quá dài
 ]

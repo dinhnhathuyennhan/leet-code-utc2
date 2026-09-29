@@ -30,6 +30,7 @@ declare module "axios" {
 // ─── Instance ─────────────────────────────────────────────────────────────────
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
+const AUTH_REFRESH_TIMEOUT_MS = 5_000;
 
 export const axiosInstance = axios.create({
   baseURL: API_URL,
@@ -95,7 +96,7 @@ export function refreshAccessToken(): Promise<string | null> {
       const response = await axios.post<RefreshResponse>(
         `${API_URL}/auth/refresh-access-token`,
         {},
-        { withCredentials: true },
+        { withCredentials: true, timeout: AUTH_REFRESH_TIMEOUT_MS },
       );
       const newToken = response.data.access_token;
       setAccessToken(newToken);

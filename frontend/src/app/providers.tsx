@@ -8,6 +8,7 @@ import { useState, type ReactNode } from "react";
 import { Toaster } from "@/components/ui/sonner";
 import { AuthProvider } from "@/context/auth-context";
 import { makeQueryClient } from "@/lib/query-client";
+import { RouteGuard } from "./route-guard";
 
 export function Providers({ children }: { children: ReactNode }) {
   // useState (not module scope) so each request/browser session gets its
@@ -18,8 +19,10 @@ export function Providers({ children }: { children: ReactNode }) {
     <ThemeProvider attribute="class" defaultTheme="system" enableSystem disableTransitionOnChange>
       <QueryClientProvider client={queryClient}>
         <AuthProvider>
-          {children}
-          <Toaster />
+          <RouteGuard>
+            {children}
+            <Toaster />
+          </RouteGuard> 
         </AuthProvider>
         {process.env.NODE_ENV !== "production" && <ReactQueryDevtools initialIsOpen={false} />}
       </QueryClientProvider>

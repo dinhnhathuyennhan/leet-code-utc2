@@ -7,7 +7,7 @@ import { BreadcrumbProvider } from "@/components/shared/breadcrumb-context";
 import { Sidebar } from "@/components/shared/Sidebar";
 import { Topbar } from "@/components/shared/top-bar";
 import { Sheet, SheetContent, SheetDescription, SheetTitle } from "@/components/ui/sheet";
-import type { ShellUser } from "@/lib/auth/use-shell-user";
+import type { ShellUser } from "@/lib/hooks/use-shell-user";
 import type { NavItem } from "@/lib/constants/navigation";
 
 interface AppShellProps {

@@ -7,7 +7,7 @@ import { LogOut } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import type { NavItem } from "@/lib/constants/navigation";
-import type { ShellUser } from "@/lib/auth/use-shell-user";
+import type { ShellUser } from "@/lib/hooks/use-shell-user";
 import { getInitial } from "@/lib/helpers/format";
 import { cn } from "@/lib/utils";
 

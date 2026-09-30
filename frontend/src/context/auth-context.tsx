@@ -78,7 +78,7 @@ function clearCachedProfile(): void {
 }
 
 /**
- * POST /auth/refresh returns only a fresh access token, no user object (a
+ * POST /auth/refresh-access-token returns only a fresh access token, no user object (a
  * gap in the current backend contract — recommend adding GET /auth/me).
  * user_id/role_id are recovered from the token's own claims (always
  * accurate: they come from the token just issued); full_name/email/

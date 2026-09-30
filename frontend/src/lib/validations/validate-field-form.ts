@@ -4,9 +4,9 @@
 import { z } from "zod";
 
 /** Sinh viên: @st.utc2.edu.vn — Giáo viên/Admin: @utc2.edu.vn */
-const UTC2_EMAIL_PATTERN = /^[a-zA-Z0-9._%+-]+@(st\.)?utc2\.edu\.vn$/;
+const UTC2_EMAIL_PATTERN = /^[a-zA-Z0-9._%+-]+@(st|ad|tc)\.utc2\.edu\.vn$/;
 
-export const EMAIL_DOMAIN_MESSAGE = "Vui lòng sử dụng Email trường @st.utc2.edu.vn";
+export const EMAIL_DOMAIN_MESSAGE = "Vui lòng sử dụng Email trường .utc2.edu.vn";
 
 export const loginSchema = z.object({
   email: z

@@ -1,6 +1,6 @@
 /**
  * Access-token holder, persisted to localStorage so it survives a hard
- * reload/tab close without waiting on `POST /auth/refresh` first.
+ * reload/tab close without waiting on `POST /auth/refresh-access-token` first.
  */
 
 const STORAGE_KEY = "chamcode.accessToken";

@@ -22,24 +22,7 @@ from models import Course, Enrollment, User
 def get_course_enrollments(
     session: Session, course_id: str, current_user: User
 ) -> list[GetStudentListResponse]:
-    course = session.get(Course, course_id)
-    if course is None:
-        raise NotFoundError("Không tìm thấy lớp học")
-
-    can_view = current_user.role_id == Role.ADMIN or (
-        current_user.role_id == Role.TEACHER
-        and course.created_by == current_user.user_id
-    )
-    if current_user.role_id == Role.STUDENT:
-        can_view = session.exec(
-            select(Enrollment).where(
-                Enrollment.course_id == course_id,
-                Enrollment.student_id == current_user.user_id,
-            )
-        ).first() is not None
-
-    if not can_view:
-        raise ForbiddenError("Bạn không có quyền xem lớp học này")
+    _get_viewable_course(session, course_id, current_user)
 
     statement = (
         select(Enrollment, User)
@@ -57,6 +40,28 @@ def get_course_enrollments(
     ]
 
 
+def _get_viewable_course(
+    session: Session, course_id: str, current_user: User
+) -> Course:
+    course = session.get(Course, course_id)
+    if course is None:
+        raise NotFoundError("Không tìm thấy lớp học")
+
+    if current_user.role_id == Role.ADMIN:
+        can_view = True
+    elif current_user.role_id == Role.TEACHER:
+        can_view = course.created_by == current_user.user_id
+    elif current_user.role_id == Role.STUDENT:
+        can_view = (
+            _find_enrollment(session, course_id, current_user.user_id) is not None
+        )
+    else:
+        can_view = False
+
+    if not can_view:
+        raise ForbiddenError("Bạn không có quyền xem lớp học này")
+    return course
+
 
 def _get_manageable_course(
     course_id: str, session: Session, current_user: User, forbidden_message: str
@@ -64,16 +69,13 @@ def _get_manageable_course(
     course = session.get(Course, course_id)
     if not course:
         raise NotFoundError("Không tìm thấy lớp học")
-    if (
-        current_user.role_id != Role.ADMIN
-        and course.created_by != current_user.user_id
-    ):
+    if current_user.role_id != Role.ADMIN and course.created_by != current_user.user_id:
         raise ForbiddenError(forbidden_message)
     return course
 
 
 def _find_enrollment(
-        session: Session, course_id: str, student_id: str
+    session: Session, course_id: str, student_id: str
 ) -> Enrollment | None:
     return session.exec(
         select(Enrollment).where(
@@ -85,7 +87,9 @@ def _find_enrollment(
 
 def add_student_to_course(student_id, course_id, session, current_user):
     course = _get_manageable_course(
-        course_id, session, current_user,
+        course_id,
+        session,
+        current_user,
         "Bạn không có quyền thêm sinh viên vào lớp này",
     )
 
@@ -105,13 +109,15 @@ def add_student_to_course(student_id, course_id, session, current_user):
     return AddStudentToCourseResponse(
         student_id=student_id,
         course_id=course_id,
-        enrollment_id=enrollment.enrollment_id
+        enrollment_id=enrollment.enrollment_id,
     )
 
 
 def delete_student_from_course(student_id, course_id, session, current_user):
     course = _get_manageable_course(
-        course_id, session, current_user,
+        course_id,
+        session,
+        current_user,
         "Bạn không có quyền thực hiện hành động này",
     )
 
@@ -197,7 +203,9 @@ def update_course(
     - Quyền: Admin mọi lớp, hoặc Teacher là chủ lớp (`created_by`).
     """
     course = _get_manageable_course(
-        course_id, session, current_user,
+        course_id,
+        session,
+        current_user,
         "Bạn không có quyền thực hiện hành động này",
     )
 
@@ -231,3 +239,26 @@ def update_course(
     session.commit()
     session.refresh(course)
     return _to_response(course)
+
+
+def get_course(session: Session, course_id: str, current_user: User) -> CourseResponse:
+    course = _get_viewable_course(session, course_id, current_user)
+    return _to_response(course)
+
+
+def get_courses(session: Session, current_user: User) -> list[CourseResponse]:
+    if current_user.role_id == Role.ADMIN:
+        statement = select(Course)
+    elif current_user.role_id == Role.TEACHER:
+        statement = select(Course).where(Course.created_by == current_user.user_id)
+    elif current_user.role_id == Role.STUDENT:
+        statement = (
+            select(Course)
+            .join(Enrollment, Enrollment.course_id == Course.course_id)
+            .where(Enrollment.student_id == current_user.user_id)
+        )
+    else:
+        raise ForbiddenError("Bạn không có quyền thực hiện hành động này")
+
+    courses = session.exec(statement.order_by(Course.course_id)).all()
+    return [_to_response(course) for course in courses]

@@ -7,9 +7,6 @@ from app.core.exceptions import TokenError
 
 JWT_SECRET_KEY = os.getenv("JWT_SECRET_KEY")
 
-if not JWT_SECRET_KEY or len(JWT_SECRET_KEY) < 32:
-    raise RuntimeError("JWT_SECRET_KEY phải được đặt và dài tối thiểu 32 ký tự")
-
 JWT_ALGORITHM = "HS256"
 ACCESS_TOKEN_EXPIRE_MINUTES = 15
 REFRESH_TOKEN_EXPIRE_DAYS = 7

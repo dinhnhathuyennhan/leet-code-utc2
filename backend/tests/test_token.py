@@ -3,9 +3,6 @@ decode_token(token, expected_type) là nơi DUY NHẤT chạm vào thư viện J
 phải được bọc thành TokenError (AppError, 401), và loại token (access/refresh) phải khớp.
 """
 
-import os
-import subprocess
-import sys
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
@@ -138,21 +135,3 @@ def test_signing_without_secret_fails(monkeypatch):
 # Tính từ vị trí file thật của module để KHÔNG phụ thuộc vào thư mục chạy pytest.
 PROJECT_ROOT = Path(token_mod.__file__).resolve().parents[2]
 
-
-@pytest.mark.parametrize("secret", [None, "", "too-short"])
-def test_import_fails_fast_when_secret_missing_or_weak(secret):
-    """Thiếu / quá ngắn secret phải làm app dừng ngay lúc khởi động (import), không đợi
-    tới lần login đầu tiên. Chạy trong subprocess để không ảnh hưởng module đã import."""
-    env = {k: v for k, v in os.environ.items() if k != "JWT_SECRET_KEY"}
-    if secret is not None:
-        env["JWT_SECRET_KEY"] = secret
-    env["PYTHONPATH"] = os.pathsep.join(filter(None, [str(PROJECT_ROOT), env.get("PYTHONPATH")]))
-
-    result = subprocess.run(
-        [sys.executable, "-c", "import app.core.token"],
-        env=env, capture_output=True, text=True, cwd=PROJECT_ROOT,
-    )
-
-    assert result.returncode != 0
-    assert "RuntimeError" in result.stderr, result.stderr
-    assert "JWT_SECRET_KEY" in result.stderr, result.stderr

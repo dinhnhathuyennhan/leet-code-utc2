@@ -5,10 +5,12 @@ Hiện tại gồm:
 
 Đặc tả import Excel:
     - Định dạng: .xlsx.
-    - Header (hàng 1) bắt buộc có 4 cột: ``user_id``, ``full_name``,
-      ``date_of_birth`` (dd/mm/yyyy hoặc yyyy-mm-dd), ``email``.
+    - Header (hàng 1) bắt buộc có 5 cột: ``user_id``, ``full_name``,
+      ``date_of_birth`` (dd/mm/yyyy hoặc yyyy-mm-dd), ``email``, ``class_id``.
     - Mỗi dòng được xử lý **độc lập** (commit theo từng dòng): nếu một
       dòng lỗi thì chỉ dòng đó bị rollback, các dòng trước vẫn được giữ.
+    - ``class_id`` là bắt buộc và phải tồn tại trong bảng ``class``;
+      dòng nào thiếu hoặc không tồn tại sẽ được liệt kê trong ``errors``.
     - Mật khẩu tạm thời được sinh từ ngày sinh theo định dạng ``ddmmyyyy``
       (xem ``app.schemas.user.password_from_date``).
 """
@@ -34,7 +36,7 @@ from app.schemas.user import (
     parse_date_of_birth,
     password_from_date,
 )
-from models import User
+from models import Class, User
 
 MAX_IMPORT_ROWS = 500
 
@@ -62,12 +64,13 @@ class ExcelFileTooLargeError(AppError):
 
 def _parse_excel(
     contents: bytes, filename: str, max_rows: int
-) -> list[tuple[int, str, str, str, str]]:
+) -> list[tuple[int, str, str, str, str, str]]:
     """Đọc file Excel và trả về các giá trị thô của từng dòng dữ liệu.
 
     Returns:
-        list các tuple ``(row_index, user_id_raw, full_name_raw, date_raw, email_raw)``
-        với mọi giá trị đều được strip; ``None`` nếu ô trống.
+        list các tuple ``(row_index, user_id_raw, full_name_raw, date_raw,
+        email_raw, class_id_raw)`` với mọi giá trị đều được strip;
+        ``""`` nếu ô trống.
 
     Raises:
         InvalidExcelFormatError, EmptyExcelFileError, ExcelFileTooLargeError.
@@ -103,6 +106,7 @@ def _parse_excel(
             "ngay sinh",
         ),
         "email": ("email", "e-mail", "mail"),
+        "class_id": ("class_id", "class id", "mã lớp", "ma lop"),
     }
     column_indexes: dict[str, int] = {}
     for index, cell in enumerate(header):
@@ -126,7 +130,7 @@ def _parse_excel(
     if not data_rows:
         raise EmptyExcelFileError("File không có dòng dữ liệu nào")
 
-    parsed: list[tuple[int, str, str, str, str]] = []
+    parsed: list[tuple[int, str, str, str, str, str]] = []
     for row_index, row in enumerate(data_rows, start=2):
         user_id_value = (
             _cell_to_string(row[column_indexes["user_id"]])
@@ -148,8 +152,20 @@ def _parse_excel(
             if column_indexes["email"] < len(row)
             else ""
         )
+        class_id_value = (
+            _cell_to_string(row[column_indexes["class_id"]])
+            if column_indexes["class_id"] < len(row)
+            else ""
+        )
         parsed.append(
-            (row_index, user_id_value, full_name_value, date_value, email_value)
+            (
+                row_index,
+                user_id_value,
+                full_name_value,
+                date_value,
+                email_value,
+                class_id_value,
+            )
         )
     return parsed
 
@@ -180,60 +196,91 @@ def _validate_row(
     full_name: str,
     date_str: str,
     email: str,
+    class_id: str,
     seen_user_ids: set[str],
     seen_emails: set[str],
     existing_user_ids: set[str],
     existing_emails: set[str],
-) -> tuple[User | None, str, str, str, str | None, str | None]:
+    existing_class_ids: set[str],
+) -> tuple[User | None, str, str, str, str, str | None, str | None, str | None]:
     """Validate một dòng Excel và trả về dữ liệu đã chuẩn hoá hoặc lỗi.
 
     Returns:
-        tuple ``(student_or_None, user_id, full_name, email_or_None,
-        date_of_birth_or_None, error_reason_or_None)``.
+        tuple ``(student_or_None, user_id, full_name, email, date_of_birth,
+        class_id_or_None, error_reason_or_None)``.
 
         Khi ``error_reason`` không phải ``None``, dòng này bị lỗi và
         sẽ được đưa vào ``errors``. Ngược lại dòng đã sẵn sàng để insert.
     """
     if not user_id:
-        return None, user_id, full_name, email, None, "user_id không được trống"
+        return (
+            None, user_id, full_name, email, None, class_id,
+            "user_id không được trống",
+        )
     if not full_name:
-        return None, user_id, full_name, email, None, "Họ tên không được trống"
+        return (
+            None, user_id, full_name, email, None, class_id,
+            "Họ tên không được trống",
+        )
     if not date_str:
-        return None, user_id, full_name, email, None, "Ngày sinh không được trống"
+        return (
+            None, user_id, full_name, email, None, class_id,
+            "Ngày sinh không được trống",
+        )
     if not email:
-        return None, user_id, full_name, None, None, "Email không được trống"
+        return (
+            None, user_id, full_name, None, None, class_id,
+            "Email không được trống",
+        )
+    if not class_id:
+        return (
+            None, user_id, full_name, email, None, class_id,
+            "Mã lớp không được trống",
+        )
 
     try:
         _EmailCheck(email=email)
     except ValidationError:
-        return None, user_id, full_name, email, None, "Email không đúng định dạng"
+        return (
+            None, user_id, full_name, email, None, class_id,
+            "Email không đúng định dạng",
+        )
 
     try:
         parsed_date = parse_date_of_birth(date_str)
     except ValueError as err:
-        return None, user_id, full_name, email, None, str(err)
+        return (
+            None, user_id, full_name, email, None, class_id,
+            str(err),
+        )
+
+    if class_id not in existing_class_ids:
+        return (
+            None, user_id, full_name, email, None, class_id,
+            f"Mã lớp {class_id} không tồn tại trong hệ thống",
+        )
 
     email_lower = email.lower()
     user_id_lower = user_id.lower()
 
     if user_id_lower in seen_user_ids:
         return (
-            None, user_id, full_name, email, None,
+            None, user_id, full_name, email, None, class_id,
             "user_id đã xuất hiện trước đó trong file",
         )
     if email_lower in seen_emails:
         return (
-            None, user_id, full_name, email, None,
+            None, user_id, full_name, email, None, class_id,
             "Email đã xuất hiện trước đó trong file",
         )
     if user_id_lower in existing_user_ids:
         return (
-            None, user_id, full_name, email, None,
+            None, user_id, full_name, email, None, class_id,
             "user_id đã tồn tại trong hệ thống",
         )
     if email_lower in existing_emails:
         return (
-            None, user_id, full_name, email, None,
+            None, user_id, full_name, email, None, class_id,
             "Email đã tồn tại trong hệ thống",
         )
 
@@ -245,10 +292,11 @@ def _validate_row(
         must_change_password=True,
         date_of_birth=parsed_date,
         role_id=Role.STUDENT,
+        class_id=class_id,
     )
     seen_user_ids.add(user_id_lower)
     seen_emails.add(email_lower)
-    return student, user_id, full_name, email, date_str, None
+    return student, user_id, full_name, email, date_str, class_id, None
 
 
 def import_students(
@@ -266,6 +314,7 @@ def import_students(
     # Tập trung query một lần để check trùng với DB
     user_ids_to_check = {row[1].lower() for row in parsed_rows if row[1]}
     emails_to_check = {row[4].lower() for row in parsed_rows if row[4]}
+    class_ids_to_check = {row[5] for row in parsed_rows if row[5]}
 
     existing_user_ids: set[str] = set()
     if user_ids_to_check:
@@ -281,12 +330,26 @@ def import_students(
         ).all()
         existing_emails = {r.lower() for r in rows}
 
+    existing_class_ids: set[str] = set()
+    if class_ids_to_check:
+        rows = session.exec(
+            select(Class.class_id).where(Class.class_id.in_(class_ids_to_check))
+        ).all()
+        existing_class_ids = set(rows)
+
     created: list[StudentImportCreatedRow] = []
     errors: list[StudentImportErrorRow] = []
     seen_user_ids: set[str] = set()
     seen_emails: set[str] = set()
 
-    for row_index, user_id, full_name, date_str, email in parsed_rows:
+    for (
+        row_index,
+        user_id,
+        full_name,
+        date_str,
+        email,
+        class_id,
+    ) in parsed_rows:
         try:
             (
                 student,
@@ -294,6 +357,7 @@ def import_students(
                 final_full_name,
                 final_email,
                 final_date,
+                _final_class_id,
                 error_reason,
             ) = _validate_row(
                 row_index,
@@ -301,10 +365,12 @@ def import_students(
                 full_name,
                 date_str,
                 email,
+                class_id,
                 seen_user_ids,
                 seen_emails,
                 existing_user_ids,
                 existing_emails,
+                existing_class_ids,
             )
         except Exception as err:  # bảo vệ ngoại lệ không lường trước trong validate
             errors.append(

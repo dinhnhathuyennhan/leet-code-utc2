@@ -84,7 +84,7 @@
 
 | Field | Kiểu | Bắt buộc | Ghi chú |
 |---|---|---|---|
-| file | file (.xlsx) | có | đúng cấu trúc mẫu: cột `user_id`, `full_name`, `date_of_birth`, `email` |
+| file | file (.xlsx) | có | đúng cấu trúc mẫu: cột `user_id`, `full_name`, `date_of_birth`, `email`, `class_id` |
 
 **Response 201 Created** — tổng hợp kết quả xử lý từng dòng
 
@@ -105,6 +105,7 @@
 
 - Xử lý "best-effort": dòng hợp lệ vẫn tạo tài khoản, dòng lỗi bị bỏ qua và liệt kê lại trong `errors` — không trả lỗi HTTP cho toàn bộ request chỉ vì có dòng lỗi (kể cả khi `created` rỗng toàn bộ, vẫn trả 201 kèm `errors` đầy đủ, đúng use-case E1 "không có tài khoản nào được tạo" — không coi là lỗi request).
 - Mỗi dòng hợp lệ: `role_id = 3`, `must_change_password = true`, mật khẩu tạm sinh theo ngày sinh (`date_of_birth`) của chính dòng đó, định dạng `ddmmyyyy`.
+- Cột `class_id` là bắt buộc (mỗi sinh viên phải thuộc một lớp hành chính) và phải tồn tại trong bảng `class`; dòng nào thiếu hoặc trỏ tới mã lớp không tồn tại sẽ được liệt kê trong `errors` (dòng đó bị bỏ qua, các dòng hợp lệ khác vẫn được tạo). Header chấp nhận alias: `class_id`, `class id`, `mã lớp`, `ma lop`.
 - **Yêu cầu quyền**: Admin hoặc Teacher.
 
 ## POST /users/{user_id}/reset-password — Đặt lại mật khẩu

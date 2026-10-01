@@ -10,13 +10,19 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import models  # noqa: F401
 
 
-@pytest.fixture
-def session():
+# Tách engine và session ra riêng để dùng linh động hơn trong việc test
+@pytest.fixture()
+def engine():
     engine = create_engine(
         "sqlite://",
         connect_args={"check_same_thread": False},
         poolclass=StaticPool,
     )
     SQLModel.metadata.create_all(engine)
-    with Session(engine) as session:
-        yield session
+    return engine
+
+
+@pytest.fixture()
+def session(engine):
+    with Session(engine) as s:
+        yield s

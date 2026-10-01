@@ -1,8 +1,9 @@
+from sqlalchemy import update
 from sqlmodel import Session, select
 
 from app.core.exceptions import AppError
 from app.core.password import hash_password, verify_password
-from app.core.token import create_access_token, create_refresh_token, decode_token
+from app.core.token import create_access_token, create_refresh_token, decode_token, TokenError
 from app.schemas.auth import (
     ChangePasswordRequest,
     LoginRequest,
@@ -11,6 +12,8 @@ from app.schemas.auth import (
 )
 from models import User
 
+
+_DUMMY_HASH = hash_password("dummy-password-for-timing-only")
 
 # Định nghĩa một số Exception riêng cho domain auth
 class InvalidCredentialsError(AppError):
@@ -57,11 +60,15 @@ def _build_login_response(user: User) -> tuple[LoginResponse, str]:
 
 
 def login(session: Session, data: LoginRequest) -> tuple[LoginResponse, str]:
-    existing = session.exec(select(User).where(User.email == data.email)).first()
+    existing = session.exec(select(User).where(User.email == data.email.strip().lower())).first()
 
-    if existing is None or not verify_password(
-        password=data.password, hashed_password=existing.hashed_password
-    ):
+    # existing null (email không tồn tại sẽ không verify password
+    # kẻ tấn công có thể dò ra được email nào tồn tại và không
+    # luôn verify với DUMMY_HASH khi email không tồn tại
+    hashed = existing.hashed_password if existing else _DUMMY_HASH
+    password_ok = _safe_verify(data.password, hashed)
+
+    if existing is None or not password_ok:
         raise InvalidCredentialsError("Email hoặc mật khẩu không đúng")
 
     return _build_login_response(existing)
@@ -78,11 +85,16 @@ def change_password(
     if data.current_password == data.new_password:
         raise SamePasswordError("Mật khẩu mới phải khác mật khẩu hiện tại")
 
-    user.hashed_password = hash_password(data.new_password)
-    user.must_change_password = False
-    user.token_version += 1
+    session.exec(
+        update(User)
+        .where(User.user_id == user.user_id)
+        .values(
+            hashed_password=hash_password(data.new_password),
+            must_change_password=False,
+            token_version=User.token_version + 1,
+        )
+    )
 
-    session.add(user)
     session.commit()
     session.refresh(user)
 
@@ -92,13 +104,23 @@ def refresh_access_token(session: Session, refresh_token: str | None) -> str:
     if not refresh_token:
         raise SessionExpiredError("Phiên đăng nhập đã hết hạn")
 
-    payload = decode_token(refresh_token)
-    # try:
-    # except TokenError as err:
-    #     raise SessionExpiredError("Phiên đăng nhập đã hết hạn") from err
+    try:
+        payload = decode_token(refresh_token, "refresh")
+    except TokenError as err:
+        raise SessionExpiredError("Phiên đăng nhập đã hết hạn") from err
 
-    user = session.get(User, payload["sub"])
-    if user is None or user.token_version != payload["tv"]:
+    sub, tv = payload.get("sub"), payload.get("tv")
+    if payload.get("type") != "refresh" or sub is None or tv is None:
+        raise SessionExpiredError("Phiên đăng nhập đã hết hạn")
+
+    user = session.get(User, sub)
+    if user is None or user.token_version != tv:
         raise SessionRevokedError("Phiên đăng nhập không còn hợp lệ")
 
     return create_access_token(user.user_id, user.role_id, user.token_version)
+
+def _safe_verify(password: str, hashed_password: str) -> bool:
+    try:
+        return verify_password(password=password, hashed_password=hashed_password)
+    except ValueError:
+        return False

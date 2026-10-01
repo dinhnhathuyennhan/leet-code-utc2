@@ -21,7 +21,7 @@ def get_current_user(
     session: Session = Depends(get_session),
 ) -> User:
     try:
-        payload = decode_token(credentials.credentials)
+        payload = decode_token(credentials.credentials, "access")
     except Exception:
         raise UnauthorizedError("Token không hợp lệ") from None
 

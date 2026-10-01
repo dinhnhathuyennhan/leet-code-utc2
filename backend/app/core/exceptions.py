@@ -62,5 +62,9 @@ class ForbiddenError(AppError):
     status_code = 403
     error_code = "FORBIDDEN"
 
+class TokenError(AppError):
+    status_code = 401
+    error_code = "INVALID_TOKEN"
+
 # trong file này định nghĩa các error dùng chung
 # đối với các error đặc trưng riêng biệt có thể khai báo thẳng trong file đó

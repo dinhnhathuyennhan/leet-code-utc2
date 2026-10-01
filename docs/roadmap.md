@@ -36,7 +36,7 @@
 - `feature/get-course` và `feature/login-ui` chưa merge vào `develop`. `login-ui` còn lẫn file rác (`frontend/tsc-errors.txt`, `frontend/tsc.txt`)
 - `main` đang chậm hơn `develop` 73 commit
 
-**Nợ kỹ thuật đã biết**: Excel import chưa có `class_id`; ngày của course đang là giờ VN naive, **phải chốt timezone trước khi làm deadline cho Lesson/Problem**.
+**Nợ kỹ thuật đã biết**: ngày của course đang là giờ VN naive, **phải chốt timezone trước khi làm deadline cho Lesson/Problem**.
 
 > **Nhận định:** FE đang đi sau BE khá xa (BE có ~15 endpoint, FE mới gọi được auth), còn BE thì chưa đụng tới phần lõi (bài tập và chấm code). Hướng đi: **(1) cho FE theo kịp phần đã có**, song song với **(2) BE mở module Lesson/Problem**, rồi dồn lực vào **(3) Submission**.
 

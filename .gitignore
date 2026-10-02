@@ -2,3 +2,4 @@
 .env.local
 CLAUDE.md
 .idea/
+.playwright-mcp/

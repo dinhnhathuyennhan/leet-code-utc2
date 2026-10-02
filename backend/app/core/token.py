@@ -3,7 +3,10 @@ from datetime import UTC, datetime, timedelta
 
 import jwt
 
+from app.core.exceptions import TokenError
+
 JWT_SECRET_KEY = os.getenv("JWT_SECRET_KEY")
+
 JWT_ALGORITHM = "HS256"
 ACCESS_TOKEN_EXPIRE_MINUTES = 15
 REFRESH_TOKEN_EXPIRE_DAYS = 7
@@ -34,5 +37,18 @@ def create_refresh_token(user_id: str, token_version: int) -> str:
     return jwt.encode(payload, JWT_SECRET_KEY, algorithm=JWT_ALGORITHM)
 
 
-def decode_token(token: str) -> dict:
-    return jwt.decode(token, JWT_SECRET_KEY, algorithms=[JWT_ALGORITHM])
+def decode_token(token: str, expected_type: str) -> dict:
+    try:
+        payload = jwt.decode(
+            token,
+            JWT_SECRET_KEY,
+            algorithms=[JWT_ALGORITHM],
+            options={"require": ["exp", "sub", "tv", "type"]},
+        )
+    except jwt.InvalidTokenError as err:  # hết hạn, sai chữ ký, sai alg, thiếu claim, rác
+        raise TokenError("Token không hợp lệ") from err
+
+    if payload["type"] != expected_type:
+        raise TokenError("Sai loại token")
+
+    return payload

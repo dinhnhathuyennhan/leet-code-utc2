@@ -1,0 +1,29 @@
+# Bí mật — không được bake vào image
+.env
+.env.*
+
+# Môi trường ảo & cache
+venv/
+.venv/
+env/
+__pycache__/
+*.pyc
+*.pyo
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+.coverage
+htmlcov/
+
+# Không cần trong image production
+tests/
+requirements-dev.txt
+Dockerfile
+.dockerignore
+.gitignore
+
+# IDE / OS
+.vs/
+.vscode/
+.idea/
+.DS_Store

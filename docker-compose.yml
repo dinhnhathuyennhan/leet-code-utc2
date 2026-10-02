@@ -31,5 +31,20 @@ services:
       DB_PASSWORD: "${POSTGRES_PASSWORD}"
     command: sh -c "python scripts/init_db.py && alembic upgrade head"
 
+  pgadmin:
+    image: dpage/pgadmin4:latest
+    container_name: cham-code-pgadmin
+    environment:
+      PGADMIN_DEFAULT_EMAIL: admin@chamcode.com
+      PGADMIN_DEFAULT_PASSWORD: "${PGADMIN_PASSWORD:-admin123}"
+    ports:
+      - "5050:80"
+    depends_on:
+      - postgres
+    restart: unless-stopped
+    volumes:
+      - pgadmin_data:/var/lib/pgadmin
+
 volumes:
   postgres_data:
+  pgadmin_data:

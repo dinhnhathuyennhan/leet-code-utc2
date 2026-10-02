@@ -31,12 +31,20 @@ def _set_refresh_token_cookie(response: Response, refresh_token: str) -> None:
         key="refresh_token",
         value=refresh_token,
         httponly=True, # không cho phép frontend đọc được refresh_token bằng JS
+        secure=True,        # bắt buộc khi dùng SameSite=None
+        samesite="none",    # cho phép gửi cookie cross-site (vercel.app → onrender.com)
         path="/auth",
         max_age=REFRESH_TOKEN_MAX_AGE_SECONDS,
     )
 
 def _clear_refresh_token_cookie(response: Response) -> None:
-    response.delete_cookie(key="refresh_token", path="/auth")
+    # Phải khớp secure/samesite với lúc set, nếu không trình duyệt chặn Set-Cookie xoá ở ngữ cảnh cross-site
+    response.delete_cookie(
+        key="refresh_token",
+        path="/auth",
+        secure=True,
+        samesite="none",
+    )
 
 @router.post("/auth/login", response_model=LoginResponse)
 def login(

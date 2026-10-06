@@ -4,6 +4,7 @@ export interface Crumb {
 }
 
 const SEGMENT_LABELS: Record<string, string> = {
+  classes: "Lớp học phần",
   courses: "Lớp học phần",
   submissions: "Bài nộp",
   accounts: "Quản lý tài khoản",

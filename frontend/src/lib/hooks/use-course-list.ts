@@ -1,37 +1,43 @@
 "use client";
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
 
-import { DEFAULT_TERM } from "@/lib/constants/academic";
 import { useCourses } from "@/lib/hooks/use-courses";
 import { useDebouncedValue } from "@/lib/hooks/use-debounced-value";
-import type { CourseView } from "@/lib/types/course";
 
 export interface CourseFilterState {
   search: string;
   setSearch: (value: string) => void;
-  semester: number;
-  setSemester: (value: number) => void;
-  year: string;
-  setYear: (value: string) => void;
-  view: CourseView;
-  setView: (value: CourseView) => void;
 }
 
-/** State bộ lọc + query danh sách lớp — dùng chung cho trang lớp của giảng viên và sinh viên. */
+/**
+ * State bộ lọc + query danh sách lớp — dùng chung cho trang lớp của giảng viên và sinh viên.
+ *
+ * Lưu ý: Backend hiện chưa hỗ trợ filter (xem `docs/api-design-course.md`,
+ * `GET /courses` chỉ trả toàn bộ lớp scope theo role). Search ở FE chỉ lọc
+ * client-side; khi BE bổ sung thì chuyển sang filter server.
+ */
 export function useCourseList() {
   const [search, setSearch] = useState("");
-  const [semester, setSemester] = useState(DEFAULT_TERM.semester);
-  const [year, setYear] = useState(DEFAULT_TERM.academicYear);
-  const [view, setView] = useState<CourseView>("grid");
-
   const debouncedSearch = useDebouncedValue(search, 300);
-  const query = useCourses({
-    search: debouncedSearch.trim() || undefined,
-    semester,
-    academic_year: year,
-  });
+  const base = useCourses({});
 
-  const filters: CourseFilterState = { search, setSearch, semester, setSemester, year, setYear, view, setView };
-  return { filters, query };
+  const items = base.data;
+  const filtered = useMemo(() => {
+    if (!items) return undefined;
+    const needle = debouncedSearch.trim().toLowerCase();
+    if (!needle) return items;
+    return items.filter((c) =>
+      c.name.toLowerCase().includes(needle) || c.code.toLowerCase().includes(needle),
+    );
+  }, [items, debouncedSearch]);
+
+  const filters: CourseFilterState = { search, setSearch };
+  return {
+    filters,
+    query: {
+      ...base,
+      data: filtered === undefined ? undefined : { items: filtered, stats: undefined },
+    },
+  };
 }

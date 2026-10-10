@@ -470,11 +470,12 @@ def seed_data() -> None:
     if password:
         logger.info("Seed data: dùng SEED_DEFAULT_PASSWORD từ môi trường")
     else:
+        # trên prod thiếu password_default không seed data
         logger.warning(
             "Seed data: SEED_DEFAULT_PASSWORD chưa set, dùng mật khẩu mặc định trong code "
             "(chỉ nên dùng khi dev)"
         )
-        password = "LeetCodeForUtc2"
+        return
 
     steps = (
         ("class", _seed_classes, ()),

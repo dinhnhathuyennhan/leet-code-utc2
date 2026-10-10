@@ -1,6 +1,6 @@
 from datetime import UTC, datetime
 
-from sqlmodel import Session, select
+from sqlmodel import Session, or_, select
 
 from app.core.exceptions import (
     ConflictError,
@@ -14,6 +14,7 @@ from app.schemas.course import (
     CourseResponse,
     CreateCourseRequest,
     GetStudentListResponse,
+    StudentEnrollmentResponse,
     UpdateCourseRequest,
 )
 from models import Course, Enrollment, User
@@ -246,7 +247,24 @@ def get_course(session: Session, course_id: str, current_user: User) -> CourseRe
     return _to_response(course)
 
 
-def get_courses(session: Session, current_user: User) -> list[CourseResponse]:
+def get_courses(
+    session: Session,
+    current_user: User,
+    *,
+    term: str | None = None,
+    search: str | None = None,
+) -> list[CourseResponse]:
+    """Lấy danh sách lớp theo role, kèm filter server-side.
+
+    Quy tắc:
+        - ADMIN: thấy tất cả.
+        - TEACHER: chỉ thấy lớp do mình tạo.
+        - STUDENT: chỉ thấy lớp đã enroll.
+
+    Filter:
+        - ``term``: LIKE %%term%% trên cột ``Course.term`` (vd: "HK1", "2024").
+        - ``search``: LIKE %%search%% trên ``course_id`` HOẶC ``course_name``.
+    """
     if current_user.role_id == Role.ADMIN:
         statement = select(Course)
     elif current_user.role_id == Role.TEACHER:
@@ -256,9 +274,140 @@ def get_courses(session: Session, current_user: User) -> list[CourseResponse]:
             select(Course)
             .join(Enrollment, Enrollment.course_id == Course.course_id)
             .where(Enrollment.student_id == current_user.user_id)
+            .distinct()
         )
     else:
         raise ForbiddenError("Bạn không có quyền thực hiện hành động này")
 
+    if term:
+        # contains() → SQL LIKE %term%; escape ký tự đặc biệt để tránh SQL injection.
+        # (sqlmodel/SQLAlchemy đã tự parameter hóa; chỉ cần thoát \, %, _.)
+        escaped = term.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
+        statement = statement.where(Course.term.contains(escaped))
+
+    if search:
+        needle = search.strip()
+        if needle:
+            escaped = needle.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
+            statement = statement.where(
+                or_(
+                    Course.course_id.contains(escaped),
+                    Course.course_name.contains(escaped),
+                )
+            )
+
     courses = session.exec(statement.order_by(Course.course_id)).all()
     return [_to_response(course) for course in courses]
+
+
+# ─── Helpers dùng chung cho 2 endpoint mới (Lỗi 7 + Lỗi 8) ──────────────
+
+
+def _check_can_view_student_courses(
+    session: Session, current_user: User, target_student_id: str
+) -> None:
+    """Check quyền xem lớp/enrollments của 1 sinh viên.
+
+    Quy tắc (theo role của current_user):
+        - ADMIN: xem được mọi SV.
+        - TEACHER: chỉ xem SV đang enroll ít nhất 1 lớp do mình tạo.
+        - STUDENT: chỉ xem của chính mình.
+
+    Raises:
+        NotFoundError: SV không tồn tại hoặc không phải role student.
+        ForbiddenError: current_user không đủ quyền.
+    """
+    target = session.get(User, target_student_id)
+    if target is None or target.role_id != Role.STUDENT:
+        raise NotFoundError("Không tìm thấy sinh viên")
+
+    if current_user.role_id == Role.ADMIN:
+        return
+
+    if current_user.role_id == Role.STUDENT:
+        if current_user.user_id != target_student_id:
+            raise ForbiddenError("Bạn chỉ có thể xem thông tin của chính mình")
+        return
+
+    if current_user.role_id == Role.TEACHER:
+        # Teacher chỉ xem được SV enroll lớp do mình tạo.
+        overlap = session.exec(
+            select(Enrollment)
+            .join(Course, Course.course_id == Enrollment.course_id)
+            .where(
+                Enrollment.student_id == target_student_id,
+                Course.created_by == current_user.user_id,
+            )
+        ).first()
+        if overlap is None:
+            raise ForbiddenError(
+                "Bạn không có quyền xem thông tin sinh viên này"
+            )
+        return
+
+    raise ForbiddenError("Bạn không có quyền thực hiện hành động này")
+
+
+def get_student_courses(
+    session: Session, student_id: str, current_user: User
+) -> list[CourseResponse]:
+    """Lấy danh sách lớp mà 1 sinh viên đang học (Lỗi 7).
+
+    Phục vụ:
+        - Student xem "Lớp đang học" của chính mình.
+        - Teacher xem SV thuộc lớp mình dạy.
+        - Admin xem tất cả.
+
+    Lưu ý: Với role TEACHER, **chỉ trả về các lớp do teacher này tạo**
+    mà student đã enroll — không trộn lẫn lớp của teacher khác
+    (xem test ``test_teacher_can_only_view_students_in_their_courses``).
+    """
+    _check_can_view_student_courses(session, current_user, student_id)
+
+    statement = (
+        select(Course)
+        .join(Enrollment, Enrollment.course_id == Course.course_id)
+        .where(Enrollment.student_id == student_id)
+        .distinct()
+    )
+    if current_user.role_id == Role.TEACHER:
+        statement = statement.where(Course.created_by == current_user.user_id)
+
+    courses = session.exec(statement.order_by(Course.course_id)).all()
+    return [_to_response(course) for course in courses]
+
+
+def get_student_enrollments(
+    session: Session, student_id: str, current_user: User
+) -> list[StudentEnrollmentResponse]:
+    """Lấy danh sách enrollment (kèm thông tin lớp) của 1 sinh viên (Lỗi 8).
+
+    Trả về các cặp ``(enrollment, course)`` thay vì chỉ CourseResponse,
+    để client có thể hiển thị "Bạn đã đăng ký lớp X lúc Y" (nếu sau này
+    schema có cột ``enrolled_at`` thì chỉ cần mở rộng StudentEnrollmentResponse).
+    """
+    _check_can_view_student_courses(session, current_user, student_id)
+
+    statement = (
+        select(Enrollment, Course)
+        .join(Course, Course.course_id == Enrollment.course_id)
+        .where(Enrollment.student_id == student_id)
+    )
+    if current_user.role_id == Role.TEACHER:
+        statement = statement.where(Course.created_by == current_user.user_id)
+    statement = statement.order_by(Enrollment.enrollment_id.desc())
+
+    rows = session.exec(statement).all()
+
+    return [
+        StudentEnrollmentResponse(
+            enrollment_id=enrollment.enrollment_id,
+            course_id=course.course_id,
+            course_name=course.course_name,
+            term=course.term,
+            start_date=course.start_date,
+            end_date=course.end_date,
+            total_number_student=course.total_number_student,
+        )
+        for enrollment, course in rows
+    ]

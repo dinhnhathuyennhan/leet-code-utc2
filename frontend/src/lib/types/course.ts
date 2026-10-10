@@ -41,7 +41,13 @@ export interface CourseStudent {
 }
 
 export interface CourseListParams {
-  /** Backend hiện không nhận filter; giữ cho tương thích các caller cũ, sẽ bỏ khi BE bổ sung. */
+  /**
+   * Filter server-side theo `term` (vd: "HK1 (2024-2025)").
+   * BE sẽ `contains` (LIKE %term%) — match một phần nên user có thể gõ
+   * "HK1" hay "2024" đều được.
+   */
+  term?: string;
+  /** Giữ các field cũ để tương thích callers cũ, sẽ dùng khi BE tách cột. */
   search?: string;
   semester?: number;
   academic_year?: string;

@@ -1,6 +1,6 @@
 import logging
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Query
 from sqlmodel import Session
 from starlette import status
 
@@ -12,6 +12,7 @@ from app.schemas.course import (
     CourseResponse,
     CreateCourseRequest,
     GetStudentListResponse,
+    StudentEnrollmentResponse,
     UpdateCourseRequest,
 )
 from app.services.course_service import (
@@ -21,6 +22,8 @@ from app.services.course_service import (
     get_course as _get_course,
     get_course_enrollments,
     get_courses as _get_courses,
+    get_student_courses as _get_student_courses,
+    get_student_enrollments as _get_student_enrollments,
     update_course as _update_course,
 )
 from models import User
@@ -51,10 +54,26 @@ def create_course_route(
     response_model=list[CourseResponse],
 )
 def get_courses_route(
+    term: str | None = Query(
+        default=None,
+        description=(
+            "Lọc theo cột `term` (LIKE %term%). "
+            "Ví dụ: 'HK1' hoặc '2024' đều match chuỗi con."
+        ),
+    ),
+    search: str | None = Query(
+        default=None,
+        description="Tìm trong `course_id` hoặc `course_name` (LIKE %search%).",
+    ),
     session: Session = Depends(get_session),
     current_user: User = Depends(get_current_user),
 ) -> list[CourseResponse]:
-    return _get_courses(session=session, current_user=current_user)
+    return _get_courses(
+        session=session,
+        current_user=current_user,
+        term=term,
+        search=search,
+    )
 
 
 @router.get(
@@ -134,3 +153,54 @@ def get_course_enrollments_route(
     current_user: User = Depends(get_current_user),
 ):
     return get_course_enrollments(session, course_id, current_user)
+
+
+# ─── Lỗi 7: Lấy danh sách lớp của 1 sinh viên ──────────────────────────────
+
+
+@router.get(
+    "/students/{student_id}/courses",
+    response_model=list[CourseResponse],
+)
+def get_student_courses_route(
+    student_id: str,
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+) -> list[CourseResponse]:
+    """Trả về các lớp mà sinh viên đang học.
+
+    Quyền:
+        - ADMIN: xem tất cả.
+        - TEACHER: chỉ xem SV enroll lớp do mình tạo.
+        - STUDENT: chỉ xem của chính mình.
+    """
+    return _get_student_courses(
+        session=session,
+        student_id=student_id,
+        current_user=current_user,
+    )
+
+
+# ─── Lỗi 8: Lấy danh sách enrollment của 1 sinh viên ───────────────────────
+
+
+@router.get(
+    "/students/{student_id}/enrollments",
+    response_model=list[StudentEnrollmentResponse],
+)
+def get_student_enrollments_route(
+    student_id: str,
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+) -> list[StudentEnrollmentResponse]:
+    """Trả về các enrollment (kèm thông tin lớp) của sinh viên.
+
+    Khác với `GET /students/{id}/courses` ở chỗ endpoint này trả cả
+    ``enrollment_id`` (khóa chính của bảng enrollment) → client có thể
+    dùng cho "Lịch sử đăng ký" hoặc để gọi API xoá enrollment sau này.
+    """
+    return _get_student_enrollments(
+        session=session,
+        student_id=student_id,
+        current_user=current_user,
+    )

@@ -230,7 +230,9 @@ Backend sẽ tổng hợp như sau: `passed_count = 2`, và `status` của Submi
 
 ## Lưu ý bảo mật
 
-- Container của Judge0 chạy ở chế độ `privileged`. **Không public cổng 2358 ra internet**, chỉ cho backend gọi tới.
+- Container của Judge0 chạy ở chế độ `privileged`. **Không bao giờ public trực tiếp cổng 2358 ra internet.**
+  Muốn backend đã deploy gọi tới thì chỉ mở qua Tailscale Funnel (HTTPS, cổng 443) và bắt buộc có `AUTHN_TOKEN`,
+  xem [Mở Judge0 cho backend đã deploy](#mở-judge0-cho-backend-đã-deploy-tailscale-funnel).
 - Khi chia sẻ cho nhóm hoặc lên server thật, **bắt buộc bật `AUTHN_TOKEN`** trong `judge0.conf` (xem bước A2). Backend gửi token này qua header `X-Auth-Token`.
 - CI trên GitHub không chạy được Judge0 (không có cgroup v1), nên test backend phải **mock** `judge_client`.
 
@@ -330,6 +332,9 @@ tailnet của người host. Giới hạn của gói miễn phí có thể thay 
 **Vận hành hằng ngày:**
 - Thành viên chỉ gọi được Judge0 khi **máy người host đang bật và VM đang chạy**. Sau khi khởi
   động lại máy, chạy `multipass start judge0`. Các container Judge0 và Tailscale sẽ tự chạy lại.
+- Nếu đã bật [Funnel](#mở-judge0-cho-backend-đã-deploy-tailscale-funnel) thì **backend đã deploy
+  cũng phụ thuộc vào máy người host**: máy tắt, ngủ (sleep/suspend) hoặc mất mạng thì chức năng
+  chấm bài trên bản deploy ngừng hoạt động. Hôm demo phải tắt chế độ ngủ của máy người host.
 - Muốn **thu hồi quyền** của một người: vào trang Machines → `judge0` → Share → gỡ người đó.
 - Muốn **đổi token** (vd khi token bị lộ): làm lại bước A2 rồi gửi token mới cho nhóm.
 
@@ -373,6 +378,116 @@ Tên biến sẽ được chốt khi viết `judge_client`, lúc đó cập nh�
 | Không thấy máy `judge0` trong Tailscale | Chưa bấm Accept lời mời chia sẻ, hoặc đang đăng nhập Tailscale bằng tài khoản khác với email được mời |
 | Trả về 401 | Sai hoặc thiếu header `X-Auth-Token`, hoặc người host vừa đổi token |
 | `tailscale ping judge0` được nhưng `curl` không được | Container Judge0 chưa chạy. Người host chạy `docker compose ps` trong VM để kiểm tra |
+
+## Mở Judge0 cho backend đã deploy (Tailscale Funnel)
+
+Backend deploy trên Render **không vào được mạng Tailscale**, nên không gọi được địa chỉ
+`100.x.y.z` ở trên. Cần một URL HTTPS công khai trỏ về Judge0 trong VM của người host.
+Dùng **Tailscale Funnel** vì:
+
+- Tailscale đã cài sẵn trong VM (bước A1), không phải cài thêm gì.
+- Có URL HTTPS **cố định, miễn phí, không cần domain**: `https://judge0.<tên-tailnet>.ts.net`.
+- Không cần mở cổng router. Chứng chỉ HTTPS do Tailscale tự cấp.
+- Chỉ public cổng 443. Cổng 2358 vẫn không bị lộ trực tiếp ra internet.
+
+> Không dùng Cloudflare quick tunnel (`*.trycloudflare.com`): URL đổi sau mỗi lần khởi động lại
+> và không cam kết uptime. Cloudflare named tunnel thì bắt buộc phải có domain riêng.
+
+```
+Backend (Render) ──HTTPS + X-Auth-Token──▶ https://judge0.<tên-tailnet>.ts.net
+                                               │ Tailscale Funnel (cổng 443)
+                                               ▼
+                                 VM judge0 ──▶ localhost:2358 (Judge0)
+```
+
+### Bật Funnel (người host, làm 1 lần)
+
+Điều kiện: đã làm xong Phần A, **đặc biệt là A2 (bật `AUTHN_TOKEN`)**. Mở ra internet mà
+không có token thì ai cũng gửi code lên chạy được.
+
+Chạy trong `multipass shell judge0`, **từng lệnh một**:
+
+```bash
+# Trong thư mục judge0-v1.13.1: token phải có giá trị, không được để trống
+grep -E '^AUTHN_TOKEN=' judge0.conf
+```
+
+```bash
+tailscale version          # cần >= 1.38.3
+```
+
+```bash
+sudo tailscale funnel --bg 2358
+```
+
+Lần đầu chạy, lệnh sẽ in ra link để bật HTTPS và Funnel cho tailnet. Mở link, đăng nhập đúng
+tài khoản Tailscale đang quản lý VM, bấm bật, rồi chạy lại lệnh trên. Có `--bg` thì Funnel
+chạy nền và **tự bật lại sau khi VM khởi động lại**.
+
+```bash
+tailscale funnel status    # in ra URL dạng https://judge0.<tên-tailnet>.ts.net
+```
+
+### Kiểm tra từ bên ngoài
+
+Phải test từ một máy **không đăng nhập Tailscale** (vd laptop dùng 4G từ điện thoại, hoặc tắt
+Tailscale trên máy đó), thì mới chắc request đi qua internet thật. Lần gọi đầu có thể chậm vài
+giây vì Tailscale đang cấp chứng chỉ.
+
+```bash
+URL=https://judge0.<tên-tailnet>.ts.net
+```
+
+```bash
+# Không có token: phải ra 401
+curl -s -o /dev/null -w '%{http_code}\n' $URL/about
+```
+
+```bash
+# Có token: JSON có "version":"1.13.1"
+curl -s -H "X-Auth-Token: <TOKEN>" $URL/about
+```
+
+```bash
+# Chấm thử: status phải là Accepted
+curl -s -X POST "$URL/submissions?base64_encoded=false&wait=true" \
+  -H 'Content-Type: application/json' -H "X-Auth-Token: <TOKEN>" \
+  -d '{"language_id":71,"source_code":"print(int(input())*2)","stdin":"21","expected_output":"42"}'
+```
+
+### Khai báo trên Render
+
+Vào service backend → **Environment**, thêm 2 biến (**không commit URL và token vào git**):
+
+```env
+JUDGE0_URL=https://judge0.<tên-tailnet>.ts.net
+JUDGE0_AUTH_TOKEN=<TOKEN>
+```
+
+Thành viên trong nhóm cũng có thể dùng URL này trong `.env` ở máy mình thay cho
+`http://100.x.y.z:2358`, khi đó không cần cài Tailscale (Phần B).
+
+> Khi viết `judge_client`: dùng batch + poll bằng token như bước 7, **không dùng `wait=true`**,
+> để request không bị treo lâu qua đường hầm.
+
+### Tắt Funnel
+
+```bash
+sudo tailscale funnel --bg off     # tắt Funnel, Judge0 vẫn dùng được qua Tailscale như cũ
+```
+
+Đổi token (vd khi token bị lộ): làm lại bước A2, rồi cập nhật `JUDGE0_AUTH_TOKEN` trên Render
+và gửi token mới cho nhóm.
+
+### Xử lý sự cố Funnel
+
+| Triệu chứng | Cách xử lý |
+|---|---|
+| `tailscale funnel` báo chưa được phép dùng Funnel | Chưa bấm bật trong link mà lệnh in ra, hoặc policy của tailnet thiếu node attribute `funnel`. Vào trang admin của Tailscale để bật |
+| `funnel status` báo `Funnel on` nhưng sau hơn 10 phút URL vẫn không phân giải được (`dig +short @1.1.1.1 judge0.<tên-tailnet>.ts.net` không ra IP) | Bản ghi DNS công khai chưa được tạo, hay gặp khi bật Funnel lần đầu. Tắt rồi bật lại: `sudo tailscale funnel --https=443 off` rồi `sudo tailscale funnel --bg 2358`, đợi vài phút |
+| Gọi URL bị timeout | Máy người host đang tắt hoặc ngủ, hoặc VM chưa chạy (`multipass start judge0`). Chạy `tailscale funnel status` trong VM để xem Funnel còn bật không |
+| Trả về 401 | Sai hoặc thiếu header `X-Auth-Token`, hoặc biến `JUDGE0_AUTH_TOKEN` trên Render chưa khớp token mới |
+| Trả về 502 | Funnel vẫn chạy nhưng Judge0 chưa lên. Chạy `docker compose ps` trong VM để kiểm tra |
 
 ---
 

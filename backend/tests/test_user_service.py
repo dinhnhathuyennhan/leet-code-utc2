@@ -1,8 +1,8 @@
-from datetime import date
+from datetime import date, datetime, timedelta
 
 import pytest
 
-from app.core.exceptions import ConflictError, NotFoundError
+from app.core.exceptions import ConflictError, NotFoundError, InvalidFormatError
 from app.core.password import hash_password, verify_password
 from app.dependencies import Role
 from app.schemas.user import CreateStudentRequest, CreateTeacherRequest
@@ -12,7 +12,7 @@ from app.services.user_service import (
     UserNotFoundError,
     create_student,
     create_teacher,
-    reset_password,
+    reset_password, list_users,
 )
 from models import Class, Course, Enrollment, User
 
@@ -48,6 +48,56 @@ def _make_user(
     session.refresh(user)
     return user
 
+
+def _make_listed_user(
+    session,
+    user_id: str,
+    role_id: int,
+    class_id=None,
+    date_of_birth=date(2005, 8, 31),
+):
+    """User có sẵn ngày sinh để không dính lỗi UserResponse khi list."""
+    user = _make_user(
+        session,
+        user_id,
+        f"{user_id}@example.com",
+        role_id,
+        date_of_birth=date_of_birth,
+    )
+    if class_id is not None:
+        user.class_id = class_id
+        session.add(user)
+        session.commit()
+        session.refresh(user)
+    return user
+
+def _make_course(session, course_id: str, teacher):
+    course = Course(
+        course_id=course_id,
+        course_name=course_id,
+        created_by=teacher.user_id,
+        term="2026",
+        start_date=datetime.now(),
+        end_date=datetime.now() + timedelta(days=30),
+        total_number_student=0,
+    )
+    session.add(course)
+    session.commit()
+    session.refresh(course)
+    return course
+
+
+def _enroll(session, course, student):
+    session.add(Enrollment(course_id=course.course_id, student_id=student.user_id))
+    session.commit()
+
+
+def _call(session, current_user, role_id=None, class_id=None, page=1, page_size=10):
+    return list_users(session, current_user, role_id, class_id, page, page_size)
+
+
+def _ids(result) -> list:
+    return [item.user_id for item in result.items]
 
 # region Test create_student
 
@@ -390,3 +440,217 @@ def test_reset_password_requires_date_of_birth(session):
         reset_password(session, admin, target.user_id)
 
 # endregion
+
+#region test list_users
+
+# --- validate role_id --------------------------------------------------------
+@pytest.mark.parametrize("bad_role", [0, 4, 99])
+def test_list_users_invalid_role_id_raises(session, bad_role):
+    admin = _make_listed_user(session, "admin1", Role.ADMIN)
+
+    with pytest.raises(InvalidFormatError):
+        _call(session, admin, role_id=bad_role)
+
+
+# --- admin -------------------------------------------------------------------
+def test_list_users_admin_without_filter_returns_all_ordered_by_user_id(session):
+    admin = _make_listed_user(session, "admin1", Role.ADMIN)
+    teacher = _make_listed_user(session, "teacher1", Role.TEACHER)
+    student = _make_listed_user(session, "student1", Role.STUDENT)
+
+    result = _call(session, admin)
+
+    assert result.total == 3
+    assert _ids(result) == sorted(
+        [admin.user_id, teacher.user_id, student.user_id]
+    )
+
+
+def test_list_users_admin_filter_by_role_id(session):
+    admin = _make_listed_user(session, "admin1", Role.ADMIN)
+    _make_listed_user(session, "teacher1", Role.TEACHER)
+    student = _make_listed_user(session, "student1", Role.STUDENT)
+
+    result = _call(session, admin, role_id=Role.STUDENT)
+
+    assert _ids(result) == [student.user_id]
+    assert result.total == 1
+
+
+def test_list_users_admin_filter_by_class_id(session):
+    _make_class(session, "CQ.64.CNTT")
+    _make_class(session, "CQ.64.KT")
+    admin = _make_listed_user(session, "admin1", Role.ADMIN)
+    cntt = _make_listed_user(session, "student1", Role.STUDENT, "CQ.64.CNTT")
+    _make_listed_user(session, "student2", Role.STUDENT, "CQ.64.KT")
+
+    result = _call(session, admin, class_id="CQ.64.CNTT")
+
+    assert _ids(result) == [cntt.user_id]
+    assert result.total == 1
+
+
+def test_list_users_admin_filter_by_class_id_no_match_returns_empty(session):
+    _make_class(session, "CQ.64.CNTT")
+    admin = _make_listed_user(session, "admin1", Role.ADMIN)
+    _make_listed_user(session, "student1", Role.STUDENT, "CQ.64.CNTT")
+
+    result = _call(session, admin, class_id="CLASS_NON_EXISTENT")
+
+    assert result.items == []
+    assert result.total == 0
+
+
+def test_list_users_admin_combined_role_and_class_filter(session):
+    _make_class(session, "CQ.64.CNTT")
+    admin = _make_listed_user(session, "admin1", Role.ADMIN)
+    student = _make_listed_user(session, "student1", Role.STUDENT, "CQ.64.CNTT")
+    # cùng class_id trong DB nhưng khác role -> không được lọt vào kết quả
+    _make_listed_user(session, "teacher1", Role.TEACHER, "CQ.64.CNTT")
+
+    result = _call(session, admin, role_id=Role.STUDENT, class_id="CQ.64.CNTT")
+
+    assert _ids(result) == [student.user_id]
+
+
+# --- teacher -----------------------------------------------------------------
+
+
+def test_list_users_teacher_sees_only_students_in_own_courses(session):
+    teacher = _make_listed_user(session, "teacher1", Role.TEACHER)
+    other_teacher = _make_listed_user(session, "teacher2", Role.TEACHER)
+    mine = _make_listed_user(session, "student1", Role.STUDENT)
+    theirs = _make_listed_user(session, "student2", Role.STUDENT)
+    _make_listed_user(session, "student3", Role.STUDENT)  # chưa enroll khoá nào
+    _make_listed_user(session, "admin1", Role.ADMIN)
+
+    _enroll(session, _make_course(session, "course1", teacher), mine)
+    _enroll(session, _make_course(session, "course2", other_teacher), theirs)
+
+    result = _call(session, teacher)
+
+    assert _ids(result) == [mine.user_id]
+    assert result.total == 1
+
+
+def test_list_users_teacher_without_courses_sees_nothing(session):
+    teacher = _make_listed_user(session, "teacher1", Role.TEACHER)
+    other_teacher = _make_listed_user(session, "teacher2", Role.TEACHER)
+    student = _make_listed_user(session, "student1", Role.STUDENT)
+    _enroll(session, _make_course(session, "course1", other_teacher), student)
+
+    result = _call(session, teacher)
+
+    assert result.items == []
+    assert result.total == 0
+
+
+def test_list_users_teacher_student_in_multiple_own_courses_appears_once(session):
+    teacher = _make_listed_user(session, "teacher1", Role.TEACHER)
+    student = _make_listed_user(session, "student1", Role.STUDENT)
+    _enroll(session, _make_course(session, "course1", teacher), student)
+    _enroll(session, _make_course(session, "course2", teacher), student)
+
+    result = _call(session, teacher)
+
+    assert _ids(result) == [student.user_id]
+    assert result.total == 1
+
+
+@pytest.mark.parametrize("role_param", [Role.ADMIN, Role.TEACHER])
+def test_list_users_teacher_ignores_role_id_param(session, role_param):
+    teacher = _make_listed_user(session, "teacher1", Role.TEACHER)
+    student = _make_listed_user(session, "student1", Role.STUDENT)
+    _make_listed_user(session, "admin1", Role.ADMIN)
+    _enroll(session, _make_course(session, "course1", teacher), student)
+
+    result = _call(session, teacher, role_id=role_param)
+
+    assert _ids(result) == [student.user_id]
+
+
+def test_list_users_teacher_class_id_filter_stays_within_own_scope(session):
+    _make_class(session, "CQ.64.CNTT")
+    _make_class(session, "CQ.64.KT")
+    teacher = _make_listed_user(session, "teacher1", Role.TEACHER)
+    in_class = _make_listed_user(session, "student1", Role.STUDENT, "CQ.64.CNTT")
+    other_class = _make_listed_user(session, "student2", Role.STUDENT, "CQ.64.KT")
+    # cùng lớp với student1 nhưng không học khoá của teacher này
+    outsider = _make_listed_user(session, "student3", Role.STUDENT, "CQ.64.CNTT")
+
+    course = _make_course(session, "course1", teacher)
+    _enroll(session, course, in_class)
+    _enroll(session, course, other_class)
+
+    result = _call(session, teacher, class_id="CQ.64.CNTT")
+
+    assert _ids(result) == [in_class.user_id]
+    assert outsider.user_id not in _ids(result)
+
+
+# --- pagination --------------------------------------------------------------
+
+
+def test_list_users_pagination_pages_and_total(session):
+    admin = _make_listed_user(session, "admin1", Role.ADMIN)
+    students = [
+        _make_listed_user(session, f"student{i}", Role.STUDENT) for i in range(1, 6)
+    ]
+
+    page1 = _call(session, admin, role_id=Role.STUDENT, page=1, page_size=2)
+    page2 = _call(session, admin, role_id=Role.STUDENT, page=2, page_size=2)
+    page3 = _call(session, admin, role_id=Role.STUDENT, page=3, page_size=2)
+
+    assert _ids(page1) == [s.user_id for s in students[:2]]
+    assert _ids(page2) == [s.user_id for s in students[2:4]]
+    assert _ids(page3) == [students[4].user_id]  # trang cuối thiếu item
+    assert page1.total == page2.total == page3.total == 5
+    assert (page1.page, page1.page_size) == (1, 2)
+
+
+def test_list_users_pagination_page_beyond_range_returns_empty_with_total(session):
+    admin = _make_listed_user(session, "admin1", Role.ADMIN)
+    for i in range(1, 4):
+        _make_listed_user(session, f"student{i}", Role.STUDENT)
+
+    result = _call(session, admin, role_id=Role.STUDENT, page=10, page_size=2)
+
+    assert result.items == []
+    assert result.total == 3
+
+
+def test_list_users_pagination_applies_to_teacher_scope(session):
+    teacher = _make_listed_user(session, "teacher1", Role.TEACHER)
+    course = _make_course(session, "course1", teacher)
+    students = [
+        _make_listed_user(session, f"student{i}", Role.STUDENT) for i in range(1, 4)
+    ]
+    for student in students:
+        _enroll(session, course, student)
+
+    page1 = _call(session, teacher, page=1, page_size=2)
+    page2 = _call(session, teacher, page=2, page_size=2)
+
+    assert _ids(page1) == [s.user_id for s in students[:2]]
+    assert _ids(page2) == [students[2].user_id]
+    assert page1.total == page2.total == 3
+
+
+# --- mapping sang UserResponse ----------------------------------------------
+
+
+def test_list_users_class_id_only_exposed_for_students(session):
+    _make_class(session, "CQ.64.CNTT")
+    admin = _make_listed_user(session, "admin1", Role.ADMIN)
+    _make_listed_user(session, "student1", Role.STUDENT, "CQ.64.CNTT")
+    # class_id có trong DB nhưng response phải ẩn với Teacher
+    _make_listed_user(session, "teacher1", Role.TEACHER, "CQ.64.CNTT")
+
+    students = _call(session, admin, role_id=Role.STUDENT).items
+    teachers = _call(session, admin, role_id=Role.TEACHER).items
+
+    assert students[0].class_id == "CQ.64.CNTT"
+    assert teachers[0].class_id is None
+
+# endregion
+

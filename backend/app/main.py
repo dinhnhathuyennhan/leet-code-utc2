@@ -10,12 +10,12 @@ from fastapi.middleware.cors import CORSMiddleware  # noqa: E402
 
 from app.handlers.exception_handlers import register_exception_handlers  # noqa: E402
 from app.routers import auth, course, student, user  # noqa: E402
-from app.seed_data import seed_users  # noqa: E402
+from app.seed_data import seed_data  # noqa: E402
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    seed_users()
+    seed_data()
     yield
 
 

@@ -49,6 +49,7 @@
 | full_name | string | có | |
 | date_of_birth | date | có | định dạng `dd/mm/yyyy` hoặc `yyyy-mm-dd` |
 | email | string (email) | có | phải đúng định dạng email |
+| class_id | string | có | mã lớp hành chính, phải tồn tại trong bảng `class` |
 | avt_link | string | không | |
 
 **Response 201 Created**
@@ -60,6 +61,7 @@
 | email | string | |
 | role_id | int | luôn = 3 |
 | date_of_birth | date | |
+| class_id | string | |
 
 **Response lỗi**
 
@@ -67,6 +69,7 @@
 |---|---|---|
 | 422 | Sai định dạng email / thiếu field | `{"error_code": "VALIDATION_ERROR", "message": "..."}` |
 | 422 | Chưa đủ tuổi theo `date_of_birth` | `{"error_code": "DATE_OF_BIRTH_INVALID", "message": "Người dùng phải đủ 17 tuổi"}` |
+| 404 | `class_id` không tồn tại | `{"error_code": "NOT_FOUND", "message": "Không tìm thấy lớp học có ID: ..."}` |
 | 409 | Email đã tồn tại | `{"error_code": "CONFLICT", "message": "Email đã được đăng ký"}` |
 
 **Quy tắc nghiệp vụ**
@@ -74,7 +77,7 @@
 - `role_id` luôn cố định = 3, không nhận từ client.
 - `must_change_password` luôn = true khi tạo.
 - Người được cấp tài khoản phải đủ 17 tuổi trở lên, tính từ `date_of_birth`.
-- Mật khẩu tạm sinh hoàn toàn phía server theo ngày sinh, định dạng `ddmmyyyy` (ví dụ `date_of_birth = 15/05/1990` → mật khẩu tạm `15051990`). Client không truyền và không thể ghi đè mật khẩu.
+- Mật khẩu tạm của Sinh viên **là MSSV (`user_id`)**, sinh hoàn toàn phía server (ví dụ `user_id = 6751071001` → mật khẩu tạm `6751071001`). Quy tắc này giống với import Excel và đặt lại mật khẩu, để mọi Sinh viên có cùng một kiểu mật khẩu tạm. Client không truyền và không thể ghi đè mật khẩu.
 - Không trả `hashed_password` trong response.
 - **Yêu cầu quyền**: Admin hoặc Teacher (`require_role(Role.ADMIN, Role.TEACHER)`).
 
@@ -84,29 +87,68 @@
 
 | Field | Kiểu | Bắt buộc | Ghi chú |
 |---|---|---|---|
-| file | file (.xlsx) | có | đúng cấu trúc mẫu: cột `user_id`, `full_name`, `date_of_birth`, `email`, `class_id` |
+| file | file (.xls hoặc .xlsx) | có | file "Danh sách lớp học phần" xuất từ phòng đào tạo, tối đa 5 MB |
 
-**Response 201 Created** — tổng hợp kết quả xử lý từng dòng
+**Mẫu file** (đúng định dạng phòng đào tạo xuất ra, không cần sửa tay):
+
+- Mỗi sheet là danh sách một lớp học phần. Hệ thống đọc **mọi sheet**. Sheet không có hàng tiêu đề theo mẫu (ví dụ sheet ghi chú) thì bỏ qua.
+- Trong 20 hàng đầu của sheet phải có một hàng tiêu đề chứa đủ 4 cột: `STT`, `Mã sinh viên`, `Họ và tên`, `Lớp`. Không phân biệt hoa/thường, chấp nhận cả viết không dấu, `MSSV`, `Họ tên`. Các hàng phía trên (tên trường, học kỳ, thời khoá biểu...) và các cột khác (điểm danh, ghi chú) bị bỏ qua.
+- `Họ và tên` thường gộp 2 ô (họ đệm và tên). Hệ thống ghép 2 ô lại bằng một dấu cách.
+- Dữ liệu bắt đầu ngay dưới hàng tiêu đề. Dòng sinh viên là dòng có ô `STT` là số **hoặc** có `Mã sinh viên` (nên dòng bị xoá STT hoặc STT gõ sai vẫn được đọc). Dòng trống hoàn toàn thì bỏ qua và đọc tiếp. Gặp dòng có chữ nhưng không có STT lẫn MSSV (phần chân trang "TP Hồ Chí Minh, ngày...", "Người lập biểu") thì **dừng**. Dòng có STT nhưng các ô khác đều trống thì bỏ qua.
+- File không có email và ngày sinh. Hai thông tin này được sinh tự động, xem phần quy tắc.
+
+Ví dụ một sheet:
+
+```
+Hàng 1-9 : TRƯỜNG ĐH GIAO THÔNG VẬN TẢI / Lớp học phần: ... / Mã học phần: ... / Học kỳ: ...
+Hàng 11  : STT | Mã sinh viên | Họ và tên (2 ô)  |      | Lớp        | ... | Ghi chú
+Hàng 12  : 1   | 6751071001   | Nguyễn Văn       | An   | CQ.67.CNTT |
+Hàng 13  : 2   | 675107A002   | Trần Thị         | Bình | CQ.67.CNTT |
+...      : (dòng trống) / TP Hồ Chí Minh, ngày ... / Người lập biểu
+```
+
+**Response 201 Created**: kết quả xử lý từng sinh viên
 
 | Field | Kiểu | Ghi chú |
 |---|---|---|
-| created | array of object | mỗi phần tử: `user_id`, `full_name`, `email`, `date_of_birth`, `temporary_password` |
-| errors | array of object | mỗi phần tử: `row` (số dòng trong file), `email`, `date_of_birth`, `reason` (lý do lỗi) |
+| created | array of object | sinh viên được tạo tài khoản. Mỗi phần tử: `user_id`, `full_name`, `email`, `class_id`, `temporary_password` |
+| skipped | array of object | sinh viên **đã có tài khoản** nên bỏ qua (không phải lỗi). Mỗi phần tử: `sheet`, `row`, `user_id`, `reason` |
+| errors | array of object | dòng bị lỗi. Mỗi phần tử: `sheet`, `row` (số dòng trong Excel), `user_id` (`null` nếu ô MSSV trống), `reason`. Sắp xếp theo thứ tự sheet rồi theo dòng |
 
-**Response lỗi**
+**Response lỗi** (cả file bị từ chối, chưa tạo tài khoản nào)
 
 | Status | Khi nào | Body |
 |---|---|---|
-| 422 | File không có phần mở rộng `.xlsx`, không đọc được, hoặc thiếu cột bắt buộc | `{"error_code": "INVALID_EXCEL_FORMAT", "message": "..."}` |
+| 422 | Đuôi file không phải `.xls`/`.xlsx`, file hỏng hoặc đổi đuôi giả, hoặc không sheet nào có hàng tiêu đề theo mẫu | `{"error_code": "INVALID_EXCEL_FORMAT", "message": "..."}` |
 | 400 | File không có dữ liệu | `{"error_code": "EMPTY_EXCEL_FILE", "message": "File không có dữ liệu"}` |
-| 400 | Vượt quá 500 dòng cho phép | `{"error_code": "EXCEL_FILE_TOO_LARGE", "message": "..."}` |
+| 400 | File lớn hơn 5 MB, hoặc có quá 500 sinh viên (đếm sau khi gộp MSSV trùng) | `{"error_code": "EXCEL_FILE_TOO_LARGE", "message": "..."}` |
+
+**Lý do lỗi của từng dòng** (`errors[].reason`)
+
+| Lý do | Khi nào |
+|---|---|
+| `Mã sinh viên không được trống` / `Họ tên không được trống` / `Mã lớp không được trống` | ô tương ứng trống |
+| `Mã sinh viên không được dài quá 50 ký tự` | |
+| `Mã sinh viên chỉ được gồm chữ không dấu và số` | có dấu, khoảng trắng, ký tự đặc biệt |
+| `Mã lớp ... không đúng dạng <hệ>.<khoá>.<ngành> (vd CQ.67.CNTT)` | thiếu phần, có phần rỗng, hoặc khoá không phải số. Mã lớp dài quá 50 ký tự cũng bị lỗi |
+| `Mã sinh viên trùng với dòng N (sheet X) nhưng khác họ tên hoặc lớp` | cùng MSSV xuất hiện nhiều lần với thông tin khác nhau. Lần xuất hiện đầu tiên vẫn được xử lý |
+| `Email {MSSV}@st.utc2.edu.vn đã được dùng cho tài khoản khác` | email tự sinh đã thuộc một tài khoản có MSSV khác |
+| `Mã sinh viên hoặc email đã tồn tại` | lỗi trùng khi lưu (ví dụ có người khác vừa tạo cùng lúc) |
+| `Không lưu được dòng này, vui lòng thử lại` | lỗi cơ sở dữ liệu khác. Chi tiết chỉ ghi vào log server, không trả câu SQL cho client |
 
 **Quy tắc nghiệp vụ**
 
-- Xử lý "best-effort": dòng hợp lệ vẫn tạo tài khoản, dòng lỗi bị bỏ qua và liệt kê lại trong `errors` — không trả lỗi HTTP cho toàn bộ request chỉ vì có dòng lỗi (kể cả khi `created` rỗng toàn bộ, vẫn trả 201 kèm `errors` đầy đủ, đúng use-case E1 "không có tài khoản nào được tạo" — không coi là lỗi request).
-- Mỗi dòng hợp lệ: `role_id = 3`, `must_change_password = true`, mật khẩu tạm sinh theo ngày sinh (`date_of_birth`) của chính dòng đó, định dạng `ddmmyyyy`.
-- Cột `class_id` là bắt buộc (mỗi sinh viên phải thuộc một lớp hành chính) và phải tồn tại trong bảng `class`; dòng nào thiếu hoặc trỏ tới mã lớp không tồn tại sẽ được liệt kê trong `errors` (dòng đó bị bỏ qua, các dòng hợp lệ khác vẫn được tạo). Header chấp nhận alias: `class_id`, `class id`, `mã lớp`, `ma lop`.
-- **Yêu cầu quyền**: Admin hoặc Teacher.
+- Xử lý "best-effort": sinh viên hợp lệ vẫn được tạo, dòng lỗi được bỏ qua và liệt kê trong `errors`. Request không trả lỗi HTTP chỉ vì có dòng lỗi: kể cả khi `created` rỗng thì vẫn trả 201 kèm `errors` đầy đủ (use-case E1).
+- Mỗi sinh viên được tạo với:
+  - `role_id = 3`, `must_change_password = true`, `date_of_birth = null`;
+  - email tự sinh `{MSSV}@st.utc2.edu.vn`, **giữ nguyên dạng MSSV** (email phân biệt hoa/thường);
+  - mật khẩu tạm = **MSSV**, chỉ trả về đúng 1 lần trong `created[].temporary_password`.
+- Cùng một MSSV xuất hiện ở nhiều sheet (sinh viên học nhiều lớp học phần) với cùng họ tên và lớp thì chỉ tạo **1 lần**, không báo lỗi.
+- MSSV **đã có tài khoản** thì đưa vào `skipped`, không ghi đè tài khoản cũ. So khớp MSSV phân biệt hoa/thường (`SV001` khác `sv001`).
+- Lớp hành chính (cột `Lớp`) chưa có trong bảng `class` thì **tự tạo** bằng cách tách mã lớp tại 2 dấu chấm đầu tiên: `CQ.67.CNTT` → `type = "CQ"`, `course_number = 67`, `department = "CNTT"`, còn `CQ.67.KTXDCTGT.2` → `department = "KTXDCTGT.2"`. Lớp đã có thì giữ nguyên. Chỉ tạo lớp cho các sinh viên thực sự được tạo tài khoản.
+- Mỗi sinh viên được lưu (commit) riêng. Nếu lỗi xảy ra giữa chừng, các sinh viên đã lưu trước đó vẫn được giữ (use-case E3).
+- Mật khẩu tạm được băm (bcrypt) song song trên nhiều luồng để rút ngắn thời gian xử lý. Một lớp khoảng 100 sinh viên mất vài giây; FE nên đặt timeout riêng cho request này, dài hơn timeout mặc định.
+- **Yêu cầu quyền**: Admin hoặc Teacher (`require_role(Role.ADMIN, Role.TEACHER)`). Teacher import cũng có thể tạo lớp hành chính mới.
 
 ## POST /users/{user_id}/reset-password — Đặt lại mật khẩu
 
@@ -127,11 +169,15 @@
 | 403 | Người gọi là Student (bị chặn hoàn toàn, kể cả tự reset chính mình) | `{"error_code": "NOT_ALLOWED_TO_RESET", "message": "Bạn không có quyền đặt lại mật khẩu cho tài khoản này"}` |
 | 403 | Người gọi là Teacher nhưng tài khoản mục tiêu không phải Student | `{"error_code": "NOT_ALLOWED_TO_RESET", "message": "Bạn không có quyền đặt lại mật khẩu cho tài khoản này"}` |
 | 403 | Người gọi là Teacher, mục tiêu là Student nhưng không học khoá nào do Teacher này tạo | `{"error_code": "NOT_ALLOWED_TO_RESET", "message": "Bạn không có quyền đặt lại mật khẩu cho tài khoản này"}` |
-| 422 | Tài khoản mục tiêu chưa có `date_of_birth` (không thể sinh mật khẩu tạm) | `{"error_code": "DATE_OF_BIRTH_INVALID", "message": "Tài khoản chưa có ngày sinh để tạo mật khẩu tạm thời"}` |
+| 403 | Tài khoản mục tiêu có vai trò không thuộc Admin/Teacher/Student (vai trò lạ) | `{"error_code": "NOT_ALLOWED_TO_RESET", "message": "Bạn không có quyền đặt lại mật khẩu cho tài khoản này"}` |
+| 422 | Tài khoản mục tiêu là Teacher/Admin nhưng chưa có `date_of_birth` (không thể sinh mật khẩu tạm) | `{"error_code": "DATE_OF_BIRTH_INVALID", "message": "Tài khoản chưa có ngày sinh để tạo mật khẩu tạm thời"}` |
 
 **Quy tắc nghiệp vụ**
 
-- Mật khẩu tạm mới sinh lại theo `date_of_birth` hiện có của tài khoản mục tiêu (định dạng `ddmmyyyy`), không sinh ngẫu nhiên.
+- Mật khẩu tạm mới sinh theo vai trò của tài khoản mục tiêu, không sinh ngẫu nhiên:
+  - **Student**: MSSV (`user_id`). Không cần ngày sinh, nên sinh viên import từ file danh sách lớp (không có ngày sinh) vẫn reset được.
+  - **Teacher/Admin**: `date_of_birth` hiện có, định dạng `ddmmyyyy`.
+  - Vai trò khác: bị chặn (403), không thay đổi gì. Danh sách vai trò được phép là whitelist.
 - Đặt `must_change_password = true`, tăng `token_version` (vô hiệu hoá toàn bộ token cũ của tài khoản mục tiêu).
 - **Yêu cầu quyền**: Admin (mọi tài khoản) hoặc Teacher — nhưng Teacher chỉ được reset cho Student đang học **ít nhất một khoá học do chính Teacher đó tạo** (`Course.created_by = current_user.user_id`), không phải cứ `role_id = 3` là được; Student không được reset cho bất kỳ ai. Endpoint không dùng `require_role` ở router — toàn bộ logic phân quyền nằm trong service (`backend/app/services/user_service.py::reset_password`).
 

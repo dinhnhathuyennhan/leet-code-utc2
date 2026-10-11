@@ -8,7 +8,9 @@ from app.schemas.user import (
     CreateStudentRequest,
     CreateTeacherRequest,
     UserResponse,
-    password_from_date, UserListResponse,
+    UserListResponse,
+    password_from_date,
+    student_temp_password,
 )
 from models import Class, Course, Enrollment, User
 
@@ -80,7 +82,7 @@ def create_student(session: Session, data: CreateStudentRequest) -> User:
         user_id=data.user_id,
         full_name=data.full_name,
         email=data.email,
-        hashed_password=hash_password(password_from_date(data.date_of_birth)),
+        hashed_password=hash_password(student_temp_password(data.user_id)),
         must_change_password=True,
         date_of_birth=data.date_of_birth,
         avt_link=data.avt_link,
@@ -155,13 +157,35 @@ def list_users(
         page=page,
         page_size=page_size,
     )
+
+
+def _temporary_password_for(user: User) -> str:
+    """Sinh mật khẩu tạm theo vai trò của tài khoản.
+
+    - STUDENT: MSSV (``user_id``), không cần ngày sinh.
+    - TEACHER, ADMIN: ngày sinh dạng ddmmyyyy.
+    - Vai trò khác: không cho reset (whitelist, tránh role lạ rơi vào nhánh sai).
+    """
+    if user.role_id == Role.STUDENT:
+        return student_temp_password(user.user_id)
+    if user.role_id in (Role.TEACHER, Role.ADMIN):
+        if user.date_of_birth is None:
+            raise DateOfBirthRequiredError(
+                "Tài khoản chưa có ngày sinh để tạo mật khẩu tạm thời"
+            )
+        return password_from_date(user.date_of_birth)
+    raise NotAllowedToResetError(
+        "Bạn không có quyền đặt lại mật khẩu cho tài khoản này"
+    )
+
+
 def reset_password(
     session: Session, current_user: User, target_user_id: str
 ) -> tuple[str, str]:
     """Đặt lại mật khẩu cho tài khoản mục tiêu.
 
-    Mật khẩu tạm thời được sinh từ ngày sinh của tài khoản mục tiêu
-    theo định dạng ddmmyyyy (xem ``password_from_date``).
+    Mật khẩu tạm thời: sinh viên = MSSV; giáo viên/admin = ngày sinh
+    dạng ddmmyyyy (xem ``_temporary_password_for``).
 
     Quyền:
         - ADMIN: đặt lại mật khẩu bất kỳ tài khoản nào.
@@ -173,8 +197,8 @@ def reset_password(
 
     Raises:
         UserNotFoundError: không tìm thấy tài khoản mục tiêu.
-        NotAllowedToResetError: người gọi không đủ quyền.
-        DateOfBirthRequiredError: tài khoản mục tiêu chưa có ngày sinh hợp lệ.
+        NotAllowedToResetError: người gọi không đủ quyền, hoặc tài khoản mục tiêu có vai trò lạ.
+        DateOfBirthRequiredError: giáo viên/admin mục tiêu chưa có ngày sinh.
     """
     target = session.get(User, target_user_id)
     if target is None:
@@ -210,13 +234,7 @@ def reset_password(
                 "Bạn không có quyền đặt lại mật khẩu cho tài khoản này"
             )
 
-    # Tài khoản mục tiêu phải có ngày sinh để sinh mật khẩu tạm thời
-    if target.date_of_birth is None:
-        raise DateOfBirthRequiredError(
-            "Tài khoản chưa có ngày sinh để tạo mật khẩu tạm thời"
-        )
-
-    temporary_password = password_from_date(target.date_of_birth)
+    temporary_password = _temporary_password_for(target)
     target.hashed_password = hash_password(temporary_password)
     target.must_change_password = True
     target.token_version += 1
@@ -225,4 +243,3 @@ def reset_password(
     session.commit()
     session.refresh(target)
     return target.user_id, temporary_password
-

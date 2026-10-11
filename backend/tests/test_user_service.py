@@ -119,6 +119,7 @@ def test_create_student_success(session):
     assert student.class_id == "CQ.64.CNTT"
     assert student.must_change_password is True
     assert student.date_of_birth == date(2005, 8, 31)
+    assert verify_password("6451071055", student.hashed_password)
 
 
 def test_create_student_accepts_dd_mm_yyyy_and_normalizes_to_date_object(session):
@@ -257,7 +258,7 @@ def test_reset_password_admin_can_reset_any_user(session):
     returned_id, temporary_password = reset_password(session, admin, target.user_id)
 
     assert returned_id == target.user_id
-    assert temporary_password == "31082005"
+    assert temporary_password == "student1"  # SV: mật khẩu tạm = MSSV
     assert temporary_password != "abc12345"
 
     session.refresh(target)
@@ -297,7 +298,7 @@ def test_reset_password_teacher_can_reset_student_in_their_class(session):
     session.commit()
 
     _, temporary_password = reset_password(session, teacher, student.user_id)
-    assert temporary_password == "31082005"
+    assert temporary_password == "student2"
 
     session.refresh(student)
     assert verify_password(temporary_password, student.hashed_password)
@@ -425,19 +426,78 @@ def test_reset_password_teacher_cannot_reset_self(session):
 
 
 def test_reset_password_requires_date_of_birth(session):
-    """Nếu tài khoản mục tiêu chưa có ngày sinh thì không thể reset mật khẩu."""
+    """Giáo viên chưa có ngày sinh thì không thể sinh mật khẩu tạm."""
     admin = _make_user(session, "admin6", "admin6@example.com", Role.ADMIN)
     target = _make_user(
         session,
-        "student_no_dob",
-        "student_no_dob@example.com",
-        Role.STUDENT,
+        "teacher_no_dob",
+        "teacher_no_dob@example.com",
+        Role.TEACHER,
         date_of_birth=None,
-        password="abc12345",
     )
 
     with pytest.raises(DateOfBirthRequiredError):
         reset_password(session, admin, target.user_id)
+
+    session.refresh(target)
+    assert target.token_version == 0
+
+
+def test_reset_password_student_without_date_of_birth_uses_user_id(session):
+    """SV import từ file danh sách lớp không có ngày sinh vẫn reset được."""
+    admin = _make_user(session, "admin7", "admin7@example.com", Role.ADMIN)
+    target = _make_user(
+        session,
+        "675107A095",
+        "675107A095@st.utc2.edu.vn",
+        Role.STUDENT,
+        date_of_birth=None,
+    )
+
+    _, temporary_password = reset_password(session, admin, target.user_id)
+
+    assert temporary_password == "675107A095"
+    session.refresh(target)
+    assert verify_password("675107A095", target.hashed_password)
+    assert target.must_change_password is True
+    assert target.token_version == 1
+
+
+def test_reset_password_teacher_target_uses_date_of_birth(session):
+    admin = _make_user(session, "admin8", "admin8@example.com", Role.ADMIN)
+    target = _make_user(
+        session,
+        "teacher8",
+        "teacher8@example.com",
+        Role.TEACHER,
+        date_of_birth=date(1990, 1, 15),
+    )
+
+    _, temporary_password = reset_password(session, admin, target.user_id)
+
+    assert temporary_password == "15011990"
+    session.refresh(target)
+    assert verify_password("15011990", target.hashed_password)
+
+
+def test_reset_password_rejects_unknown_target_role(session):
+    """Role lạ không được rơi vào nhánh nào (whitelist), dữ liệu giữ nguyên."""
+    admin = _make_user(session, "admin9", "admin9@example.com", Role.ADMIN)
+    target = _make_user(
+        session,
+        "ghost",
+        "ghost@example.com",
+        99,
+        date_of_birth=date(2000, 1, 1),
+        password="keep-me-123",
+    )
+
+    with pytest.raises(NotAllowedToResetError):
+        reset_password(session, admin, target.user_id)
+
+    session.refresh(target)
+    assert verify_password("keep-me-123", target.hashed_password)
+    assert target.token_version == 0
 
 # endregion
 

@@ -48,6 +48,11 @@ def password_from_date(value: date) -> str:
     return value.strftime("%d%m%Y")
 
 
+def student_temp_password(user_id: str) -> str:
+    """Mật khẩu tạm của sinh viên = MSSV (file danh sách lớp không có ngày sinh)."""
+    return user_id
+
+
 class CreateTeacherRequest(BaseModel):
     user_id: str
     full_name: str
@@ -98,4 +103,3 @@ class UserResetPasswordResponse(BaseModel):
 
     user_id: str
     temporary_password: str
-

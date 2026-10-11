@@ -1,14 +1,14 @@
-from sqlmodel import Session, select
+from sqlmodel import Session, select, func
 
 from app.core.date import age_calculation
-from app.core.exceptions import AppError, ConflictError, NotFoundError
+from app.core.exceptions import AppError, ConflictError, NotFoundError, InvalidFormatError, ForbiddenError
 from app.core.password import hash_password
 from app.dependencies import Role
 from app.schemas.user import (
     CreateStudentRequest,
     CreateTeacherRequest,
     UserResponse,
-    password_from_date,
+    password_from_date, UserListResponse,
 )
 from models import Class, Course, Enrollment, User
 
@@ -103,7 +103,58 @@ def user_response(user: User) -> UserResponse:
         class_id=user.class_id if user.role_id == Role.STUDENT else None,
     )
 
+def list_users(
+    session: Session,
+    current_user: User,
+    role_id: int | None,
+    class_id: str | None,
+    page: int,
+    page_size: int,
+) -> UserListResponse:
+    if role_id is not None and role_id not in (
+        Role.ADMIN,
+        Role.TEACHER,
+        Role.STUDENT,
+    ):
+        raise InvalidFormatError("role_id không hợp lệ")
 
+    conditions = []
+
+    if current_user.role_id == Role.TEACHER:
+        # Teacher chỉ thấy Student đang học khoá do mình tạo, bất kể role_id truyền vào
+        managed_course_ids = select(Course.course_id).where(
+            Course.created_by == current_user.user_id
+        )
+        managed_student_ids = select(Enrollment.student_id).where(
+            Enrollment.course_id.in_(managed_course_ids)
+        )
+        conditions.append(User.role_id == Role.STUDENT)
+        conditions.append(User.user_id.in_(managed_student_ids))
+    elif current_user.role_id != Role.ADMIN:
+        # Whitelist: chỉ Admin và Teacher được xem, mọi role khác (kể cả role phát sinh sau này) bị từ chối
+        raise ForbiddenError("Bạn không có quyền xem danh sách người dùng")
+    elif role_id is not None:
+        conditions.append(User.role_id == role_id)
+
+    if class_id is not None:
+        conditions.append(User.role_id == Role.STUDENT)
+        conditions.append(User.class_id == class_id)
+
+    total = session.exec(select(func.count()).select_from(User).where(*conditions)).one()
+    users = session.exec(
+        select(User)
+        .where(*conditions)
+        .order_by(User.user_id)
+        .offset((page - 1) * page_size)
+        .limit(page_size)
+    ).all()
+
+    return UserListResponse(
+        items=[user_response(user) for user in users],
+        total=total,
+        page=page,
+        page_size=page_size,
+    )
 def reset_password(
     session: Session, current_user: User, target_user_id: str
 ) -> tuple[str, str]:

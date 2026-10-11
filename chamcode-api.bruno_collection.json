@@ -1,0 +1,329 @@
+{
+  "info": {
+    "name": "ChamCode API",
+    "description": "Toàn bộ API của dự án LeetCode UTC2 - ChamCode. Import vào Bruno: menu ⋯ → Import Collection → Postman.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    { "key": "baseUrl",   "value": "http://localhost:8000", "type": "string" },
+    { "key": "accessToken", "value": "",                   "type": "string" },
+    { "key": "userId",    "value": "",                     "type": "string" },
+    { "key": "courseId",  "value": "",                     "type": "string" },
+    { "key": "studentId", "value": "",                     "type": "string" }
+  ],
+  "item": [
+    {
+      "name": "Health Check",
+      "request": {
+        "method": "GET",
+        "url": { "raw": "{{baseUrl}}/", "host": ["{{baseUrl}}"], "path": [""] },
+        "description": "Kiểm tra trạng thái server. Không cần auth. Response: { \"status\": \"ok\" }."
+      }
+    },
+    {
+      "name": "Auth",
+      "description": "Các API xác thực: đăng nhập, đăng xuất, làm mới token, đổi mật khẩu.",
+      "item": [
+        {
+          "name": "Login",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (pm.response.code === 200) {",
+                  "  var body = pm.response.json();",
+                  "  pm.environment.set('accessToken', body.access_token);",
+                  "  console.log('✅ accessToken đã được lưu vào environment');",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "url": { "raw": "{{baseUrl}}/auth/login", "host": ["{{baseUrl}}"], "path": ["auth", "login"] },
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"admin@chamcode.com\",\n  \"password\": \"LeetCodeForUtc2\"\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "description": "Đăng nhập bằng email và mật khẩu.\n\n- Trả về `access_token` (JWT Bearer) trong body.\n- Trả về `refresh_token` qua **HttpOnly cookie** (path `/auth`), không đọc được bằng JS.\n- Script tự động lưu `access_token` vào biến `accessToken`.\n\n**Roles:** Tất cả người dùng"
+          }
+        },
+        {
+          "name": "Logout",
+          "request": {
+            "method": "POST",
+            "url": { "raw": "{{baseUrl}}/auth/logout", "host": ["{{baseUrl}}"], "path": ["auth", "logout"] },
+            "description": "Xóa cookie `refresh_token` phía server (Set-Cookie max-age=0). Không cần Authorization header. Response: **204 No Content**.\n\n**Roles:** Tất cả người dùng"
+          }
+        },
+        {
+          "name": "Refresh Access Token",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (pm.response.code === 200) {",
+                  "  var body = pm.response.json();",
+                  "  pm.environment.set('accessToken', body.access_token);",
+                  "  console.log('✅ accessToken mới đã được lưu');",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "url": { "raw": "{{baseUrl}}/auth/refresh-access-token", "host": ["{{baseUrl}}"], "path": ["auth", "refresh-access-token"] },
+            "description": "Lấy `access_token` mới bằng cookie `refresh_token` (HttpOnly, tự động gửi kèm request cùng domain).\n\n- Không cần Authorization header.\n- Cần bật \"Send Cookies\" trong Bruno để cookie được gửi đúng.\n\n**Roles:** Tất cả người dùng"
+          }
+        },
+        {
+          "name": "Change Password",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (pm.response.code === 200) {",
+                  "  var body = pm.response.json();",
+                  "  pm.environment.set('accessToken', body.access_token);",
+                  "  console.log('✅ accessToken mới đã được lưu sau khi đổi mật khẩu');",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "auth": { "type": "bearer", "bearer": [{ "key": "token", "value": "{{accessToken}}" }] },
+            "url": { "raw": "{{baseUrl}}/auth/change-password", "host": ["{{baseUrl}}"], "path": ["auth", "change-password"] },
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"current_password\": \"LeetCodeForUtc2\",\n  \"new_password\": \"NewPassword123\",\n  \"confirm_password\": \"NewPassword123\"\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "description": "Đổi mật khẩu cho tài khoản đang đăng nhập.\n\n- `new_password` phải ≥ 8 ký tự.\n- `confirm_password` phải trùng `new_password`.\n- Trả về `access_token` mới + đặt lại `refresh_token` cookie.\n- Thường dùng khi `must_change_password = true`.\n\n**Roles:** Tất cả người dùng đã đăng nhập"
+          }
+        }
+      ]
+    },
+    {
+      "name": "User",
+      "description": "Quản lý người dùng: xem thông tin cá nhân, tạo giáo viên/sinh viên, liệt kê, reset mật khẩu.",
+      "item": [
+        {
+          "name": "Get Current User (Me)",
+          "request": {
+            "method": "GET",
+            "auth": { "type": "bearer", "bearer": [{ "key": "token", "value": "{{accessToken}}" }] },
+            "url": { "raw": "{{baseUrl}}/users/me", "host": ["{{baseUrl}}"], "path": ["users", "me"] },
+            "description": "Lấy thông tin người dùng đang đăng nhập dựa vào `access_token`.\n\n**Response:** `user_id`, `full_name`, `email`, `role_id`, `date_of_birth`, `class_id`\n\n**Roles:** Tất cả người dùng đã đăng nhập"
+          }
+        },
+        {
+          "name": "List Users",
+          "request": {
+            "method": "GET",
+            "auth": { "type": "bearer", "bearer": [{ "key": "token", "value": "{{accessToken}}" }] },
+            "url": {
+              "raw": "{{baseUrl}}/users?role_id=3&page=1&page_size=20",
+              "host": ["{{baseUrl}}"],
+              "path": ["users"],
+              "query": [
+                { "key": "role_id",   "value": "3",  "description": "1=Admin, 2=Teacher, 3=Student. Bỏ trống để lấy tất cả." },
+                { "key": "class_id",  "value": "",   "description": "Lọc theo mã lớp (optional).", "disabled": true },
+                { "key": "page",      "value": "1",  "description": "Trang hiện tại (min: 1)." },
+                { "key": "page_size", "value": "20", "description": "Số item mỗi trang (max: 100)." }
+              ]
+            },
+            "description": "Lấy danh sách người dùng với phân trang và lọc theo role/lớp.\n\n**Response:** `{ items: [...], total, page, page_size }`\n\n**Roles:** Admin, Teacher"
+          }
+        },
+        {
+          "name": "Create Teacher",
+          "request": {
+            "method": "POST",
+            "auth": { "type": "bearer", "bearer": [{ "key": "token", "value": "{{accessToken}}" }] },
+            "url": { "raw": "{{baseUrl}}/teachers", "host": ["{{baseUrl}}"], "path": ["teachers"] },
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"user_id\": \"GV001\",\n  \"full_name\": \"Nguyễn Văn A\",\n  \"date_of_birth\": \"15/08/1985\",\n  \"email\": \"nguyenvana@chamcode.com\",\n  \"avt_link\": null\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "description": "Tạo tài khoản giáo viên mới.\n\n- `date_of_birth`: `dd/MM/yyyy`, `dd-MM-yyyy`, hoặc `yyyy-MM-dd`.\n- Mật khẩu mặc định = ngày sinh định dạng `ddmmyyyy`, kèm `must_change_password = true`.\n- `avt_link` optional, tối đa 2048 ký tự.\n\n**Roles:** Admin"
+          }
+        },
+        {
+          "name": "Create Student",
+          "request": {
+            "method": "POST",
+            "auth": { "type": "bearer", "bearer": [{ "key": "token", "value": "{{accessToken}}" }] },
+            "url": { "raw": "{{baseUrl}}/students", "host": ["{{baseUrl}}"], "path": ["students"] },
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"user_id\": \"SV001\",\n  \"full_name\": \"Trần Thị B\",\n  \"date_of_birth\": \"20/03/2003\",\n  \"email\": \"tranthib@chamcode.com\",\n  \"class_id\": \"CNTT2021A\",\n  \"avt_link\": null\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "description": "Tạo tài khoản sinh viên mới.\n\n- `class_id`: Mã lớp (bắt buộc).\n- `date_of_birth`: `dd/MM/yyyy`, `dd-MM-yyyy`, hoặc `yyyy-MM-dd`.\n- Mật khẩu mặc định = ngày sinh định dạng `ddmmyyyy`, kèm `must_change_password = true`.\n\n**Roles:** Admin, Teacher"
+          }
+        },
+        {
+          "name": "Reset User Password",
+          "request": {
+            "method": "POST",
+            "auth": { "type": "bearer", "bearer": [{ "key": "token", "value": "{{accessToken}}" }] },
+            "url": {
+              "raw": "{{baseUrl}}/users/{{userId}}/reset-password",
+              "host": ["{{baseUrl}}"],
+              "path": ["users", "{{userId}}", "reset-password"]
+            },
+            "description": "Đặt lại mật khẩu người dùng về mật khẩu tạm thời (random).\n\n- Trả về `user_id` và `temporary_password` — cần thông báo cho người dùng.\n- Người dùng sẽ bị yêu cầu đổi mật khẩu ngay sau khi đăng nhập lại.\n\n**Roles:** Tất cả người dùng đã đăng nhập"
+          }
+        }
+      ]
+    },
+    {
+      "name": "Course",
+      "description": "Quản lý lớp học và danh sách sinh viên đăng ký (enrollment).",
+      "item": [
+        {
+          "name": "Create Course",
+          "request": {
+            "method": "POST",
+            "auth": { "type": "bearer", "bearer": [{ "key": "token", "value": "{{accessToken}}" }] },
+            "url": { "raw": "{{baseUrl}}/courses", "host": ["{{baseUrl}}"], "path": ["courses"] },
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"course_id\": \"CSE101-2024A\",\n  \"course_name\": \"Lập trình cơ bản\",\n  \"term\": \"Học kỳ 1 - 2024\",\n  \"start_date\": \"2024-09-01T00:00:00Z\",\n  \"end_date\": \"2025-01-15T00:00:00Z\",\n  \"avt_link\": null\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "description": "Tạo lớp học mới.\n\n- `start_date` phải trước `end_date` (ISO 8601 có timezone).\n- `created_by` tự động gán từ người dùng đang đăng nhập.\n- `course_id` tối đa 50 ký tự; `course_name`, `term` tối đa 255 ký tự.\n\n**Response:** 201 Created\n\n**Roles:** Admin, Teacher"
+          }
+        },
+        {
+          "name": "Get All Courses",
+          "request": {
+            "method": "GET",
+            "auth": { "type": "bearer", "bearer": [{ "key": "token", "value": "{{accessToken}}" }] },
+            "url": { "raw": "{{baseUrl}}/courses", "host": ["{{baseUrl}}"], "path": ["courses"] },
+            "description": "Lấy danh sách tất cả lớp học.\n\n- Admin/Teacher: thấy tất cả khóa học.\n- Student: chỉ thấy khóa học mình đã đăng ký.\n\n**Roles:** Tất cả người dùng đã đăng nhập"
+          }
+        },
+        {
+          "name": "Get Course By ID",
+          "request": {
+            "method": "GET",
+            "auth": { "type": "bearer", "bearer": [{ "key": "token", "value": "{{accessToken}}" }] },
+            "url": {
+              "raw": "{{baseUrl}}/courses/{{courseId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["courses", "{{courseId}}"]
+            },
+            "description": "Lấy thông tin chi tiết một lớp học theo `course_id`.\n\n**Response:** `course_id`, `course_name`, `term`, `start_date`, `end_date`, `avt_link`, `created_by`, `total_number_student`\n\n**Roles:** Tất cả người dùng đã đăng nhập"
+          }
+        },
+        {
+          "name": "Update Course",
+          "request": {
+            "method": "PATCH",
+            "auth": { "type": "bearer", "bearer": [{ "key": "token", "value": "{{accessToken}}" }] },
+            "url": {
+              "raw": "{{baseUrl}}/courses/{{courseId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["courses", "{{courseId}}"]
+            },
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"course_name\": \"Lập trình cơ bản (Nâng cao)\",\n  \"term\": \"Học kỳ 1 - 2024\",\n  \"start_date\": \"2024-09-01T00:00:00Z\",\n  \"end_date\": \"2025-02-01T00:00:00Z\",\n  \"avt_link\": null\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "description": "Cập nhật một phần lớp học (partial update).\n\n- Chỉ truyền các field cần thay đổi.\n- `course_id`, `created_by`, `total_number_student` không thay đổi được.\n- Nếu truyền cả `start_date` lẫn `end_date`, `start_date` phải trước `end_date`.\n- Field gửi `null` sẽ bị bỏ qua.\n\n**Roles:** Admin, Teacher"
+          }
+        },
+        {
+          "name": "Add Student To Course",
+          "request": {
+            "method": "POST",
+            "auth": { "type": "bearer", "bearer": [{ "key": "token", "value": "{{accessToken}}" }] },
+            "url": {
+              "raw": "{{baseUrl}}/courses/{{courseId}}/enrollments",
+              "host": ["{{baseUrl}}"],
+              "path": ["courses", "{{courseId}}", "enrollments"]
+            },
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"student_id\": \"{{studentId}}\"\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "description": "Đăng ký một sinh viên vào lớp học.\n\n**Response:** 201 Created + `{ enrollment_id, course_id, student_id }`\n\n**Roles:** Admin, Teacher"
+          }
+        },
+        {
+          "name": "Get Course Enrollments",
+          "request": {
+            "method": "GET",
+            "auth": { "type": "bearer", "bearer": [{ "key": "token", "value": "{{accessToken}}" }] },
+            "url": {
+              "raw": "{{baseUrl}}/courses/{{courseId}}/enrollments",
+              "host": ["{{baseUrl}}"],
+              "path": ["courses", "{{courseId}}", "enrollments"]
+            },
+            "description": "Lấy danh sách sinh viên đã đăng ký vào lớp học.\n\n**Response:** `[{ enrollment_id, student_id, full_name, email }]`\n\n**Roles:** Tất cả người dùng đã đăng nhập"
+          }
+        },
+        {
+          "name": "Remove Student From Course",
+          "request": {
+            "method": "DELETE",
+            "auth": { "type": "bearer", "bearer": [{ "key": "token", "value": "{{accessToken}}" }] },
+            "url": {
+              "raw": "{{baseUrl}}/courses/{{courseId}}/enrollments/{{studentId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["courses", "{{courseId}}", "enrollments", "{{studentId}}"]
+            },
+            "description": "Xóa đăng ký của sinh viên khỏi lớp học.\n\n**Response:** 204 No Content\n\n**Roles:** Admin, Teacher"
+          }
+        }
+      ]
+    },
+    {
+      "name": "Student",
+      "description": "Import sinh viên hàng loạt từ file Excel.",
+      "item": [
+        {
+          "name": "Import Students From Excel",
+          "request": {
+            "method": "POST",
+            "auth": { "type": "bearer", "bearer": [{ "key": "token", "value": "{{accessToken}}" }] },
+            "url": { "raw": "{{baseUrl}}/students/import", "host": ["{{baseUrl}}"], "path": ["students", "import"] },
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                {
+                  "key": "file",
+                  "type": "file",
+                  "description": "File Excel (.xlsx) chứa danh sách sinh viên cần import"
+                }
+              ]
+            },
+            "description": "Import danh sách sinh viên hàng loạt từ file Excel (.xlsx) qua `multipart/form-data`.\n\n**Response:** 201 Created\n```json\n{\n  \"created\": [{ \"user_id\", \"full_name\", \"email\", \"date_of_birth\", \"temporary_password\" }],\n  \"errors\":  [{ \"row\", \"email\", \"date_of_birth\", \"reason\" }]\n}\n```\n\n**Roles:** Admin, Teacher"
+          }
+        }
+      ]
+    }
+  ]
+}

@@ -54,18 +54,39 @@ export interface CreateAccountResponse {
   temporary_password: string;
 }
 
+export interface ResetPasswordResponse {
+  user_id: string;
+  temporary_password: string;
+}
+
+export interface CreateTeacherRequest {
+  user_id: string;
+  full_name: string;
+  date_of_birth: string;
+  email: string;
+}
+
+export interface CreateStudentRequest extends CreateTeacherRequest {
+  class_id: string;
+}
+
+export interface AccountResponse {
+  user_id: string;
+  full_name: string;
+  email: string;
+  role_id: Role;
+  date_of_birth: string;
+  class_id?: string | null;
+}
+
 export interface ImportStudentsError {
   row: number;
-  email: string;
+  email?: string | null;
+  date_of_birth?: string | null;
   reason: string;
 }
 
 export interface ImportStudentsResponse {
-  created: CreateAccountResponse[];
+  created: Array<AccountResponse & { temporary_password: string }>;
   errors: ImportStudentsError[];
-}
-
-export interface ResetPasswordResponse {
-  user_id: string;
-  temporary_password: string;
 }

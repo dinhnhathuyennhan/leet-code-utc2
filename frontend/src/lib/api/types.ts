@@ -79,14 +79,30 @@ export interface AccountResponse {
   class_id?: string | null;
 }
 
-export interface ImportStudentsError {
+export interface ImportStudentsCreatedRow {
+  user_id: string;
+  full_name: string;
+  email: string;
+  class_id: string;
+  temporary_password: string;
+}
+
+export interface ImportStudentsSkippedRow {
+  sheet: string;
   row: number;
-  email?: string | null;
-  date_of_birth?: string | null;
+  user_id: string;
+  reason: string;
+}
+
+export interface ImportStudentsErrorRow {
+  sheet: string;
+  row: number;
+  user_id: string | null;
   reason: string;
 }
 
 export interface ImportStudentsResponse {
-  created: Array<AccountResponse & { temporary_password: string }>;
-  errors: ImportStudentsError[];
+  created: ImportStudentsCreatedRow[];
+  skipped: ImportStudentsSkippedRow[];
+  errors: ImportStudentsErrorRow[];
 }

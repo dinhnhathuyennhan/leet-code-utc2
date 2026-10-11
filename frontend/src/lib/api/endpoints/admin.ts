@@ -31,7 +31,11 @@ export async function importStudents(file: File): Promise<ImportStudentsResponse
     const formData = new FormData();
     formData.append("file", file);
     const response = await axiosInstance.post<ImportStudentsResponse>("/students/import", formData, {
+      // Override the instance's JSON default; otherwise Axios serializes FormData as { file: {} }.
+      // In browsers Axios removes this header before sending so the browser adds the multipart boundary.
       headers: { "Content-Type": "multipart/form-data" },
+      // Hashing hundreds of passwords can exceed the default 10-second API timeout.
+      timeout: 120_000,
     });
     return response.data;
   } catch (error) {

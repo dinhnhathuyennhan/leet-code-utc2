@@ -107,12 +107,8 @@ export function LoginForm({ onSuccess }: LoginFormProps) {
   }
 
   return (
-    /* Outer Container: Tối ưu bo góc và padding thoáng hơn cho iPhone (p-3.5, rounded-[2rem]) */
-    <div className="w-full max-w-[420px] sm:w-fit sm:max-w-full rounded-[2rem] sm:rounded-[3rem] bg-white/10 p-3.5 ring-1 ring-white/25 backdrop-blur-sm sm:p-6">
-      
-      {/* Inner White Card: p-5 & space-y-5 tạo độ thở hoàn hảo trên iPhone */}
-      <div className="rounded-[1.5rem] sm:rounded-[2rem] bg-white p-5 space-y-5 sm:space-y-8 sm:p-8 shadow-2xl">
-        
+    <div className="w-full max-w-[520px] rounded-[2rem] bg-white/10 p-2.5 ring-1 ring-white/25 backdrop-blur-sm sm:rounded-[2.5rem] sm:p-4 lg:p-5">
+      <div className="space-y-5 rounded-[1.5rem] bg-white p-4 shadow-2xl sm:space-y-6 sm:rounded-[2rem] sm:p-6 lg:p-7">
         {/* Header Section */}
         <header className="space-y-1.5 sm:space-y-2 text-center">
           <Image
@@ -133,7 +129,7 @@ export function LoginForm({ onSuccess }: LoginFormProps) {
         <FormProvider {...form}>
           <form
             onSubmit={form.handleSubmit(onSubmit)}
-            className="flex flex-col gap-4 sm:gap-6"
+            className="flex flex-col gap-4 sm:gap-5"
             noValidate
           >
             {/* Email Field */}
@@ -141,7 +137,7 @@ export function LoginForm({ onSuccess }: LoginFormProps) {
               control={form.control}
               name="email"
               render={({ field }) => (
-                <FormItem className="flex w-full flex-col gap-1.5 lg:w-[412px]">
+                <FormItem className="flex w-full min-w-0 flex-col gap-1.5">
                   <FormLabel className="text-slate-700 text-xs sm:text-sm font-semibold">
                     Email UTC2 <span className="text-red-500">*</span>
                   </FormLabel>
@@ -176,7 +172,7 @@ export function LoginForm({ onSuccess }: LoginFormProps) {
               control={form.control}
               name="password"
               render={({ field }) => (
-                <FormItem className="flex w-full flex-col gap-1.5 lg:w-[412px]">
+                <FormItem className="flex w-full min-w-0 flex-col gap-1.5">
                   <div className="flex items-baseline justify-between gap-2">
                     <FormLabel className="text-slate-700 text-xs sm:text-sm font-semibold">
                       Mật khẩu <span className="text-red-500">*</span>

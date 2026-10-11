@@ -9,6 +9,7 @@ from app.schemas.user import (
     CreateTeacherRequest,
     UserResponse,
     password_from_date,
+    student_temp_password,
 )
 from models import Class, Course, Enrollment, User
 
@@ -80,7 +81,7 @@ def create_student(session: Session, data: CreateStudentRequest) -> User:
         user_id=data.user_id,
         full_name=data.full_name,
         email=data.email,
-        hashed_password=hash_password(password_from_date(data.date_of_birth)),
+        hashed_password=hash_password(student_temp_password(data.user_id)),
         must_change_password=True,
         date_of_birth=data.date_of_birth,
         avt_link=data.avt_link,
@@ -101,6 +102,26 @@ def user_response(user: User) -> UserResponse:
         role_id=user.role_id,
         date_of_birth=user.date_of_birth,
         class_id=user.class_id if user.role_id == Role.STUDENT else None,
+    )
+
+
+def _temporary_password_for(user: User) -> str:
+    """Sinh mật khẩu tạm theo vai trò của tài khoản.
+
+    - STUDENT: MSSV (``user_id``), không cần ngày sinh.
+    - TEACHER, ADMIN: ngày sinh dạng ddmmyyyy.
+    - Vai trò khác: không cho reset (whitelist, tránh role lạ rơi vào nhánh sai).
+    """
+    if user.role_id == Role.STUDENT:
+        return student_temp_password(user.user_id)
+    if user.role_id in (Role.TEACHER, Role.ADMIN):
+        if user.date_of_birth is None:
+            raise DateOfBirthRequiredError(
+                "Tài khoản chưa có ngày sinh để tạo mật khẩu tạm thời"
+            )
+        return password_from_date(user.date_of_birth)
+    raise NotAllowedToResetError(
+        "Bạn không có quyền đặt lại mật khẩu cho tài khoản này"
     )
 
 
@@ -159,13 +180,7 @@ def reset_password(
                 "Bạn không có quyền đặt lại mật khẩu cho tài khoản này"
             )
 
-    # Tài khoản mục tiêu phải có ngày sinh để sinh mật khẩu tạm thời
-    if target.date_of_birth is None:
-        raise DateOfBirthRequiredError(
-            "Tài khoản chưa có ngày sinh để tạo mật khẩu tạm thời"
-        )
-
-    temporary_password = password_from_date(target.date_of_birth)
+    temporary_password = _temporary_password_for(target)
     target.hashed_password = hash_password(temporary_password)
     target.must_change_password = True
     target.token_version += 1
@@ -174,4 +189,3 @@ def reset_password(
     session.commit()
     session.refresh(target)
     return target.user_id, temporary_password
-

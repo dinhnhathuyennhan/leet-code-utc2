@@ -48,6 +48,11 @@ def password_from_date(value: date) -> str:
     return value.strftime("%d%m%Y")
 
 
+def student_temp_password(user_id: str) -> str:
+    """Mật khẩu tạm của sinh viên = MSSV (file danh sách lớp không có ngày sinh)."""
+    return user_id
+
+
 class CreateTeacherRequest(BaseModel):
     user_id: str
     full_name: str
@@ -87,10 +92,14 @@ class UserResponse(BaseModel):
     def serialize_date_of_birth(self, value: date) -> str:
         return value.strftime("%d/%m/%Y")
 
+class UserListResponse(BaseModel):
+    items: list[UserResponse]
+    total: int
+    page: int
+    page_size: int
 
 class UserResetPasswordResponse(BaseModel):
     """Response cho API đặt lại mật khẩu của một tài khoản."""
 
     user_id: str
     temporary_password: str
-

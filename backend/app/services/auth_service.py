@@ -60,7 +60,7 @@ def _build_login_response(user: User) -> tuple[LoginResponse, str]:
 
 
 def login(session: Session, data: LoginRequest) -> tuple[LoginResponse, str]:
-    existing = session.exec(select(User).where(User.email == data.email.strip().lower())).first()
+    existing = session.exec(select(User).where(User.email == data.email.strip())).first()
 
     # existing null (email không tồn tại sẽ không verify password
     # kẻ tấn công có thể dò ra được email nào tồn tại và không

@@ -1,4 +1,5 @@
 import sys
+import zipfile
 from io import BytesIO
 from pathlib import Path
 
@@ -31,9 +32,10 @@ def build_class_list_xlsx(sheets: dict[str, list[tuple] | None]) -> bytes:
     """Dựng file .xlsx theo đúng bố cục file "DS lớp học phần" thật.
 
     ``sheets``: tên sheet → danh sách sinh viên ``(mssv, họ đệm, tên, lớp)``.
-    Giá trị ``None`` thay cho danh sách nghĩa là sheet không theo mẫu
-    (không có hàng tiêu đề). Mỗi sheet gồm phần đầu 10 hàng, tiêu đề ở hàng
-    11 (ô "Họ và tên" gộp 2 cột), dữ liệu từ hàng 12, rồi chân trang.
+    Phần tử ``None`` trong danh sách là một dòng trống hoàn toàn (không có
+    STT). Giá trị ``None`` thay cho cả danh sách nghĩa là sheet không theo
+    mẫu (không có hàng tiêu đề). Mỗi sheet gồm phần đầu 10 hàng, tiêu đề ở
+    hàng 11 (ô "Họ và tên" gộp 2 cột), dữ liệu từ hàng 12, rồi chân trang.
     """
     workbook = Workbook()
     workbook.remove(workbook.active)
@@ -46,7 +48,12 @@ def build_class_list_xlsx(sheets: dict[str, list[tuple] | None]) -> bytes:
             worksheet.append(line)
         worksheet.append(CLASS_LIST_HEADER)
         worksheet.merge_cells("C11:D11")
-        for stt, student in enumerate(students, start=1):
+        stt = 0
+        for student in students:
+            if student is None:
+                worksheet.append([])
+                continue
+            stt += 1
             worksheet.append([stt, *student])
         worksheet.append([])
         worksheet.append([None, None, None, None, None, None, "TP Hồ Chí Minh, ngày 5 tháng 10 năm 2026"])
@@ -54,6 +61,28 @@ def build_class_list_xlsx(sheets: dict[str, list[tuple] | None]) -> bytes:
     buffer = BytesIO()
     workbook.save(buffer)
     return buffer.getvalue()
+
+
+@pytest.fixture()
+def broken_sheet_xlsx() -> bytes:
+    """File .xlsx mở được (zip và workbook hợp lệ) nhưng XML của sheet bị cắt cụt.
+
+    openpyxl ở chế độ ``read_only`` chỉ đọc XML của sheet khi duyệt hàng,
+    nên lỗi chỉ lộ ra lúc đọc ô chứ không phải lúc mở file.
+    """
+    workbook = Workbook()
+    workbook.active.append(["STT", "Mã sinh viên"])
+    valid = BytesIO()
+    workbook.save(valid)
+
+    broken = BytesIO()
+    with zipfile.ZipFile(BytesIO(valid.getvalue())) as source, zipfile.ZipFile(broken, "w") as target:
+        for name in source.namelist():
+            data = source.read(name)
+            if name == "xl/worksheets/sheet1.xml":
+                data = b"<worksheet><sheetData><row><c r="
+            target.writestr(name, data)
+    return broken.getvalue()
 
 
 @pytest.fixture()

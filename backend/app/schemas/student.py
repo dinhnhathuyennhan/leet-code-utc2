@@ -51,7 +51,7 @@ class StudentImportRow(BaseModel):
         if len(class_id) > MAX_ID_LENGTH:
             raise InvalidFormatError(f"Mã lớp không được dài quá {MAX_ID_LENGTH} ký tự")
         parts = class_id.split(".", 2)
-        if len(parts) != 3 or not all(parts) or not parts[1].isdigit():
+        if len(parts) != 3 or not all(parts) or not (parts[1].isascii() and parts[1].isdigit()):
             raise InvalidFormatError(
                 f"Mã lớp {class_id} không đúng dạng <hệ>.<khoá>.<ngành> (vd CQ.67.CNTT)"
             )

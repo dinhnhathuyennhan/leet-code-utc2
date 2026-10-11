@@ -97,6 +97,15 @@ def test_corrupt_file_returns_422_not_500(client):
     assert response.json()["error_code"] == "INVALID_EXCEL_FORMAT"
 
 
+def test_file_broken_inside_sheet_returns_422_not_500(client, broken_sheet_xlsx):
+    _login_as(Role.ADMIN)
+
+    response = _upload(client, broken_sheet_xlsx)
+
+    assert response.status_code == 422
+    assert response.json()["error_code"] == "INVALID_EXCEL_FORMAT"
+
+
 def test_wrong_extension_returns_422(client, one_student_file):
     _login_as(Role.ADMIN)
 

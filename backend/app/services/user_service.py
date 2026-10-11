@@ -130,8 +130,8 @@ def reset_password(
 ) -> tuple[str, str]:
     """Đặt lại mật khẩu cho tài khoản mục tiêu.
 
-    Mật khẩu tạm thời được sinh từ ngày sinh của tài khoản mục tiêu
-    theo định dạng ddmmyyyy (xem ``password_from_date``).
+    Mật khẩu tạm thời: sinh viên = MSSV; giáo viên/admin = ngày sinh
+    dạng ddmmyyyy (xem ``_temporary_password_for``).
 
     Quyền:
         - ADMIN: đặt lại mật khẩu bất kỳ tài khoản nào.
@@ -143,8 +143,8 @@ def reset_password(
 
     Raises:
         UserNotFoundError: không tìm thấy tài khoản mục tiêu.
-        NotAllowedToResetError: người gọi không đủ quyền.
-        DateOfBirthRequiredError: tài khoản mục tiêu chưa có ngày sinh hợp lệ.
+        NotAllowedToResetError: người gọi không đủ quyền, hoặc tài khoản mục tiêu có vai trò lạ.
+        DateOfBirthRequiredError: giáo viên/admin mục tiêu chưa có ngày sinh.
     """
     target = session.get(User, target_user_id)
     if target is None:

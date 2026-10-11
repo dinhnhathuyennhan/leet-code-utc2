@@ -9,15 +9,13 @@ Mẫu file (mỗi sheet là một lớp học phần):
       ``Mã sinh viên``, ``Họ và tên`` (gộp 2 ô: họ đệm + tên), ``Lớp``.
       Các hàng phía trên (tên trường, học kỳ...) và các cột khác
       (điểm danh, ghi chú) bị bỏ qua.
-    - Dữ liệu bắt đầu ngay dưới hàng tiêu đề và dừng ở dòng đầu tiên có
-      ô STT không phải số (phần chân trang "Người lập biểu"...).
+    - Dữ liệu bắt đầu ngay dưới hàng tiêu đề. Dòng sinh viên là dòng có ô
+      STT là số hoặc có MSSV; dòng trống thì bỏ qua; gặp dòng có chữ nhưng
+      không có STT lẫn MSSV (phần chân trang "Người lập biểu"...) thì dừng.
 
 Quy tắc:
     - Email tự sinh ``{MSSV}@st.utc2.edu.vn``, mật khẩu tạm = MSSV.
     - Lớp hành chính chưa có thì tự tạo từ mã lớp (vd ``CQ.67.CNTT``).
-    - MSSV đã có tài khoản → ``ss``.
-    - Email tự sinh ``{MSSV}@st.= MSSV.
-    - Lớp hành chính chưa có thì7.CNTT``).
     - MSSV đã có tài khoản → ``skipped``; dòng sai → ``errors``.
     - Commit theo từng sinh viên: lỗi DB ở một dòng không làm mất các
       sinh viên đã tạo trước đó (đặc tả E3).
@@ -115,10 +113,12 @@ def _extract_rows(
 
         for index in range(header_index + 1, len(sheet.rows)):
             row = sheet.rows[index]
-            if not _cell(row, columns["stt"]).isdigit():
-                break  # hết bảng, tới phần chân trang
-
             user_id = _cell(row, columns["user_id"])
+            if not _cell(row, columns["stt"]).isdigit() and not user_id:
+                if any(row):
+                    break  # hết bảng, tới phần chân trang
+                continue  # dòng trống giữa bảng: bỏ qua, đọc tiếp
+
             name_parts = [_cell(row, name_col)]
             if name_has_two_cells:
                 name_parts.append(_cell(row, name_col + 1))

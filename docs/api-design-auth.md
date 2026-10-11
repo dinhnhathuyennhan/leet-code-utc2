@@ -94,7 +94,7 @@
 - Mỗi sheet là danh sách một lớp học phần. Hệ thống đọc **mọi sheet**. Sheet không có hàng tiêu đề theo mẫu (ví dụ sheet ghi chú) thì bỏ qua.
 - Trong 20 hàng đầu của sheet phải có một hàng tiêu đề chứa đủ 4 cột: `STT`, `Mã sinh viên`, `Họ và tên`, `Lớp`. Không phân biệt hoa/thường, chấp nhận cả viết không dấu, `MSSV`, `Họ tên`. Các hàng phía trên (tên trường, học kỳ, thời khoá biểu...) và các cột khác (điểm danh, ghi chú) bị bỏ qua.
 - `Họ và tên` thường gộp 2 ô (họ đệm và tên). Hệ thống ghép 2 ô lại bằng một dấu cách.
-- Dữ liệu bắt đầu ngay dưới hàng tiêu đề và **dừng ở dòng đầu tiên có ô `STT` không phải số** (phần chân trang "TP Hồ Chí Minh, ngày...", "Người lập biểu"). Dòng có STT nhưng các ô khác đều trống thì bỏ qua.
+- Dữ liệu bắt đầu ngay dưới hàng tiêu đề. Dòng sinh viên là dòng có ô `STT` là số **hoặc** có `Mã sinh viên` (nên dòng bị xoá STT hoặc STT gõ sai vẫn được đọc). Dòng trống hoàn toàn thì bỏ qua và đọc tiếp. Gặp dòng có chữ nhưng không có STT lẫn MSSV (phần chân trang "TP Hồ Chí Minh, ngày...", "Người lập biểu") thì **dừng**. Dòng có STT nhưng các ô khác đều trống thì bỏ qua.
 - File không có email và ngày sinh. Hai thông tin này được sinh tự động, xem phần quy tắc.
 
 Ví dụ một sheet:

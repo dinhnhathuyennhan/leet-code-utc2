@@ -10,7 +10,7 @@ from io import BytesIO
 from pathlib import Path
 
 import pytest
-from openpyxl import Workbook
+from openpyxl import Workbook, load_workbook
 from sqlalchemy.exc import IntegrityError, OperationalError
 from sqlmodel import select
 
@@ -185,6 +185,52 @@ def test_import_skips_rows_that_only_have_stt(session, class_list_xlsx):
     assert response.errors == []
 
 
+def test_import_continues_after_blank_rows_inside_table(session, class_list_xlsx):
+    """Dòng trống giữa bảng không được làm mất các SV phía sau."""
+    contents = class_list_xlsx(
+        {
+            SHEET: [
+                ("6751071001", "Nguyễn Văn", "An", "CQ.67.CNTT"),
+                None,
+                None,
+                ("6751071002", "Trần Thị", "Bình", "CQ.67.CNTT"),
+            ]
+        }
+    )
+
+    response = import_students(session, contents, "ds.xlsx")
+
+    assert [row.user_id for row in response.created] == ["6751071001", "6751071002"]
+    assert response.errors == []
+    assert set(_users(session)) == {"6751071001", "6751071002"}
+
+
+def test_import_reads_row_with_missing_stt(session, class_list_xlsx):
+    """Ô STT bị xoá hoặc gõ sai nhưng vẫn có MSSV thì vẫn là dòng sinh viên."""
+    contents = class_list_xlsx(
+        {
+            SHEET: [
+                ("6751071001", "Nguyễn Văn", "An", "CQ.67.CNTT"),
+                ("6751071002", "Trần Thị", "Bình", "CQ.67.CNTT"),
+                ("6751071003", "Lê", "Cường", "CQ.67.CNTT"),
+            ]
+        }
+    )
+    workbook = load_workbook(BytesIO(contents))
+    workbook[SHEET].cell(row=_row(2), column=1).value = None  # xoá STT của SV thứ 2
+    workbook[SHEET].cell(row=_row(3), column=1).value = "3a"  # STT gõ sai
+    buffer = BytesIO()
+    workbook.save(buffer)
+
+    response = import_students(session, buffer.getvalue(), "ds.xlsx")
+
+    assert [row.user_id for row in response.created] == [
+        "6751071001",
+        "6751071002",
+        "6751071003",
+    ]
+
+
 def test_import_handles_single_full_name_column(session):
     """File chỉ có 1 cột "Họ tên" thì không được ghép nhầm ô "Lớp" vào tên."""
     workbook = Workbook()
@@ -258,7 +304,18 @@ def test_import_does_not_create_class_for_skipped_or_invalid_rows(session, class
     assert session.exec(select(Class)).all() == []
 
 
-@pytest.mark.parametrize("class_id", ["CNTT", "CQ.K67.CNTT", "CQ..CNTT", "CQ.67.", "C" * 51])
+@pytest.mark.parametrize(
+    "class_id",
+    [
+        "CNTT",
+        "CQ.K67.CNTT",
+        "CQ..CNTT",
+        "CQ.67.",
+        "C" * 51,
+        "CQ.\uff16\uff17.CNTT",  # "67" full-width: isdigit() là True nhưng int() lỗi
+        "CQ.\u00b2\u2076.CNTT",  # "²⁶" (số mũ): tương tự
+    ],
+)
 def test_import_rejects_invalid_class_id(session, class_list_xlsx, class_id):
     contents = class_list_xlsx({SHEET: [("6751071001", "Nguyễn Văn", "An", class_id)]})
 

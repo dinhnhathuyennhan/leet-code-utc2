@@ -9,11 +9,9 @@ module này rồi tự bốc tách dữ liệu theo mẫu file của mình.
 from datetime import date as _date
 from datetime import datetime as _datetime
 from io import BytesIO
-from zipfile import BadZipFile
 
 import xlrd
 from openpyxl import load_workbook
-from openpyxl.utils.exceptions import InvalidFileException
 from pydantic import BaseModel
 
 from app.core.exceptions import AppError
@@ -72,18 +70,17 @@ def read_workbook(contents: bytes, filename: str, max_bytes: int) -> ExcelWorkbo
             f"File vượt quá dung lượng {max_bytes // (1024 * 1024)} MB cho phép"
         )
 
-    sheets = [sheet for sheet in reader(contents) if sheet.rows]
+    try:
+        sheets = [sheet for sheet in reader(contents) if sheet.rows]
+    except Exception as err:  # file hỏng: lỗi có thể lộ ra lúc mở file hoặc lúc đọc từng ô
+        raise InvalidExcelFormatError("Không đọc được file Excel") from err
     if not sheets:
         raise EmptyExcelFileError("File không có dữ liệu")
     return ExcelWorkbook(sheets=sheets)
 
 
 def _read_xlsx(contents: bytes) -> list[ExcelSheet]:
-    try:
-        workbook = load_workbook(BytesIO(contents), read_only=True, data_only=True)
-    except (InvalidFileException, BadZipFile, KeyError, OSError) as err:
-        raise InvalidExcelFormatError("Không đọc được file Excel") from err
-
+    workbook = load_workbook(BytesIO(contents), read_only=True, data_only=True)
     try:
         return [
             ExcelSheet(
@@ -100,11 +97,7 @@ def _read_xlsx(contents: bytes) -> list[ExcelSheet]:
 
 
 def _read_xls(contents: bytes) -> list[ExcelSheet]:
-    try:
-        book = xlrd.open_workbook(file_contents=contents)
-    except Exception as err:  # xlrd raise nhiều loại lỗi khác nhau khi file hỏng
-        raise InvalidExcelFormatError("Không đọc được file Excel") from err
-
+    book = xlrd.open_workbook(file_contents=contents)
     sheets: list[ExcelSheet] = []
     for sheet in book.sheets():
         rows = (

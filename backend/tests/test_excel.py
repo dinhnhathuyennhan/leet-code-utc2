@@ -12,6 +12,7 @@ from io import BytesIO
 from pathlib import Path
 
 import pytest
+import xlrd
 from openpyxl import Workbook, load_workbook
 
 from app.core.excel import (
@@ -197,6 +198,26 @@ def test_rejects_corrupt_xls():
         read_workbook(b"garbage" * 100, "ds.xls", MAX_BYTES)
 
     assert exc_info.value.message == "Không đọc được file Excel"
+
+
+def test_rejects_xlsx_with_broken_sheet_data(broken_sheet_xlsx):
+    """Lỗi chỉ lộ ra lúc đọc từng hàng (không phải lúc mở file) vẫn phải ra 422."""
+    with pytest.raises(InvalidExcelFormatError) as exc_info:
+        read_workbook(broken_sheet_xlsx, "ds.xlsx", MAX_BYTES)
+
+    assert exc_info.value.message == "Không đọc được file Excel"
+
+
+def test_rejects_xls_with_unreadable_date_cell(monkeypatch):
+    """Ô ngày có giá trị ngoài phạm vi làm xlrd lỗi khi đổi sang datetime."""
+
+    def broken_date(*_args):
+        raise OverflowError("date value out of range")
+
+    monkeypatch.setattr(xlrd, "xldate_as_datetime", broken_date)
+
+    with pytest.raises(InvalidExcelFormatError):
+        read_workbook(XLS_FIXTURE.read_bytes(), "ds.xls", MAX_BYTES)
 
 
 def test_rejects_xlsx_renamed_to_xls():

@@ -1,7 +1,7 @@
 from sqlmodel import Session, select, func
 
 from app.core.date import age_calculation
-from app.core.exceptions import AppError, ConflictError, NotFoundError, InvalidFormatError
+from app.core.exceptions import AppError, ConflictError, NotFoundError, InvalidFormatError, ForbiddenError
 from app.core.password import hash_password
 from app.dependencies import Role
 from app.schemas.user import (
@@ -130,10 +130,14 @@ def list_users(
         )
         conditions.append(User.role_id == Role.STUDENT)
         conditions.append(User.user_id.in_(managed_student_ids))
+    elif current_user.role_id != Role.ADMIN:
+        # Whitelist: chỉ Admin và Teacher được xem, mọi role khác (kể cả role phát sinh sau này) bị từ chối
+        raise ForbiddenError("Bạn không có quyền xem danh sách người dùng")
     elif role_id is not None:
         conditions.append(User.role_id == role_id)
 
     if class_id is not None:
+        conditions.append(User.role_id == Role.STUDENT)
         conditions.append(User.class_id == class_id)
 
     total = session.exec(select(func.count()).select_from(User).where(*conditions)).one()
@@ -151,8 +155,6 @@ def list_users(
         page=page,
         page_size=page_size,
     )
-
-
 def reset_password(
     session: Session, current_user: User, target_user_id: str
 ) -> tuple[str, str]:

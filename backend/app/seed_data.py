@@ -63,30 +63,6 @@ STUDENTS = [
     ("SV10", "6651071002", "Mai Bảo Trân", date(2006, 4, 22), 66),
 ]
 
-# Giữ nguyên 3 tài khoản test có sẵn (không có ngày sinh, không có lớp)
-LEGACY_USERS = [
-    {
-        "user_id": "6451071003",
-        "full_name": "TEACHER NEW",
-        "email": "teacher.new@st.utc2.edu.vn",
-        "role_id": Role.TEACHER,
-        "must_change_password": True,
-    },
-    {
-        "user_id": "6451071004",
-        "full_name": "STUDENT NEW",
-        "email": "student.new@st.utc2.edu.vn",
-        "role_id": Role.STUDENT,
-        "must_change_password": True,
-    },
-    {
-        "user_id": "6451071005",
-        "full_name": "STUDENT TOKEN",
-        "email": "student.token@st.utc2.edu.vn",
-        "role_id": Role.STUDENT,
-    },
-]
-
 # alias -> user_id thật
 UID = {row[0]: row[1] for row in STAFF + STUDENTS}
 
@@ -241,7 +217,7 @@ def _user_rows() -> list[dict]:
         }
         for _, mssv, name, dob, course_number in STUDENTS
     ]
-    return rows + LEGACY_USERS
+    return rows
 
 
 def _seed_users(session: Session, password: str) -> None:

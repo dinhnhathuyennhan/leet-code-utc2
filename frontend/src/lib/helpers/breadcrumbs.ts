@@ -8,7 +8,7 @@ const SEGMENT_LABELS: Record<string, string> = {
   courses: "Lớp học phần",
   submissions: "Bài nộp",
   accounts: "Quản lý tài khoản",
-  history: "Lịch sử nộp bài",
+  history: "Lịch sử nộp bài", // segment "history" bên trong /student/history
 };
 
 /**

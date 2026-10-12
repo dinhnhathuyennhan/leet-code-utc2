@@ -4,11 +4,6 @@ import re
 import zipfile
 
 from app.services.course_view import build_course_response
-from app.services.enrollment_service import (
-    add_student_to_course,
-    delete_student_from_course,
-    get_course_enrollments,
-)
 from sqlmodel import Session, func, select
 from fastapi import UploadFile
 from app.schemas.classroom import ClassResponse, ClassStudentResponse

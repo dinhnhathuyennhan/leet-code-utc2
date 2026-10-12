@@ -9,7 +9,7 @@ from app.schemas.submission import (
     SubmissionTestcaseResponse,
     SubmissionUpdateRequest,
 )
-from models import Course, Enrollment, Lesson, Problem, Submission, Testcase, User
+from models import Course, Lesson, Problem, Submission, Testcase, User
 
 
 _VISIBLE_STATUSES = {"pending", "wrong_answer", "compile_error"}

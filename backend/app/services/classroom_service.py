@@ -61,6 +61,8 @@ def delete_class(session: Session, class_id: str) -> None:
         raise ConflictError(
             f"Lớp {class_id} đang có {student_count} sinh viên, không thể xóa"
         )
+    # Không dùng session.delete(): ORM sẽ tự gán class_id = NULL cho sinh viên
+    # của lớp rồi xoá lớp. Câu DELETE trực tiếp để khoá ngoại của DB chặn lại.
     try:
         session.exec(delete(Class).where(Class.class_id == class_id))
         session.commit()

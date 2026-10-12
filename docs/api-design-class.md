@@ -109,8 +109,8 @@ Ví dụ:
 | Status | Khi nào | Body |
 |---|---|---|
 | 404 | `class_id` không tồn tại (use-case "Xoá lớp hành chính" bước 5a) | `{"error_code": "NOT_FOUND", "message": "Không tìm thấy lớp CQ.67.CNTT"}` |
-| 409 | Lớp còn Sinh viên (bước 6a) | `{"error_code": "CONFLICT", "message": "Lớp CQ.67.CNTT đang có 97 sinh viên, không thể xoá"}` |
-| 409 | Có Sinh viên được thêm vào lớp ngay lúc đang xoá (E2) | `{"error_code": "CONFLICT", "message": "Lớp CQ.67.CNTT đang có sinh viên, không thể xoá"}` |
+| 409 | Lớp còn Sinh viên (bước 6a) | `{"error_code": "CONFLICT", "message": "Lớp CQ.67.CNTT đang có 97 sinh viên, không thể xóa"}` |
+| 409 | Có Sinh viên được thêm vào lớp ngay lúc đang xoá (E2) | `{"error_code": "CONFLICT", "message": "Lớp CQ.67.CNTT đang có sinh viên, không thể xóa"}` |
 | 403 | Người gọi không phải Admin (kể cả Teacher) | `{"error_code": "FORBIDDEN", "message": "Bạn không có quyền thực hiện hành động này"}` |
 
 **Quy tắc nghiệp vụ**

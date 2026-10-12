@@ -27,22 +27,22 @@ export function AppShell({ navItems, homeHref, user, onLogout, children }: AppSh
 
   return (
     <BreadcrumbProvider>
-      <div className="min-h-dvh bg-slate-50 dark:bg-slate-950">
-        <aside className="fixed inset-y-0 left-0 z-30 hidden w-72 border-r lg:block">
+      <div className="min-h-dvh bg-[#f3f4f9] dark:bg-slate-950">
+        <aside className="fixed inset-y-0 left-0 z-30 hidden w-[16.6667vw] border-r bg-card lg:block">
           <Sidebar navItems={navItems} user={user} onLogout={onLogout} />
         </aside>
 
         <Sheet open={menuOpen} onOpenChange={setMenuOpen}>
-          <SheetContent side="left" className="w-72 p-0 [&>button]:hidden">
+          <SheetContent side="left" className="w-[min(82vw,280px)] p-0 [&>button]:hidden">
             <SheetTitle className="sr-only">Menu điều hướng</SheetTitle>
             <SheetDescription className="sr-only">Chọn mục cần truy cập</SheetDescription>
             <Sidebar navItems={navItems} user={user} onLogout={onLogout} onNavigate={() => setMenuOpen(false)} />
           </SheetContent>
         </Sheet>
 
-        <div className="lg:pl-72">
+        <div className="lg:pl-[16.6667vw]">
           <Topbar homeHref={homeHref} onMenuClick={() => setMenuOpen(true)} onLogout={onLogout} />
-          <main className="mx-auto w-full max-w-[120rem] p-4 sm:p-6 lg:p-8">{children}</main>
+          <main className="w-full p-4 sm:p-6 lg:p-6">{children}</main>
         </div>
 
         <BackToTop />

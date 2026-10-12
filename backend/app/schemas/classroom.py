@@ -13,7 +13,7 @@ from typing import NamedTuple
 from pydantic import BaseModel, field_validator, model_validator
 
 from app.core.exceptions import InvalidFormatError
-from app.core.Validator import required_text
+from app.core.Validator import AppEmailStr, required_text
 
 
 CLASS_ID_MAX_LEN = 50
@@ -135,4 +135,11 @@ class ClassResponse(BaseModel):
     type: str
     course_number: int
     department: str
-    student_count: int
+    student_count: int = 0
+
+
+class ClassStudentResponse(BaseModel):
+    user_id: str
+    full_name: str
+    email: AppEmailStr
+    class_id: str | None

@@ -57,6 +57,7 @@ export interface CourseSummary {
   semester: number;
   academic_year: string;
   group: number;
+  sessions?: CourseSession[];
 }
 
 export interface CourseListParams {
@@ -262,4 +263,3 @@ export interface ProblemDetailData {
   starter_code: string;
   testcases: Array<{ id: number; input: string; expected_output: string; is_sample: boolean }>;
 }
-

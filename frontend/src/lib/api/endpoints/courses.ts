@@ -18,6 +18,21 @@ function statusFromDates(start: string, end: string): CourseDetail["status"] {
   return "ongoing";
 }
 
+function isDueThisWeek(deadline: string, now = new Date()): boolean {
+  const date = new Date(deadline);
+  if (Number.isNaN(date.getTime())) return false;
+
+  const startOfWeek = new Date(now);
+  const day = startOfWeek.getDay();
+  const daysSinceMonday = (day + 6) % 7;
+  startOfWeek.setDate(startOfWeek.getDate() - daysSinceMonday);
+  startOfWeek.setHours(0, 0, 0, 0);
+
+  const endOfWeek = new Date(startOfWeek);
+  endOfWeek.setDate(endOfWeek.getDate() + 7);
+  return date >= startOfWeek && date < endOfWeek;
+}
+
 function toSummary(record: CourseApiRecord) {
   const academicYear = record.term.replace(/^HK\d-/, "");
   const semester = Number(record.term.match(/^HK(\d)/)?.[1] ?? 1);
@@ -31,6 +46,7 @@ function toSummary(record: CourseApiRecord) {
     semester,
     academic_year: academicYear,
     group: 1,
+    sessions: record.sessions ?? [],
   };
 }
 
@@ -49,7 +65,25 @@ export async function getCourses(params: CourseListParams = {}): Promise<CourseL
     }
     if (params.semester) items = items.filter((course) => course.semester === params.semester);
     if (params.academic_year) items = items.filter((course) => course.academic_year === params.academic_year);
-    return { items, stats: { course_count: items.length, completed_problems: 0, total_problems: 0, due_this_week: 0 } };
+    const dueThisWeek = items.reduce(
+      (total, course) =>
+        total + (course.sessions ?? []).filter((session) => isDueThisWeek(session.deadline)).length,
+      0,
+    );
+    const totalProblems = items.reduce(
+      (total, course) =>
+        total + (course.sessions ?? []).reduce((sessionTotal, session) => sessionTotal + session.problems.length, 0),
+      0,
+    );
+    return {
+      items,
+      stats: {
+        course_count: items.length,
+        completed_problems: 0,
+        total_problems: totalProblems,
+        due_this_week: dueThisWeek,
+      },
+    };
   } catch (error) {
     throw wrapAxiosError(error);
   }

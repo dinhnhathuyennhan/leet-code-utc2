@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
 import {
@@ -13,35 +13,38 @@ import {
 } from "lucide-react";
 
 import { useBreadcrumbLabel } from "@/components/shared/breadcrumb-context";
+import { ErrorState } from "@/components/shared/page-state";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
+import { getSubmissionDetail, updateSubmission } from "@/lib/api/endpoints/dashboard";
+import type { SubmissionDetail } from "@/lib/types/dashboard";
 
 export default function SubmissionDetailPage() {
   const { id } = useParams<{ id: string }>();
   useBreadcrumbLabel(`Chấm bài #${id}`);
 
-  const [score, setScore] = useState("8.0");
-  const [feedback, setFeedback] = useState("Thuật toán tối ưu, cần lưu ý điều kiện biên mảng rỗng.");
+  const [data, setData] = useState<SubmissionDetail | null>(null);
+  const [error, setError] = useState<unknown>(null);
+  const [feedback, setFeedback] = useState("");
   const [saved, setSaved] = useState(false);
 
-  const mockCode = `import java.util.Scanner;
+  useEffect(() => {
+    getSubmissionDetail(id)
+      .then((submission) => {
+        setData(submission);
+        setFeedback(submission.feedback ?? "");
+      })
+      .catch(setError);
+  }, [id]);
 
-public class Solution {
-    public static void main(String[] args) {
-        Scanner sc = new Scanner(System.in);
-        if (!sc.hasNextInt()) return;
-        int n = sc.nextInt();
-        int sum = 0;
-        for (int i = 0; i < n; i++) {
-            int val = sc.nextInt();
-            if (val > 0 && val % 2 == 0) {
-                sum += val;
-            }
-        }
-        System.out.println(sum);
-    }
-}`;
+  if (error) return <ErrorState error={error} />;
+  if (!data) return <div className="rounded-xl border bg-card p-6 text-sm text-muted-foreground">Đang tải bài nộp...</div>;
+
+  const score = data.total_testcases
+    ? ((data.passed_count / data.total_testcases) * 10).toFixed(1)
+    : "0.0";
+  const statusLabel = data.status === "compile_error" ? "Lỗi biên dịch" : data.status === "accepted" ? "Đã chấp nhận" : "Sai kết quả";
 
   return (
     <div className="space-y-6">
@@ -58,7 +61,7 @@ public class Solution {
               Chấm bài & Xử lý khiếu nại #{id}
             </h1>
             <p className="text-xs text-muted-foreground">
-              Bài tập: ARR_01 - Tổng các phần tử trong mảng 1 chiều · Lớp JAVA01
+              Bài tập: {data.problem_code ?? data.problem_title} - {data.problem_title} · Lớp {data.course_code}
             </p>
           </div>
         </div>
@@ -83,8 +86,8 @@ public class Solution {
                 A
               </span>
               <div>
-                <p className="font-semibold text-slate-900 dark:text-slate-100">Nguyễn Văn An</p>
-                <p className="text-xs text-muted-foreground">MSSV: 2151129812 · Lớp JAVA01</p>
+                <p className="font-semibold text-slate-900 dark:text-slate-100">{data.student_name}</p>
+                <p className="text-xs text-muted-foreground">MSSV: {data.student_code} · Lớp {data.class_id ?? "Chưa phân lớp"}</p>
               </div>
             </div>
 
@@ -93,7 +96,7 @@ public class Solution {
                 <Clock className="size-3.5" /> Nộp trễ 45 phút
               </span>
               <span className="rounded-md bg-red-100 px-2.5 py-1 font-semibold text-red-700 dark:bg-red-500/20 dark:text-red-300">
-                WA: 8/10 Test Passed
+                {statusLabel}: {data.passed_count}/{data.total_testcases} Test Passed
               </span>
             </div>
           </div>
@@ -103,37 +106,30 @@ public class Solution {
             <div className="flex items-center justify-between border-b border-slate-800 bg-slate-900/80 px-4 py-2.5">
               <div className="flex items-center gap-2">
                 <Code2 className="size-4 text-sky-400" />
-                <span className="font-mono text-xs text-slate-300">Solution.java (JDK 17)</span>
+                <span className="font-mono text-xs text-slate-300">Bài nộp ({data.language})</span>
               </div>
-              <span className="text-xs text-slate-400">Thời gian chạy: 0.12s · Bộ nhớ: 32MB</span>
+              <span className="text-xs text-slate-400">{new Date(data.submitted_datetime).toLocaleString("vi-VN")}</span>
             </div>
             <pre className="overflow-x-auto p-4 font-mono text-xs leading-relaxed text-slate-200">
-              <code>{mockCode}</code>
+              <code>{data.submitted_code}</code>
             </pre>
           </div>
 
           {/* Test cases execution status */}
           <div className="rounded-xl border bg-card p-5 shadow-xs">
             <h3 className="mb-3 text-sm font-bold text-slate-900 dark:text-slate-100">
-              Kết quả chi tiết các Test Cases (8/10 Đúng)
+              Kết quả chi tiết các Test Cases ({data.passed_count}/{data.total_testcases} Đúng)
             </h3>
             <div className="grid gap-2 sm:grid-cols-2">
-              {[1, 2, 3, 4, 5, 6, 7, 8].map((num) => (
-                <div key={num} className="flex items-center justify-between rounded-lg border bg-muted/30 px-3 py-2 text-xs">
-                  <span className="font-medium">Test #{num} (Bình thường)</span>
-                  <span className="flex items-center gap-1 font-semibold text-emerald-600 dark:text-emerald-400">
-                    <CheckCircle2 className="size-3.5" /> 100/100 ms
+              {data.testcases.map((testcase, index) => {
+                const passed = index < data.passed_count;
+                return <div key={testcase.id} className={`flex items-center justify-between rounded-lg border px-3 py-2 text-xs ${passed ? "bg-muted/30" : "border-red-200 bg-red-50/50 dark:bg-red-500/10"}`}>
+                  <span className="font-medium">Test #{index + 1}</span>
+                  <span className={`flex items-center gap-1 font-semibold ${passed ? "text-emerald-600 dark:text-emerald-400" : "text-red-600 dark:text-red-400"}`}>
+                    {passed ? <><CheckCircle2 className="size-3.5" /> Đúng</> : <><XCircle className="size-3.5" /> Sai kết quả</>}
                   </span>
-                </div>
-              ))}
-              {[9, 10].map((num) => (
-                <div key={num} className="flex items-center justify-between rounded-lg border border-red-200 bg-red-50/50 px-3 py-2 text-xs dark:bg-red-500/10">
-                  <span className="font-medium text-red-900 dark:text-red-200">Test #{num} (Mảng số âm)</span>
-                  <span className="flex items-center gap-1 font-semibold text-red-600 dark:text-red-400">
-                    <XCircle className="size-3.5" /> Sai kết quả (WA)
-                  </span>
-                </div>
-              ))}
+                </div>;
+              })}
             </div>
           </div>
         </div>
@@ -155,7 +151,7 @@ public class Solution {
                 max="10"
                 min="0"
                 value={score}
-                onChange={(e) => setScore(e.target.value)}
+                readOnly
                 className="mt-1 h-11 text-lg font-bold"
               />
             </div>
@@ -166,9 +162,7 @@ public class Solution {
               </label>
               <div className="mt-1 rounded-lg border bg-amber-50/70 p-3 text-xs text-amber-900 dark:bg-amber-500/10 dark:text-amber-200">
                 <p className="font-semibold">Lý do nộp trễ:</p>
-                <p className="mt-0.5">
-                  &quot;Em bị sự cố mất điện cục bộ tại phòng trọ lúc 23h30 nên xin nộp bù sau khi có điện trở lại. Kính mong thầy hỗ trợ chấm bài giúp em ạ!&quot;
-                </p>
+                <p className="mt-0.5">{data.feedback || "Sinh viên chưa gửi lý do hoặc phúc khảo."}</p>
               </div>
             </div>
 
@@ -179,14 +173,19 @@ public class Solution {
               <Textarea
                 rows={4}
                 value={feedback}
-                onChange={(e) => setFeedback(e.target.value)}
+                  onChange={(e) => setFeedback(e.target.value)}
                 className="mt-1 text-sm"
                 placeholder="Nhập nhận xét gửi cho sinh viên..."
               />
             </div>
 
             <Button
-              onClick={() => setSaved(true)}
+              onClick={() => {
+                void updateSubmission(id, { feedback }).then((submission) => {
+                  setData(submission);
+                  setSaved(true);
+                }).catch(setError);
+              }}
               className="w-full h-11 bg-[#2f226b] font-semibold text-white shadow-sm hover:bg-[#251b56]"
             >
               <Save className="size-4 mr-2" /> {saved ? "Đã cập nhật điểm" : "Xác nhận điểm & Chấp nhận"}

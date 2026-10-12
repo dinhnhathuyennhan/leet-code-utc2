@@ -1,6 +1,8 @@
 import { ApiError } from "@/lib/api/error";
 import { getCourses } from "@/lib/api/endpoints/courses";
-import type { PendingFilter, PendingSubmissionParams, PendingSubmissionsResponse, PlagiarismAlert, TeacherOverview } from "@/lib/types/dashboard";
+import axiosInstance from "@/lib/axios";
+import { wrapAxiosError } from "@/lib/api/client";
+import type { PendingFilter, PendingSubmissionParams, PendingSubmissionsResponse, PlagiarismAlert, SubmissionDetail, TeacherOverview } from "@/lib/types/dashboard";
 
 export async function getTeacherOverview(): Promise<TeacherOverview> {
   const courses = await getCourses();
@@ -12,9 +14,33 @@ export async function getTeacherOverview(): Promise<TeacherOverview> {
   };
 }
 
-export async function getPendingSubmissions(_params: PendingSubmissionParams): Promise<PendingSubmissionsResponse> {
-  void _params;
-  throw new ApiError({ status: 501, detail: "API bài nộp chưa được backend cung cấp." });
+export async function getPendingSubmissions(params: PendingSubmissionParams): Promise<PendingSubmissionsResponse> {
+  try {
+    const response = await axiosInstance.get<PendingSubmissionsResponse>("/submissions/pending", {
+      params: { filter: params.filter, search: params.search, limit: params.limit },
+    });
+    return response.data;
+  } catch (error) {
+    throw wrapAxiosError(error);
+  }
+}
+
+export async function getSubmissionDetail(id: string | number): Promise<SubmissionDetail> {
+  try {
+    const response = await axiosInstance.get<SubmissionDetail>(`/submissions/${id}`);
+    return response.data;
+  } catch (error) {
+    throw wrapAxiosError(error);
+  }
+}
+
+export async function updateSubmission(id: string | number, data: { feedback?: string | null; status?: string }): Promise<SubmissionDetail> {
+  try {
+    const response = await axiosInstance.patch<SubmissionDetail>(`/submissions/${id}`, data);
+    return response.data;
+  } catch (error) {
+    throw wrapAxiosError(error);
+  }
 }
 
 export async function getPlagiarismAlerts(): Promise<PlagiarismAlert[]> {

@@ -17,17 +17,18 @@ from app.dependencies import Role
 from app.main import app
 from app.schemas.course import CreateCourseRequest, UpdateCourseRequest
 from app.services.course_service import (
-    add_student_to_course,
     create_course,
-    delete_student_from_course,
     get_course,
-    get_course_enrollments,
     get_courses,
     get_course_terms,
     update_course,
 )
 from models import Course, Enrollment, User
-
+from app.services.enrollment_service import (
+    add_student_to_course,
+    delete_student_from_course,
+    get_course_enrollments,
+)
 """
 Test các luồng nghiệp vụ chính của course_service.
 Sử dụng SQLite in-memory thao tác nhanh, không cần Postgres.

@@ -17,20 +17,20 @@ export function CourseFilters({ filters }: { filters: CourseFilterState }) {
 
   return (
     <div className="flex flex-wrap items-center justify-between gap-3">
-      <div className="relative w-full sm:max-w-md sm:flex-1">
+      <div className="relative w-full sm:max-w-xs sm:flex-1">
         <Search aria-hidden className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
         <Input
           value={search}
           onChange={(event) => setSearch(event.target.value)}
           placeholder="Tìm kiếm lớp học phần..."
           aria-label="Tìm kiếm lớp học phần"
-          className="h-11 bg-card pl-10"
+          className="h-9 border-0 bg-card pl-10 shadow-none"
         />
       </div>
 
       <div className="flex flex-wrap items-center gap-3">
         <Select value={String(semester)} onValueChange={(value) => value && setSemester(Number(value))}>
-          <SelectTrigger aria-label="Học kỳ" className="h-11 w-32 bg-card">
+          <SelectTrigger aria-label="Học kỳ" className="h-9 w-24 border-0 bg-card shadow-none">
             <SelectValue />
           </SelectTrigger>
           <SelectContent>
@@ -41,7 +41,7 @@ export function CourseFilters({ filters }: { filters: CourseFilterState }) {
         </Select>
 
         <Select value={year} onValueChange={(value) => value && setYear(value)}>
-          <SelectTrigger aria-label="Năm học" className="h-11 w-48 bg-card">
+          <SelectTrigger aria-label="Năm học" className="h-9 w-40 border-0 bg-card shadow-none">
             <SelectValue />
           </SelectTrigger>
           <SelectContent>

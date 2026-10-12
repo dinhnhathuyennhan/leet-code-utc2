@@ -1,10 +1,20 @@
-from datetime import UTC, datetime
+# ruff: noqa: F401
+# Re-export TẠM để các import cũ `from app.schemas.course import ...` vẫn chạy.
+# Xoá dòng noqa này và khối re-export ở Bước 6, sau khi đã đổi import ở routers/ và services/.
+from datetime import date, datetime
+from app.core.datetime_utils import as_utc
 
 from pydantic import BaseModel, Field, field_validator, model_validator
 
 from app.core.exceptions import EmptyFieldError, InvalidFormatError
-from app.core.Validator import AppEmailStr
-
+from app.schemas.class_ import ClassResponse, ClassStudentResponse
+from app.schemas.enrollment import (
+    AddClassToCourseRequest,
+    AddClassToCourseResponse,
+    AddStudentToCourseRequest,
+    AddStudentToCourseResponse,
+    GetStudentListResponse,
+)
 
 # ----- hằng số giới hạn độ dài (khớp với column max_length trong models.py) -----
 COURSE_ID_MAX_LEN = 50
@@ -29,42 +39,212 @@ def _required_datetime(value: datetime | None, field_name: str) -> datetime:
     """
     if value is None:
         raise EmptyFieldError(f"{field_name} không được để trống")
-    if value.tzinfo is None:
-        return value.replace(tzinfo=UTC)
-    return value.astimezone(UTC)
+    return as_utc(value)
 
 
 def _normalize_optional_datetime(value: datetime | None) -> datetime | None:
     """Đưa optional datetime về cùng timezone-aware UTC để so sánh được với
     giá trị đang lưu trong DB (Postgres trả về tz-aware)."""
-    if value is None:
-        return None
-    if value.tzinfo is None:
-        return value.replace(tzinfo=UTC)
-    return value.astimezone(UTC)
+    return None if value is None else as_utc(value)
 
 
-class AddStudentToCourseResponse(BaseModel):
-    enrollment_id: int
-    course_id: str
-    student_id: str
+# class AddStudentToCourseResponse(BaseModel):
+#     enrollment_id: int
+#     course_id: str
+#     student_id: str
 
 
-class AddStudentToCourseRequest(BaseModel):
-    student_id: str
+# class AddStudentToCourseRequest(BaseModel):
+#     student_id: str
 
-    @field_validator("student_id")
-    @classmethod
-    def validate_user_id(cls, v: str | None) -> str:
-        if v is None:
-            raise EmptyFieldError("user_id is required")
-        return v
+#     @field_validator("student_id")
+#     @classmethod
+#     def validate_user_id(cls, v: str | None) -> str:
+#         if v is None:
+#             raise EmptyFieldError("user_id is required")
+#         return v
 
-class GetStudentListResponse(BaseModel):
-    enrollment_id: int
+
+# # SỬA: Contract cho thao tác thêm toàn bộ sinh viên thuộc một lớp hành chính.
+# class AddClassToCourseRequest(BaseModel):
+#     class_id: str = Field(..., min_length=1, max_length=50)
+
+
+# class AddClassToCourseResponse(BaseModel):
+#     course_id: str
+#     class_id: str
+#     added_count: int
+#     skipped_count: int
+#     added_student_ids: list[str]
+
+
+# # SỬA: Contract danh sách lớp và sinh viên để dropdown chọn lớp dùng API thật.
+# class ClassResponse(BaseModel):
+#     class_id: str
+#     type: str
+#     course_number: int
+#     department: str
+
+
+# class ClassStudentResponse(BaseModel):
+#     user_id: str
+#     full_name: str
+#     email: AppEmailStr
+#     class_id: str | None
+
+# class GetStudentListResponse(BaseModel):
+#     enrollment_id: int
+#     student_id: str
+#     full_name: str
+#     email: AppEmailStr
+#     class_id: str | None = None
+#     # SỬA: Trả trực tiếp số bài AC để tab Sinh viên không phải đoán từ dữ liệu thiếu.
+#     submitted_lessons: int = 0
+#     total_lessons: int = 0
+#     progress_percent: float = 0
+
+
+class CourseProblemResponse(BaseModel):
+    id: int
+    title: str
+    report: str | None
+    level: str
+    start_datetime: datetime
+    end_datetime: datetime
+    total_number_testcase: int
+
+
+class CourseLessonResponse(BaseModel):
+    id: int
+    order: int
+    title: str
+    status: str
+    opens_at: datetime | None
+    deadline: datetime
+    problems: list[CourseProblemResponse]
+    participant_count: int | None
+
+
+# SỬA: Giữ riêng trạng thái đã nộp để phân biệt điểm 0 với bài chưa làm.
+# Không thêm cột vào models.py; đây chỉ là contract tổng hợp cho màn hình bảng điểm.
+class GradeScoreResponse(BaseModel):
+    value: float | None
+    submitted: bool = False
+
+
+class CourseGradeRowResponse(BaseModel):
     student_id: str
     full_name: str
-    email: AppEmailStr
+    class_id: str | None
+    overall_score: float | None
+    session_scores: dict[str, list[GradeScoreResponse]]
+
+
+# SỬA: Bổ sung contract cho dữ liệu buổi học, dùng chung cho API tạo/sửa và frontend.
+class LessonCreateRequest(BaseModel):
+    lesson_name: str = Field(..., min_length=1, max_length=255)
+    start_date: date
+    end_date: date
+    problem_ids: list[int] = Field(default_factory=list)
+
+    @field_validator("lesson_name")
+    @classmethod
+    def validate_lesson_name(cls, value: str) -> str:
+        value = value.strip()
+        if not value:
+            raise EmptyFieldError("lesson_name không được để trống")
+        return value
+
+    @model_validator(mode="after")
+    def validate_lesson_dates(self) -> "LessonCreateRequest":
+        if self.start_date > self.end_date:
+            raise InvalidFormatError("start_date phải trước hoặc bằng end_date")
+        return self
+
+
+# SỬA: Cho phép cập nhật từng phần thông tin buổi học và danh sách bài tập.
+class LessonUpdateRequest(BaseModel):
+    lesson_name: str | None = Field(default=None, min_length=1, max_length=255)
+    start_date: date | None = None
+    end_date: date | None = None
+    problem_ids: list[int] | None = None
+
+    @field_validator("lesson_name")
+    @classmethod
+    def validate_optional_lesson_name(cls, value: str | None) -> str | None:
+        if value is None:
+            return None
+        value = value.strip()
+        if not value:
+            raise EmptyFieldError("lesson_name không được để trống")
+        return value
+
+    @model_validator(mode="after")
+    def validate_optional_dates(self) -> "LessonUpdateRequest":
+        if self.start_date is not None and self.end_date is not None and self.start_date > self.end_date:
+            raise InvalidFormatError("start_date phải trước hoặc bằng end_date")
+        return self
+
+
+# SỬA: Response chi tiết buổi học phục vụ trang quản trị và thống kê bài nộp.
+class LessonDetailResponse(BaseModel):
+    id: int
+    order: int
+    title: str
+    course_code: str
+    course_name: str
+    start_date: date
+    end_date: date
+    deadline_notice: str
+    submitted_students: int
+    total_students: int
+    stats: dict[str, float | int | str]
+    alert: dict[str, int | str]
+    exercises: list[dict[str, object]]
+
+
+# SỬA: Contract chi tiết bài tập để nút "Xem chi tiết" mở được dữ liệu thật.
+class ProblemDetailResponse(BaseModel):
+    id: int
+    lesson_id: int
+    course_id: str
+    code: str | None
+    title: str
+    description: str
+    constraints: str
+    level: str
+    hint: str | None
+    complexity: str | None
+    time_limit_seconds: int
+    total_number_testcase: int
+    start_datetime: datetime
+    end_datetime: datetime
+    starter_code: str
+    testcases: list[dict[str, int | str | bool]]
+
+
+# SỬA: Contract cập nhật nội dung bài tập theo đúng các thuộc tính đang có trong models.py.
+# Không thêm trường điểm tối đa vì database hiện không có cột tương ứng.
+class ProblemTestcaseUpdate(BaseModel):
+    input: str
+    expected_output: str
+    is_sample: bool = False
+    input_type: str = "stdin"
+    expected_output_type: str = "stdout"
+
+
+class ProblemUpdateRequest(BaseModel):
+    title: str | None = Field(default=None, min_length=1, max_length=255)
+    description: str | None = None
+    constraints: str | None = None
+    level: str | None = None
+    hint: str | None = None
+    complexity: str | None = None
+    time_limit_seconds: int | None = Field(default=None, ge=1)
+    start_datetime: datetime | None = None
+    end_datetime: datetime | None = None
+    starter_code: str | None = None
+    testcases: list[ProblemTestcaseUpdate] | None = None
 
 class CourseResponse(BaseModel):
     """Response chuẩn cho mọi endpoint thuộc module Course.
@@ -80,6 +260,8 @@ class CourseResponse(BaseModel):
     avt_link: str | None
     created_by: str
     total_number_student: int
+    sessions: list[CourseLessonResponse] = Field(default_factory=list)
+    grades: list[CourseGradeRowResponse] = Field(default_factory=list)
 
 
 class CreateCourseRequest(BaseModel):

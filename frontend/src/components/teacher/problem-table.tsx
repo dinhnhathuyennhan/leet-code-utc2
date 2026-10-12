@@ -37,12 +37,12 @@ export function ProblemTable({ problems, studentCount }: { problems: ProblemRow[
                   </span>
                   <div className="min-w-0">
                     <p className="font-semibold">{problem.title}</p>
-                    <p className="text-sm text-muted-foreground">{problem.code} · {problem.topic}</p>
+                    <p className="text-sm text-muted-foreground">{problem.report ?? "Chưa có mã bài"} · {problem.level}</p>
                   </div>
                 </div>
               </TableCell>
               <TableCell className="text-center text-sm text-muted-foreground">
-                {problem.time_limit_s.toFixed(1)}s · {problem.memory_limit_mb}MB
+                {problem.time_limit_seconds}s · {problem.total_number_testcase} test case
               </TableCell>
               <TableCell className="text-center font-semibold">{problem.submitted_count}/{studentCount}</TableCell>
               <TableCell className="text-center text-sm font-semibold text-emerald-700 dark:text-emerald-400">
@@ -53,7 +53,7 @@ export function ProblemTable({ problems, studentCount }: { problems: ProblemRow[
                   <Button asChild size="sm" variant="secondary" className="bg-indigo-50 font-semibold hover:bg-indigo-100 dark:bg-slate-800">
                     <Link href={`/teacher/submissions?problem=${problem.id}`}>Xem bài nộp</Link>
                   </Button>
-                  <ActionMenu label={`Thao tác bài ${problem.code}`} items={PROBLEM_MENU} className="size-8 text-slate-600" />
+                  <ActionMenu label={`Thao tác bài ${problem.report ?? problem.title}`} items={PROBLEM_MENU} className="size-8 text-slate-600" />
                 </div>
               </TableCell>
             </TableRow>

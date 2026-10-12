@@ -111,7 +111,9 @@ export function RouteGuard({
   },[auth, pathname, searchParams, router]);
   if (auth.status === "loading") {
     return (
-      <div className="h-[100dvh] w-full bg-slate-900" aria-busy="true" />
+      <div className="flex h-[100dvh] w-full items-center justify-center bg-slate-900" aria-busy="true">
+        <Loader2 className="animate-spin text-white size-8" />
+      </div>
     );
   }
 

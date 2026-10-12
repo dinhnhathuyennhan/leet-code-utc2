@@ -1,5 +1,6 @@
 import {
   FileCheck2,
+  BookOpenCheck,
   GraduationCap,
   History,
   LayoutDashboard,
@@ -21,6 +22,7 @@ export const TEACHER_NAV: NavItem[] = [
   { label: "Tổng quan", href: "/teacher", icon: LayoutDashboard, exact: true },
   { label: "Lớp học phần", href: "/teacher/courses", icon: GraduationCap },
   { label: "Bài nộp", href: "/teacher/submissions", icon: FileCheck2 },
+  { label: "Ngân hàng đề", href: "/teacher/problem-bank", icon: BookOpenCheck },
   { label: "Quản lý tài khoản", href: "/teacher/accounts", icon: ShieldCheck },
 ];
 

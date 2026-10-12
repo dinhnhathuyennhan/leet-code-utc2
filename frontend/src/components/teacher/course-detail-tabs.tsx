@@ -18,24 +18,23 @@ function ComingSoon({ title }: { title: string }) {
 interface CourseDetailTabsProps {
   value: CourseTab;
   onValueChange: (value: CourseTab) => void;
-  updatedAtLabel: string;
   sessions: ReactNode;
+  students: ReactNode;
 }
 
-export function CourseDetailTabs({ value, onValueChange, updatedAtLabel, sessions }: CourseDetailTabsProps) {
+export function CourseDetailTabs({ value, onValueChange, sessions, students }: CourseDetailTabsProps) {
   return (
     <Tabs value={value} onValueChange={(next) => onValueChange(next as CourseTab)} className="rounded-2xl bg-card p-2 shadow-sm sm:p-4">
-      <div className="flex flex-wrap items-center justify-between gap-2 border-b">
+      <div className="border-b">
         <TabsList className="h-auto gap-1 rounded-none bg-transparent p-0">
           <TabsTrigger value="sessions" className={TRIGGER}>Buổi học</TabsTrigger>
           <TabsTrigger value="students" className={TRIGGER}>Sinh viên</TabsTrigger>
           <TabsTrigger value="grades" className={TRIGGER}>Bảng điểm</TabsTrigger>
         </TabsList>
-        <p className="pr-2 text-sm text-muted-foreground">Cập nhật lúc: {updatedAtLabel}</p>
       </div>
 
       <TabsContent value="sessions" className="mt-5">{sessions}</TabsContent>
-      <TabsContent value="students" className="mt-5"><ComingSoon title="Danh sách sinh viên" /></TabsContent>
+      <TabsContent value="students" className="mt-5">{students}</TabsContent>
       <TabsContent value="grades" className="mt-5"><ComingSoon title="Bảng điểm" /></TabsContent>
     </Tabs>
   );

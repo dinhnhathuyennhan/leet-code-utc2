@@ -1,5 +1,5 @@
 import type { ReactNode } from "react";
-import { CalendarCheck, MapPin, Pencil, Plus, UserCheck, Users } from "lucide-react";
+import { CalendarCheck, Pencil, Plus, UserCheck, Users } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { formatDate } from "@/lib/helpers/format";
@@ -30,13 +30,13 @@ export function CourseHeaderCard({ course, onCreateSession, onEditCourse }: Cour
           {course.name} — {course.code}
         </h1>
         <span className="inline-block rounded-md bg-indigo-700 px-3 py-1 text-sm font-medium text-white">
-          Học kỳ {course.semester} ({course.academic_year.replace("-", " - ")})
+          {course.term}
         </span>
         <div className="grid gap-x-14 gap-y-2.5 text-[15px] sm:grid-cols-2">
-          <MetaItem icon={<MapPin className="size-4" />}>Phòng {course.room}</MetaItem>
-          <MetaItem icon={<Users className="size-4" />}>Nhóm {String(course.group).padStart(2, "0")}</MetaItem>
-          <MetaItem icon={<CalendarCheck className="size-4" />}>Ngày kết thúc: <strong>{formatDate(course.end_date)}</strong></MetaItem>
-          <MetaItem icon={<UserCheck className="size-4" />}>Sĩ số: <strong>{course.student_count} sinh viên</strong></MetaItem>
+          <MetaItem icon={<CalendarCheck className="size-4" />}>Bắt đầu: <strong>{formatDate(course.start_date)}</strong></MetaItem>
+          <MetaItem icon={<CalendarCheck className="size-4" />}>Kết thúc: <strong>{formatDate(course.end_date)}</strong></MetaItem>
+          <MetaItem icon={<UserCheck className="size-4" />}>Sĩ số: <strong>{course.total_number_student} sinh viên</strong></MetaItem>
+          <MetaItem icon={<Users className="size-4" />}>Người tạo: <strong>{course.created_by}</strong></MetaItem>
         </div>
       </div>
 

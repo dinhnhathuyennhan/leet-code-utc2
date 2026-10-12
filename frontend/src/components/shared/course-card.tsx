@@ -1,54 +1,48 @@
-import Image from "next/image";
 import Link from "next/link";
-import { CalendarDays, CircleUser } from "lucide-react";
+import { BookOpen, CalendarDays, Users } from "lucide-react";
 
-import { StatusBadge } from "@/components/shared/status-badge";
-import { COURSE_COVERS } from "@/lib/constants/course-covers";
-import { COURSE_STATUS } from "@/lib/constants/status";
-import { formatTerm } from "@/lib/helpers/format";
-import type { CourseSummary, CourseView } from "@/lib/types/course";
+import { formatDate } from "@/lib/helpers/format";
+import type { CourseSummary } from "@/lib/types/course";
 import { cn } from "@/lib/utils";
 
 interface CourseCardProps {
   course: CourseSummary;
   href: string;
-  view: CourseView;
 }
 
-/** Thẻ lớp học phần — dùng chung cho giảng viên và sinh viên, có 2 kiểu hiển thị lưới/danh sách. */
-export function CourseCard({ course, href, view }: CourseCardProps) {
-  const status = COURSE_STATUS[course.status];
-  const isList = view === "list";
-
+/**
+ * Thẻ lớp học phần — đơn giản vì BE hiện chỉ trả vài trường cốt lõi.
+ * Khi BE bổ sung `language`/`teacher_name`/`avt_link` thì thêm ảnh bìa + tên GV.
+ */
+export function CourseCard({ course, href }: CourseCardProps) {
   return (
     <Link
       href={href}
       className={cn(
-        "group overflow-hidden rounded-xl border bg-card shadow-sm outline-none transition duration-200 hover:-translate-y-0.5 hover:shadow-lg focus-visible:ring-2 focus-visible:ring-indigo-500",
-        isList ? "flex items-stretch" : "block",
+        "group block rounded-xl border bg-card p-5 shadow-sm outline-none transition duration-200 hover:-translate-y-0.5 hover:shadow-lg focus-visible:ring-2 focus-visible:ring-indigo-500",
       )}
     >
-      <div className={cn("relative shrink-0 overflow-hidden bg-slate-900", isList ? "w-40 sm:w-56" : "aspect-[13/5] w-full")}>
-        <Image
-          src={COURSE_COVERS[course.language]}
-          alt=""
-          fill
-          sizes={isList ? "224px" : "(min-width: 1536px) 20vw, (min-width: 1024px) 30vw, 90vw"}
-          className="object-cover transition-transform duration-300 group-hover:scale-105"
-        />
-      </div>
+      <div className="space-y-3">
+        <span className="inline-block rounded-md bg-indigo-50 px-2.5 py-0.5 text-xs font-medium text-indigo-700 dark:bg-indigo-500/20 dark:text-indigo-300">
+          {course.code}
+        </span>
+        <h3 className="line-clamp-2 text-lg font-semibold leading-snug">{course.name}</h3>
 
-      <div className={cn("space-y-2.5 p-4", isList && "flex flex-1 flex-col justify-center")}>
-        <StatusBadge label={status.label} tone={status.tone} className="w-fit" />
-        <h3 className="text-lg font-semibold leading-snug">{course.name}</h3>
-        <p className="flex items-center gap-2 text-sm font-medium">
-          <CircleUser className="size-4 shrink-0 text-muted-foreground" />
-          <span className="truncate">{course.teacher_name}</span>
-        </p>
         <p className="flex items-center gap-2 text-sm text-muted-foreground">
-          <CalendarDays className="size-4 shrink-0" />
-          <span className="truncate">{formatTerm(course)}</span>
+          <BookOpen className="size-4 shrink-0" />
+          <span className="truncate">{course.term}</span>
         </p>
+
+        <div className="grid grid-cols-2 gap-2 pt-1 text-sm text-muted-foreground">
+          <p className="flex items-center gap-2">
+            <CalendarDays className="size-4 shrink-0" />
+            <span className="truncate">{formatDate(course.start_date)}</span>
+          </p>
+          <p className="flex items-center gap-2">
+            <Users className="size-4 shrink-0" />
+            <span>{course.total_number_student} SV</span>
+          </p>
+        </div>
       </div>
     </Link>
   );

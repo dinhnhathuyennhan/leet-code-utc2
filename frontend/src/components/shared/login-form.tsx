@@ -23,6 +23,7 @@ import { PasswordInput } from "./password-input";
 import { useAuth } from "@/context/auth-context";
 import { ApiError } from "@/lib/api/error";
 import { loginSchema, type LoginFormValues } from "@/lib/validations/validate-field-form";
+import { toast } from "sonner";
 
 import type { UserResponse } from "@/lib/api/types";
 
@@ -87,22 +88,27 @@ export function LoginForm({ onSuccess }: LoginFormProps) {
         password: values.password,
       });
 
+      toast.success(`Chào mừng ${user.full_name || "bạn"} quay lại!`);
       onSuccess?.(user);
     } catch (error) {
       if (error instanceof ApiError) {
         if (error.isNetworkError) {
           setConnectionError("Mất kết nối từ server, vui lòng thử lại.");
+          toast.error("Mất kết nối từ server, vui lòng thử lại.");
           return;
         }
 
+        const message = error.detail || "Email hoặc mật khẩu không chính xác";
         form.setError("password", {
-          message: error.detail || "Email hoặc mật khẩu không chính xác",
+          message,
         });
         form.resetField("password", { keepError: true });
+        toast.error(message);
         return;
       }
 
       setConnectionError("Đã có lỗi xảy ra, vui lòng thử lại.");
+      toast.error("Đã có lỗi xảy ra, vui lòng thử lại.");
     }
   }
 

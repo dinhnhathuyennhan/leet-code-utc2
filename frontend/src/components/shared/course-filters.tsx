@@ -1,24 +1,36 @@
 "use client";
 
-import { LayoutGrid, List, Search } from "lucide-react";
+import { Filter, Search } from "lucide-react";
 
 import { Input } from "@/components/ui/input";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
-import { ACADEMIC_YEARS, SEMESTERS } from "@/lib/constants/academic";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import type { CourseFilterState } from "@/lib/hooks/use-course-list";
-import type { CourseView } from "@/lib/types/course";
 
-const VIEW_ITEM =
-  "size-8 rounded-md text-slate-500 data-[state=on]:bg-card data-[state=on]:text-indigo-600 data-[state=on]:shadow-sm";
-
+/**
+ * Thanh filter — search + chọn học kỳ.
+ *
+ * - ``search``: lọc client-side theo tên/mã lớp.
+ * - ``term``: đẩy xuống server (`GET /courses?term=<giá trị>`).
+ *   BE trả các lớp có cột `term` chứa chuỗi này (LIKE %term%).
+ *   Dropdown chỉ hiển thị các term có thật trong data của user,
+ *   FE tự suy ra từ response.
+ */
 export function CourseFilters({ filters }: { filters: CourseFilterState }) {
-  const { search, setSearch, semester, setSemester, year, setYear, view, setView } = filters;
+  const { search, setSearch, term, setTerm, availableTerms } = filters;
 
   return (
     <div className="flex flex-wrap items-center justify-between gap-3">
       <div className="relative w-full sm:max-w-md sm:flex-1">
-        <Search aria-hidden className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
+        <Search
+          aria-hidden
+          className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground"
+        />
         <Input
           value={search}
           onChange={(event) => setSearch(event.target.value)}
@@ -28,44 +40,30 @@ export function CourseFilters({ filters }: { filters: CourseFilterState }) {
         />
       </div>
 
-      <div className="flex flex-wrap items-center gap-3">
-        <Select value={String(semester)} onValueChange={(value) => value && setSemester(Number(value))}>
-          <SelectTrigger aria-label="Học kỳ" className="h-11 w-32 bg-card">
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            {SEMESTERS.map((s) => (
-              <SelectItem key={s} value={String(s)}>Học kỳ {s}</SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-
-        <Select value={year} onValueChange={(value) => value && setYear(value)}>
-          <SelectTrigger aria-label="Năm học" className="h-11 w-48 bg-card">
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            {ACADEMIC_YEARS.map((y) => (
-              <SelectItem key={y} value={y}>Năm học {y.replace("-", " - ")}</SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-
-        <ToggleGroup
-          type="single"
-          value={view}
-          onValueChange={(value) => value && setView(value as CourseView)}
-          aria-label="Kiểu hiển thị"
-          className="rounded-lg bg-indigo-50 p-1 dark:bg-slate-800"
-        >
-          <ToggleGroupItem value="grid" aria-label="Dạng lưới" className={VIEW_ITEM}>
-            <LayoutGrid className="size-4" />
-          </ToggleGroupItem>
-          <ToggleGroupItem value="list" aria-label="Dạng danh sách" className={VIEW_ITEM}>
-            <List className="size-4" />
-          </ToggleGroupItem>
-        </ToggleGroup>
-      </div>
+      {availableTerms.length > 0 && (
+        <div className="flex items-center gap-2">
+          <Filter className="size-4 text-muted-foreground" aria-hidden />
+          <Select
+            value={term || "__all__"}
+            onValueChange={(value) => setTerm(value === "__all__" || value == null ? "" : value)}
+          >
+            <SelectTrigger
+              className="h-11 min-w-48 bg-card"
+              aria-label="Lọc theo học kỳ"
+            >
+              <SelectValue placeholder="Tất cả học kỳ" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="__all__">Tất cả học kỳ</SelectItem>
+              {availableTerms.map((t) => (
+                <SelectItem key={t} value={t}>
+                  {t}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+      )}
     </div>
   );
 }

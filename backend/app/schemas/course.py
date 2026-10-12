@@ -66,6 +66,22 @@ class GetStudentListResponse(BaseModel):
     full_name: str
     email: AppEmailStr
 
+
+class StudentEnrollmentResponse(BaseModel):
+    """Response cho `GET /students/{student_id}/enrollments` (Lỗi 8).
+
+    Trả về thông tin enrollment kèm thông tin lớp tương ứng,
+    để client hiển thị "Sinh viên X đã đăng ký lớp Y".
+    """
+
+    enrollment_id: int
+    course_id: str
+    course_name: str
+    term: str
+    start_date: datetime
+    end_date: datetime
+    total_number_student: int
+
 class CourseResponse(BaseModel):
     """Response chuẩn cho mọi endpoint thuộc module Course.
 

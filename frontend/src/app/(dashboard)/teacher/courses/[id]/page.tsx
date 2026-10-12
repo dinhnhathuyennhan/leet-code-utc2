@@ -2,15 +2,13 @@
 
 import { useState } from "react";
 import { useParams } from "next/navigation";
-import { SearchX } from "lucide-react";
+import { CalendarPlus, SearchX } from "lucide-react";
 
 import { useBreadcrumbLabel } from "@/components/shared/breadcrumb-context";
 import { EmptyState, ErrorState } from "@/components/shared/page-state";
 import { CourseDetailSkeleton } from "@/components/teacher/course-detail-skeleton";
 import { CourseDetailTabs, type CourseTab } from "@/components/teacher/course-detail-tabs";
-import { SessionList } from "@/components/teacher/session-list";
 import { ApiError } from "@/lib/api/error";
-import { formatUpdatedAt } from "@/lib/helpers/format";
 import { useCourse } from "@/lib/hooks/use-courses";
 import { CourseHeaderCard } from "@/components/teacher/course-header-card";
 
@@ -19,7 +17,7 @@ export default function TeacherCourseDetailPage() {
   const { data: course, isPending, error, refetch } = useCourse(id);
   const [tab, setTab] = useState<CourseTab>("sessions");
 
-  useBreadcrumbLabel(course?.code); // breadcrumb: Lớp học phần / JAVA01
+  useBreadcrumbLabel(course?.code); // breadcrumb: Lớp học phần / <code>
 
   if (isPending) return <CourseDetailSkeleton />;
 
@@ -36,10 +34,8 @@ export default function TeacherCourseDetailPage() {
       <CourseDetailTabs
         value={tab}
         onValueChange={setTab}
-        updatedAtLabel={formatUpdatedAt(course.updated_at)}
-        sessions={
-          <SessionList sessions={course.sessions} studentCount={course.student_count} onViewResults={() => setTab("grades")} />
-        }
+        sessions={<EmptyState icon={CalendarPlus} title="Chưa có buổi học nào" description="Tính năng buổi học sẽ đến ở Phase 2." />}
+        students={<EmptyState icon={CalendarPlus} title="Danh sách sinh viên" description="Tính năng sẽ đến ở Phase 1." />}
       />
     </div>
   );

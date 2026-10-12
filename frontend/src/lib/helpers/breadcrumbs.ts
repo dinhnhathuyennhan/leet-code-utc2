@@ -4,10 +4,11 @@ export interface Crumb {
 }
 
 const SEGMENT_LABELS: Record<string, string> = {
+  classes: "Lớp học phần",
   courses: "Lớp học phần",
   submissions: "Bài nộp",
   accounts: "Quản lý tài khoản",
-  history: "Lịch sử nộp bài",
+  history: "Lịch sử nộp bài", // segment "history" bên trong /student/history
 };
 
 /**

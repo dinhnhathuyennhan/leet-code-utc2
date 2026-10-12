@@ -7,7 +7,7 @@
 
 - Định dạng: `<hệ>.<khoá>.<ngành>`, ví dụ `CQ.67.CNTT` hoặc `CQ.67.KTXDCTGT.2`. Định dạng này lấy theo cột "Lớp" trong file danh sách lớp học phần của phòng đào tạo.
 - `class_id` **luôn do server ghép** từ 3 field: `type` (hệ), `course_number` (khoá), `department` (ngành). Client không gửi `class_id` khi tạo lớp.
-- Tách ngược `class_id` thành 3 field theo **2 dấu chấm đầu tiên**: `CQ.67.KTXDCTGT.2` → `type = "CQ"`, `course_number = 67`, `department = "KTXDCTGT.2"`. Vì vậy `type` không được chứa dấu chấm, còn `department` thì được.
+- Tách ngược `class_id` thành 3 field theo **2 dấu chấm đầu tiên**: `CQ.67.KTXDCTGT.2` → `type = "CQ"`, `course_number = 67`, `department = "KTXDCTGT.2"`. Vì vậy `type` chỉ được gồm chữ cái không dấu (không có dấu chấm), còn `department` thì được chứa dấu chấm.
 - Import Excel (`POST /students/import`) tự tạo lớp còn thiếu và dùng chung quy ước này, nên lớp tạo bằng tay và lớp tạo khi import luôn cùng định dạng.
 - `class_id` **phân biệt chữ hoa/thường** và được lưu đúng như ghép ra. `cq.67.cntt` và `CQ.67.CNTT` là 2 lớp khác nhau.
 - `class_id` là khoá chính và đang được `user.class_id` tham chiếu, nên **không có API sửa lớp**. Muốn đổi thì xoá lớp sai (khi lớp chưa có Sinh viên) rồi tạo lại.
@@ -18,7 +18,7 @@
 
 | Field | Kiểu | Bắt buộc | Ghi chú |
 |---|---|---|---|
-| type | string | có | hệ đào tạo, vd `CQ`. Không được chứa dấu `.` |
+| type | string | có | hệ đào tạo, vd `CQ`. Chỉ gồm chữ cái không dấu (`A-Z`, `a-z`): không có số, khoảng trắng, dấu `.` hay ký tự đặc biệt |
 | course_number | int | có | khoá, vd `67`. Phải là số nguyên dương |
 | department | string | có | ngành, vd `CNTT` hoặc `KTXDCTGT.2` (được chứa dấu `.`) |
 
@@ -49,8 +49,8 @@ Ví dụ:
 | 422 | Thiếu field; `course_number` không phải số nguyên hoặc là `null` | `{"error_code": "VALIDATION_ERROR", "message": "..."}` (message của pydantic, tiếng Anh) |
 | 422 | `type` rỗng, chỉ chứa khoảng trắng hoặc là `null` (use-case "Tạo lớp hành chính" bước 5a) | `{"error_code": "EMPTY_FIELD", "message": "Hệ đào tạo không được trống"}` |
 | 422 | `department` rỗng, chỉ chứa khoảng trắng hoặc là `null` (bước 5a) | `{"error_code": "EMPTY_FIELD", "message": "Ngành không được trống"}` |
-| 422 | `type` chứa dấu `.` (bước 5a) | `{"error_code": "INVALID_FORMAT", "message": "Hệ đào tạo không được chứa dấu chấm"}` |
-| 422 | `course_number` ≤ 0 (bước 5a) | `{"error_code": "INVALID_FORMAT", "message": "Khoá phải là số nguyên dương"}` |
+| 422 | `type` có ký tự không phải chữ cái không dấu, vd `C.Q`, `CQ1`, `C Q`, `CQ-`, `CQ@`, `Đ` (bước 5a) | `{"error_code": "INVALID_FORMAT", "message": "Hệ đào tạo chỉ được gồm chữ cái không dấu"}` |
+| 422 | `course_number` ≤ 0 hoặc là `true`/`false` (bước 5a) | `{"error_code": "INVALID_FORMAT", "message": "Khoá phải là số nguyên dương"}` |
 | 422 | `class_id` ghép ra dài quá 50 ký tự (bước 5a) | `{"error_code": "INVALID_FORMAT", "message": "Mã lớp không được dài quá 50 ký tự"}` |
 | 403 | Người gọi không phải Admin/Teacher | `{"error_code": "FORBIDDEN", "message": "Bạn không có quyền thực hiện hành động này"}` |
 | 409 | `class_id` ghép ra đã tồn tại (bước 6a) | `{"error_code": "CONFLICT", "message": "Lớp CQ.67.CNTT đã tồn tại"}` |

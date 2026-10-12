@@ -7,6 +7,7 @@ from sqlmodel import Session, func, or_, select
 from app.core.password import hash_password
 from app.db import engine
 from app.dependencies import Role
+from app.schemas.classroom import build_class_id
 from models import (
     Class,
     Course,
@@ -27,13 +28,12 @@ DEFAULT_CONSTRAINTS = "Đọc dữ liệu từ stdin, in kết quả ra stdout."
 
 # ---- Convention của dự án ----
 EMAIL_DOMAIN = "st.utc2.edu.vn"
-CLASS_TYPE = "Chính quy"
+CLASS_TYPE = "CQ"
 MAJOR_ABBR = "CNTT"
-MAJOR_NAME = "Công Nghệ Thông Tin"
 
 
 def class_id_of(course_number: int) -> str:
-    return f"CQ.{course_number}.{MAJOR_ABBR}"
+    return build_class_id(CLASS_TYPE, course_number, MAJOR_ABBR)
 
 
 # ---- Dữ liệu ----
@@ -185,7 +185,7 @@ def _seed_classes(session: Session) -> None:
                     class_id=class_id,
                     type=CLASS_TYPE,
                     course_number=course_number,
-                    department=MAJOR_NAME,
+                    department=MAJOR_ABBR,
                 )
             )
             created.append(class_id)

@@ -100,7 +100,7 @@ Sau khi BE xong một phase và trước khi FE bắt đầu phase tiếp theo, 
 | Việc                                                                                          | Ước lượng |
 | --------------------------------------------------------------------------------------------- | --------- |
 | `GET /users` (Admin, có lọc theo role/class, phân trang, scope theo vai trò), `GET /users/me` | 1–2 ngày  |
-| CRUD `Class` (Admin), dùng cho import Excel và lọc sinh viên                                  | 1 ngày    |
+| ~~CRUD `Class` (Admin), dùng cho import Excel và lọc sinh viên~~ ✅ xem [api-design-class.md](api-design-class.md); import đã tự tạo lớp | 1 ngày    |
 | Sau đó chuyển sang viết docs cho Lesson/Problem/Testcase (Phase 2)                            | —         |
 
 **FE: 05/10 → 14/10 (10 ngày, 3 người làm song song)**

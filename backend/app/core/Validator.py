@@ -20,3 +20,11 @@ def _validate_email(v: str) -> str:
 
 
 AppEmailStr = Annotated[str, BeforeValidator(_validate_email)]
+
+
+def required_text(value, message: str) -> str:
+    """Strip giá trị; rỗng hoặc toàn khoảng trắng thì raise ``EmptyFieldError``."""
+    text = str(value).strip() if value is not None else ""
+    if not text:
+        raise EmptyFieldError(message)
+    return text

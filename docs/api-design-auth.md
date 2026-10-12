@@ -49,7 +49,7 @@
 | full_name | string | có | |
 | date_of_birth | date | có | định dạng `dd/mm/yyyy` hoặc `yyyy-mm-dd` |
 | email | string (email) | có | phải đúng định dạng email |
-| class_id | string | có | mã lớp hành chính, phải tồn tại trong bảng `class` |
+| class_id | string | có | mã lớp hành chính, phải tồn tại trong bảng `class` (lớp chưa có thì tạo trước bằng [`POST /classes`](api-design-class.md)) |
 | avt_link | string | không | |
 
 **Response 201 Created**
@@ -69,7 +69,7 @@
 |---|---|---|
 | 422 | Sai định dạng email / thiếu field | `{"error_code": "VALIDATION_ERROR", "message": "..."}` |
 | 422 | Chưa đủ tuổi theo `date_of_birth` | `{"error_code": "DATE_OF_BIRTH_INVALID", "message": "Người dùng phải đủ 17 tuổi"}` |
-| 404 | `class_id` không tồn tại | `{"error_code": "NOT_FOUND", "message": "Không tìm thấy lớp học có ID: ..."}` |
+| 404 | `class_id` không tồn tại (tạo lớp trước bằng [`POST /classes`](api-design-class.md)) | `{"error_code": "NOT_FOUND", "message": "Không tìm thấy lớp học có ID: ..."}` |
 | 409 | Email đã tồn tại | `{"error_code": "CONFLICT", "message": "Email đã được đăng ký"}` |
 
 **Quy tắc nghiệp vụ**
@@ -145,7 +145,7 @@ Hàng 13  : 2   | 675107A002   | Trần Thị         | Bình | CQ.67.CNTT |
   - mật khẩu tạm = **MSSV**, chỉ trả về đúng 1 lần trong `created[].temporary_password`.
 - Cùng một MSSV xuất hiện ở nhiều sheet (sinh viên học nhiều lớp học phần) với cùng họ tên và lớp thì chỉ tạo **1 lần**, không báo lỗi.
 - MSSV **đã có tài khoản** thì đưa vào `skipped`, không ghi đè tài khoản cũ. So khớp MSSV phân biệt hoa/thường (`SV001` khác `sv001`).
-- Lớp hành chính (cột `Lớp`) chưa có trong bảng `class` thì **tự tạo** bằng cách tách mã lớp tại 2 dấu chấm đầu tiên: `CQ.67.CNTT` → `type = "CQ"`, `course_number = 67`, `department = "CNTT"`, còn `CQ.67.KTXDCTGT.2` → `department = "KTXDCTGT.2"`. Lớp đã có thì giữ nguyên. Chỉ tạo lớp cho các sinh viên thực sự được tạo tài khoản.
+- Lớp hành chính (cột `Lớp`) chưa có trong bảng `class` thì **tự tạo** bằng cách tách mã lớp tại 2 dấu chấm đầu tiên: `CQ.67.CNTT` → `type = "CQ"`, `course_number = 67`, `department = "CNTT"`, còn `CQ.67.KTXDCTGT.2` → `department = "KTXDCTGT.2"`. Mã lớp có ngành chứa ký tự không hợp lệ (vd `CQ.67.CNTT/1`, `CQ.67.CN TT`) bị báo lỗi ở dòng đó. Lớp đã có thì giữ nguyên. Chỉ tạo lớp cho các sinh viên thực sự được tạo tài khoản. Quy ước mã lớp dùng chung với `POST /classes`, xem [api-design-class.md](api-design-class.md#quy-ước-mã-lớp-class_id).
 - Mỗi sinh viên được lưu (commit) riêng. Nếu lỗi xảy ra giữa chừng, các sinh viên đã lưu trước đó vẫn được giữ (use-case E3).
 - Mật khẩu tạm được băm (bcrypt) song song trên nhiều luồng để rút ngắn thời gian xử lý. Một lớp khoảng 100 sinh viên mất vài giây; FE nên đặt timeout riêng cho request này, dài hơn timeout mặc định.
 - **Yêu cầu quyền**: Admin hoặc Teacher (`require_role(Role.ADMIN, Role.TEACHER)`). Teacher import cũng có thể tạo lớp hành chính mới.

@@ -9,7 +9,7 @@ from fastapi import FastAPI  # noqa: E402
 from fastapi.middleware.cors import CORSMiddleware  # noqa: E402
 
 from app.handlers.exception_handlers import register_exception_handlers  # noqa: E402
-from app.routers import auth, course, student, user  # noqa: E402
+from app.routers import auth, classroom, course, student, user  # noqa: E402
 from app.seed_data import seed_data  # noqa: E402
 
 
@@ -33,6 +33,7 @@ app.include_router(user.router)
 app.include_router(auth.router)
 app.include_router(course.router)
 app.include_router(student.router)
+app.include_router(classroom.router)
 
 register_exception_handlers(app)
 

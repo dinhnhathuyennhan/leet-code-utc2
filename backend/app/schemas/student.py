@@ -1,16 +1,10 @@
 from pydantic import BaseModel, field_validator
 
-from app.core.exceptions import EmptyFieldError, InvalidFormatError
+from app.core.exceptions import InvalidFormatError
+from app.core.Validator import required_text
+from app.schemas.classroom import parse_class_id
 
 MAX_ID_LENGTH = 50
-
-
-def _required_text(value, message: str) -> str:
-    """Strip giá trị; rỗng hoặc toàn khoảng trắng thì raise ``EmptyFieldError``."""
-    text = str(value).strip() if value is not None else ""
-    if not text:
-        raise EmptyFieldError(message)
-    return text
 
 
 class StudentImportRow(BaseModel):
@@ -30,7 +24,7 @@ class StudentImportRow(BaseModel):
     @field_validator("user_id", mode="before")
     @classmethod
     def validate_user_id(cls, value) -> str:
-        user_id = _required_text(value, "Mã sinh viên không được trống")
+        user_id = required_text(value, "Mã sinh viên không được trống")
         if len(user_id) > MAX_ID_LENGTH:
             raise InvalidFormatError(
                 f"Mã sinh viên không được dài quá {MAX_ID_LENGTH} ký tự"
@@ -42,20 +36,12 @@ class StudentImportRow(BaseModel):
     @field_validator("full_name", mode="before")
     @classmethod
     def validate_full_name(cls, value) -> str:
-        return _required_text(value, "Họ tên không được trống")
+        return required_text(value, "Họ tên không được trống")
 
     @field_validator("class_id", mode="before")
     @classmethod
     def validate_class_id(cls, value) -> str:
-        class_id = _required_text(value, "Mã lớp không được trống")
-        if len(class_id) > MAX_ID_LENGTH:
-            raise InvalidFormatError(f"Mã lớp không được dài quá {MAX_ID_LENGTH} ký tự")
-        parts = class_id.split(".", 2)
-        if len(parts) != 3 or not all(parts) or not (parts[1].isascii() and parts[1].isdigit()):
-            raise InvalidFormatError(
-                f"Mã lớp {class_id} không đúng dạng <hệ>.<khoá>.<ngành> (vd CQ.67.CNTT)"
-            )
-        return class_id
+        return parse_class_id(value).class_id
 
 
 class StudentImportCreatedRow(BaseModel):

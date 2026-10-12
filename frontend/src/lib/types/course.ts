@@ -19,6 +19,11 @@ export interface CourseApiRecord {
   grades?: GradeRow[];
 }
 
+export interface CourseTermsResponse {
+  academic_years: string[];
+  semesters: number[];
+}
+
 export interface LessonApiRecord {
   lesson_id: number;
   lesson_number: number;

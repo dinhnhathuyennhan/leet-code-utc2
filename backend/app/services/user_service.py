@@ -1,14 +1,16 @@
-from sqlmodel import Session, select
+from sqlmodel import Session, select, func
 
 from app.core.date import age_calculation
-from app.core.exceptions import AppError, ConflictError, NotFoundError
+from app.core.exceptions import AppError, ConflictError, NotFoundError, InvalidFormatError, ForbiddenError
 from app.core.password import hash_password
 from app.dependencies import Role
 from app.schemas.user import (
     CreateStudentRequest,
     CreateTeacherRequest,
     UserResponse,
+    UserListResponse,
     password_from_date,
+    student_temp_password,
 )
 from models import Class, Course, Enrollment, User
 
@@ -80,7 +82,7 @@ def create_student(session: Session, data: CreateStudentRequest) -> User:
         user_id=data.user_id,
         full_name=data.full_name,
         email=data.email,
-        hashed_password=hash_password(password_from_date(data.date_of_birth)),
+        hashed_password=hash_password(student_temp_password(data.user_id)),
         must_change_password=True,
         date_of_birth=data.date_of_birth,
         avt_link=data.avt_link,
@@ -103,14 +105,87 @@ def user_response(user: User) -> UserResponse:
         class_id=user.class_id if user.role_id == Role.STUDENT else None,
     )
 
+def list_users(
+    session: Session,
+    current_user: User,
+    role_id: int | None,
+    class_id: str | None,
+    page: int,
+    page_size: int,
+) -> UserListResponse:
+    if role_id is not None and role_id not in (
+        Role.ADMIN,
+        Role.TEACHER,
+        Role.STUDENT,
+    ):
+        raise InvalidFormatError("role_id không hợp lệ")
+
+    conditions = []
+
+    if current_user.role_id == Role.TEACHER:
+        # Teacher chỉ thấy Student đang học khoá do mình tạo, bất kể role_id truyền vào
+        managed_course_ids = select(Course.course_id).where(
+            Course.created_by == current_user.user_id
+        )
+        managed_student_ids = select(Enrollment.student_id).where(
+            Enrollment.course_id.in_(managed_course_ids)
+        )
+        conditions.append(User.role_id == Role.STUDENT)
+        conditions.append(User.user_id.in_(managed_student_ids))
+    elif current_user.role_id != Role.ADMIN:
+        # Whitelist: chỉ Admin và Teacher được xem, mọi role khác (kể cả role phát sinh sau này) bị từ chối
+        raise ForbiddenError("Bạn không có quyền xem danh sách người dùng")
+    elif role_id is not None:
+        conditions.append(User.role_id == role_id)
+
+    if class_id is not None:
+        conditions.append(User.role_id == Role.STUDENT)
+        conditions.append(User.class_id == class_id)
+
+    total = session.exec(select(func.count()).select_from(User).where(*conditions)).one()
+    users = session.exec(
+        select(User)
+        .where(*conditions)
+        .order_by(User.user_id)
+        .offset((page - 1) * page_size)
+        .limit(page_size)
+    ).all()
+
+    return UserListResponse(
+        items=[user_response(user) for user in users],
+        total=total,
+        page=page,
+        page_size=page_size,
+    )
+
+
+def _temporary_password_for(user: User) -> str:
+    """Sinh mật khẩu tạm theo vai trò của tài khoản.
+
+    - STUDENT: MSSV (``user_id``), không cần ngày sinh.
+    - TEACHER, ADMIN: ngày sinh dạng ddmmyyyy.
+    - Vai trò khác: không cho reset (whitelist, tránh role lạ rơi vào nhánh sai).
+    """
+    if user.role_id == Role.STUDENT:
+        return student_temp_password(user.user_id)
+    if user.role_id in (Role.TEACHER, Role.ADMIN):
+        if user.date_of_birth is None:
+            raise DateOfBirthRequiredError(
+                "Tài khoản chưa có ngày sinh để tạo mật khẩu tạm thời"
+            )
+        return password_from_date(user.date_of_birth)
+    raise NotAllowedToResetError(
+        "Bạn không có quyền đặt lại mật khẩu cho tài khoản này"
+    )
+
 
 def reset_password(
     session: Session, current_user: User, target_user_id: str
 ) -> tuple[str, str]:
     """Đặt lại mật khẩu cho tài khoản mục tiêu.
 
-    Mật khẩu tạm thời được sinh từ ngày sinh của tài khoản mục tiêu
-    theo định dạng ddmmyyyy (xem ``password_from_date``).
+    Mật khẩu tạm thời: sinh viên = MSSV; giáo viên/admin = ngày sinh
+    dạng ddmmyyyy (xem ``_temporary_password_for``).
 
     Quyền:
         - ADMIN: đặt lại mật khẩu bất kỳ tài khoản nào.
@@ -122,8 +197,8 @@ def reset_password(
 
     Raises:
         UserNotFoundError: không tìm thấy tài khoản mục tiêu.
-        NotAllowedToResetError: người gọi không đủ quyền.
-        DateOfBirthRequiredError: tài khoản mục tiêu chưa có ngày sinh hợp lệ.
+        NotAllowedToResetError: người gọi không đủ quyền, hoặc tài khoản mục tiêu có vai trò lạ.
+        DateOfBirthRequiredError: giáo viên/admin mục tiêu chưa có ngày sinh.
     """
     target = session.get(User, target_user_id)
     if target is None:
@@ -159,13 +234,7 @@ def reset_password(
                 "Bạn không có quyền đặt lại mật khẩu cho tài khoản này"
             )
 
-    # Tài khoản mục tiêu phải có ngày sinh để sinh mật khẩu tạm thời
-    if target.date_of_birth is None:
-        raise DateOfBirthRequiredError(
-            "Tài khoản chưa có ngày sinh để tạo mật khẩu tạm thời"
-        )
-
-    temporary_password = password_from_date(target.date_of_birth)
+    temporary_password = _temporary_password_for(target)
     target.hashed_password = hash_password(temporary_password)
     target.must_change_password = True
     target.token_version += 1
@@ -174,4 +243,3 @@ def reset_password(
     session.commit()
     session.refresh(target)
     return target.user_id, temporary_password
-

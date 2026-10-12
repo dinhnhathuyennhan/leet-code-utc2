@@ -2,12 +2,13 @@
 
 import { keepPreviousData, useQuery } from "@tanstack/react-query";
 
-import { getClassStudents, getClasses, getCourseById, getCourseEnrollments, getCourses, searchStudents } from "@/lib/api/endpoints/courses";
+import { getClassStudents, getClasses, getCourseById, getCourseEnrollments, getCourseTerms, getCourses, searchStudents } from "@/lib/api/endpoints/courses";
 import type { CourseListParams } from "@/lib/types/course";
 
 export const courseKeys = {
   all: ["courses"] as const,
   list: (params: CourseListParams) => [...courseKeys.all, "list", params] as const,
+  terms: () => [...courseKeys.all, "terms"] as const,
   detail: (id: number | string) => [...courseKeys.all, "detail", id] as const,
   enrollments: (id: string) => [...courseKeys.all, "enrollments", id] as const,
   classes: () => [...courseKeys.all, "classes"] as const,
@@ -22,6 +23,10 @@ export function useCourses(params: CourseListParams) {
     queryFn: () => getCourses(params),
     placeholderData: keepPreviousData,
   });
+}
+
+export function useCourseTerms() {
+  return useQuery({ queryKey: courseKeys.terms(), queryFn: getCourseTerms });
 }
 
 export function useClasses(enabled = true) {

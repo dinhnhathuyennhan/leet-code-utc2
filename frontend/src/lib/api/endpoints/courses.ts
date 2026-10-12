@@ -1,6 +1,21 @@
 import axiosInstance from "@/lib/axios";
 import { wrapAxiosError } from "@/lib/api/client";
-import type { ClassApiRecord, CourseApiRecord, CourseDetail, CourseLanguage, CourseListParams, CourseListResponse, CourseSession, CourseStudent, LessonMutationRequest, ProblemDetailData, ProblemUpdateRequest, SessionDetailData, StudentSearchResult } from "@/lib/types/course";
+import type { 
+  ClassApiRecord, 
+  CourseApiRecord, 
+  CourseDetail, 
+  CourseLanguage, 
+  CourseListParams, 
+  CourseListResponse, 
+  CourseSession, 
+  CourseStudent, 
+  CourseTermsResponse, 
+  LessonMutationRequest, 
+  ProblemDetailData, 
+  ProblemUpdateRequest, 
+  SessionDetailData, 
+  StudentSearchResult 
+} from "@/lib/types/course";
 
 function languageFromCover(cover: string | null): CourseLanguage {
   const value = (cover ?? "").toLowerCase();
@@ -34,8 +49,9 @@ function isDueThisWeek(deadline: string, now = new Date()): boolean {
 }
 
 function toSummary(record: CourseApiRecord) {
-  const academicYear = record.term.replace(/^HK\d-/, "");
-  const semester = Number(record.term.match(/^HK(\d)/)?.[1] ?? 1);
+  const termMatch = record.term.match(/^HK(\d)\s*(.+)$/i);
+  const semester = Number(termMatch?.[1] ?? 1);
+  const academicYear = termMatch?.[2] ?? record.term;
   return {
     id: record.course_id,
     code: record.course_id,
@@ -51,8 +67,23 @@ function toSummary(record: CourseApiRecord) {
 }
 
 // SỬA: Giữ số liệu AC do backend tính; chỉ dùng giá trị 0 cho dữ liệu API cũ.
-function toStudent(record: { enrollment_id: number; student_id: string; full_name: string; email: string; class_id?: string | null; submitted_lessons?: number; total_lessons?: number; progress_percent?: number }): CourseStudent {
-  return { ...record, submitted_lessons: record.submitted_lessons ?? 0, total_lessons: record.total_lessons ?? 0, progress_percent: record.progress_percent ?? 0, submission_history: [] };
+function toStudent(record: { 
+  enrollment_id: number; 
+  student_id: string; 
+  full_name: string; 
+  email: string; 
+  class_id?: string | null; 
+  submitted_lessons?: number; 
+  total_lessons?: number; 
+  progress_percent?: number 
+}): CourseStudent {
+  return { 
+    ...record, 
+    submitted_lessons: record.submitted_lessons ?? 0, 
+    total_lessons: record.total_lessons ?? 0, 
+    progress_percent: record.progress_percent ?? 0, 
+    submission_history: [] 
+  };
 }
 
 export async function getCourses(params: CourseListParams = {}): Promise<CourseListResponse> {
@@ -65,6 +96,7 @@ export async function getCourses(params: CourseListParams = {}): Promise<CourseL
     }
     if (params.semester) items = items.filter((course) => course.semester === params.semester);
     if (params.academic_year) items = items.filter((course) => course.academic_year === params.academic_year);
+    
     const dueThisWeek = items.reduce(
       (total, course) =>
         total + (course.sessions ?? []).filter((session) => isDueThisWeek(session.deadline)).length,
@@ -89,11 +121,28 @@ export async function getCourses(params: CourseListParams = {}): Promise<CourseL
   }
 }
 
+export async function getCourseTerms(): Promise<CourseTermsResponse> {
+  try {
+    const response = await axiosInstance.get<CourseTermsResponse>("/courses/terms");
+    return response.data;
+  } catch (error) {
+    throw wrapAxiosError(error);
+  }
+}
+
 export async function getCourseById(courseId: number | string): Promise<CourseDetail> {
   try {
     const response = await axiosInstance.get<CourseApiRecord>(`/courses/${courseId}`);
     const course = toSummary(response.data);
-    return { ...course, room: "", end_date: response.data.end_date, student_count: response.data.total_number_student, updated_at: "", sessions: response.data.sessions ?? [], grades: response.data.grades ?? [] };
+    return { 
+      ...course, 
+      room: "", 
+      end_date: response.data.end_date, 
+      student_count: response.data.total_number_student, 
+      updated_at: "", 
+      sessions: response.data.sessions ?? [], 
+      grades: response.data.grades ?? [] 
+    };
   } catch (error) {
     throw wrapAxiosError(error);
   }
@@ -101,7 +150,16 @@ export async function getCourseById(courseId: number | string): Promise<CourseDe
 
 export async function getCourseEnrollments(courseId: string): Promise<CourseStudent[]> {
   try {
-    const response = await axiosInstance.get<Array<{ enrollment_id: number; student_id: string; full_name: string; email: string; class_id?: string | null; submitted_lessons?: number; total_lessons?: number; progress_percent?: number }>>(`/courses/${courseId}/enrollments`);
+    const response = await axiosInstance.get<Array<{ 
+      enrollment_id: number; 
+      student_id: string; 
+      full_name: string; 
+      email: string; 
+      class_id?: string | null; 
+      submitted_lessons?: number; 
+      total_lessons?: number; 
+      progress_percent?: number 
+    }>>(`/courses/${courseId}/enrollments`);
     return response.data.map(toStudent);
   } catch (error) {
     throw wrapAxiosError(error);
@@ -209,7 +267,15 @@ export async function createLesson(courseId: string, data: LessonMutationRequest
   try {
     const response = await axiosInstance.post<CourseApiRecord>(`/courses/${courseId}/lessons`, data);
     const course = toSummary(response.data);
-    return { ...course, room: "", end_date: response.data.end_date, student_count: response.data.total_number_student, updated_at: "", sessions: response.data.sessions ?? [], grades: response.data.grades ?? [] };
+    return { 
+      ...course, 
+      room: "", 
+      end_date: response.data.end_date, 
+      student_count: response.data.total_number_student, 
+      updated_at: "", 
+      sessions: response.data.sessions ?? [], 
+      grades: response.data.grades ?? [] 
+    };
   } catch (error) {
     throw wrapAxiosError(error);
   }
@@ -219,7 +285,15 @@ export async function updateLesson(courseId: string, lessonId: number, data: Les
   try {
     const response = await axiosInstance.patch<CourseApiRecord>(`/courses/${courseId}/lessons/${lessonId}`, data);
     const course = toSummary(response.data);
-    return { ...course, room: "", end_date: response.data.end_date, student_count: response.data.total_number_student, updated_at: "", sessions: response.data.sessions ?? [], grades: response.data.grades ?? [] };
+    return { 
+      ...course, 
+      room: "", 
+      end_date: response.data.end_date, 
+      student_count: response.data.total_number_student, 
+      updated_at: "", 
+      sessions: response.data.sessions ?? [], 
+      grades: response.data.grades ?? [] 
+    };
   } catch (error) {
     throw wrapAxiosError(error);
   }

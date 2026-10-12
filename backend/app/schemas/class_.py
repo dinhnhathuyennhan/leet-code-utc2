@@ -1,17 +1,9 @@
-from pydantic import BaseModel
+"""Compatibility exports for the former ``class_`` schema module.
 
-from app.core.Validator import AppEmailStr
+The canonical class schemas live in :mod:`app.schemas.classroom`; this module
+remains importable for callers that have not migrated yet.
+"""
 
+from app.schemas.classroom import ClassResponse, ClassStudentResponse
 
-class ClassResponse(BaseModel):
-    class_id: str
-    type: str
-    course_number: int
-    department: str
-
-
-class ClassStudentResponse(BaseModel):
-    user_id: str
-    full_name: str
-    email: AppEmailStr
-    class_id: str | None
+__all__ = ["ClassResponse", "ClassStudentResponse"]

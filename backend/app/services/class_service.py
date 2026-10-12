@@ -2,7 +2,7 @@ from sqlmodel import Session, select
 
 from app.core.exceptions import NotFoundError
 from app.dependencies import Role
-from app.schemas.class_ import ClassResponse, ClassStudentResponse
+from app.schemas.classroom import ClassResponse, ClassStudentResponse
 from models import Class, User
 
 

@@ -5,7 +5,6 @@ import { LayoutGrid, List, Search } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
-import { ACADEMIC_YEARS, SEMESTERS } from "@/lib/constants/academic";
 import type { CourseFilterState } from "@/lib/hooks/use-course-list";
 import type { CourseView } from "@/lib/types/course";
 
@@ -34,7 +33,7 @@ export function CourseFilters({ filters }: { filters: CourseFilterState }) {
             <SelectValue />
           </SelectTrigger>
           <SelectContent>
-            {SEMESTERS.map((s) => (
+            {filters.semesters.map((s) => (
               <SelectItem key={s} value={String(s)}>Học kỳ {s}</SelectItem>
             ))}
           </SelectContent>
@@ -45,7 +44,7 @@ export function CourseFilters({ filters }: { filters: CourseFilterState }) {
             <SelectValue />
           </SelectTrigger>
           <SelectContent>
-            {ACADEMIC_YEARS.map((y) => (
+            {filters.years.map((y) => (
               <SelectItem key={y} value={y}>Năm học {y.replace("-", " - ")}</SelectItem>
             ))}
           </SelectContent>

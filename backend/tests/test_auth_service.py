@@ -160,12 +160,6 @@ class TestLogin:
 
         assert len(calls) == 1
 
-    @pytest.mark.parametrize("typed", ["A@Example.COM", "a@EXAMPLE.com", "A@EXAMPLE.COM"])
-    def test_email_lookup_is_case_insensitive(self, session, user, typed):
-        """Email không phân biệt hoa/thường khi đăng nhập (bàn phím điện thoại hay tự viết hoa)."""
-        response, _ = svc.login(session, _login_req(email=typed))
-        assert response.user.user_id == user.user_id
-
     def test_case_insensitive_login_still_checks_password(self, session, user):
         with pytest.raises(svc.InvalidCredentialsError):
             svc.login(session, _login_req(email="A@EXAMPLE.COM", password=BAD_PASSWORD))

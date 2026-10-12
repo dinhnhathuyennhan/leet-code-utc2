@@ -8,6 +8,7 @@ from app.db import get_session
 from app.dependencies import Role, get_current_user, require_role
 from app.schemas.course import (
     CourseResponse,
+    CourseTermsResponse,
     CreateCourseRequest,
     UpdateCourseRequest,
 )
@@ -15,6 +16,7 @@ from app.services.course_service import (
     create_course as _create_course,
     get_course as _get_course,
     get_courses as _get_courses,
+    get_course_terms as _get_course_terms,
     update_course as _update_course,
 )
 from models import User
@@ -38,6 +40,17 @@ def create_course_route(
         session=session,
         current_user=current_user,
     )
+
+
+@router.get(
+    "/courses/terms",
+    response_model=CourseTermsResponse,
+)
+def get_course_terms_route(
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+) -> CourseTermsResponse:
+    return _get_course_terms(session=session, current_user=current_user)
 
 
 @router.get(

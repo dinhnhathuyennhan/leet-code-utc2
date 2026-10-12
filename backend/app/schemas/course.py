@@ -66,6 +66,11 @@ class CourseResponse(BaseModel):
     grades: list[CourseGradeRowResponse] = Field(default_factory=list)
 
 
+class CourseTermsResponse(BaseModel):
+    academic_years: list[str]
+    semesters: list[int]
+
+
 class CreateCourseRequest(BaseModel):
     """Body cho `POST /courses` — tạo lớp học mới.
 

@@ -37,7 +37,7 @@ export function ProblemTable({ problems, studentCount }: { problems: ProblemRow[
                   </span>
                   <div className="min-w-0">
                     <p className="font-semibold">{problem.title}</p>
-                    <p className="text-sm text-muted-foreground">{problem.report ?? "Chưa có mã bài"} · {problem.level}</p>
+                    <p className="text-sm text-muted-foreground">{problem.report ?? `Chưa có mã bài · ID ${problem.id}`} · {problem.level}</p>
                   </div>
                 </div>
               </TableCell>

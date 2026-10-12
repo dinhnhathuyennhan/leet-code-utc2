@@ -45,7 +45,7 @@ def copy_problems_to_lesson(
     session: Session, problem_ids: list[int], lesson: Lesson, current_user: User
 ) -> list[Problem]:
     """Gắn bài vào buổi: bài đã ở buổi này giữ nguyên, bài ở buổi khác được SAO CHÉP
-    (problem_id mới, Submission cũ không đi theo). Không sao chép `report`."""
+    (problem_id mới, Submission cũ không đi theo). Giữ nguyên mã bài `report`."""
     problem_ids = list(dict.fromkeys(problem_ids))   # bỏ id trùng, giữ thứ tự
     if not problem_ids:
         return []
@@ -70,7 +70,7 @@ def copy_problems_to_lesson(
             time_limit_seconds=src.time_limit_seconds, start_format_code=src.start_format_code,
             constraints=src.constraints, level=src.level, hint=src.hint,
             complexity=src.complexity, start_datetime=start_dt, end_datetime=end_dt,
-            total_number_testcase=len(testcases_by_source[pid]),
+            total_number_testcase=len(testcases_by_source[pid]), report=src.report,
         )
         session.add(clone)
         session.flush()

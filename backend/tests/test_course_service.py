@@ -23,6 +23,7 @@ from app.services.course_service import (
     get_course,
     get_course_enrollments,
     get_courses,
+    get_course_terms,
     update_course,
 )
 from models import Course, Enrollment, User
@@ -843,6 +844,19 @@ class TestGetCourses:
         result = get_courses(session, admin)
 
         assert result == []
+
+    def test_course_terms_are_scoped_and_sorted(
+        self, session, course, owner_teacher, other_teacher
+    ):
+        make_course(session, "CS102", owner_teacher)
+        make_course(session, "CS201", other_teacher)
+        session.get(Course, "CS102").term = "HK2 2025-2026"
+        session.commit()
+
+        result = get_course_terms(session, owner_teacher)
+
+        assert result.academic_years == ["2026-2027", "2025-2026"]
+        assert result.semesters == [1, 2]
 
 
 class TestGetCourse:

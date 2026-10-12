@@ -1,5 +1,6 @@
 import io
 import json
+import re
 import zipfile
 
 from app.services.course_view import build_course_response
@@ -10,7 +11,7 @@ from app.services.enrollment_service import (
 )
 from sqlmodel import Session, func, select
 from fastapi import UploadFile
-from app.schemas.class_ import ClassResponse, ClassStudentResponse
+from app.schemas.classroom import ClassResponse, ClassStudentResponse
 from app.schemas.lesson import LessonCreateRequest, LessonDetailResponse, LessonUpdateRequest
 from app.schemas.problem import ProblemDetailResponse, ProblemUpdateRequest
 from app.core.datetime_utils import as_utc, now_utc
@@ -30,6 +31,7 @@ from app.core.exceptions import (
 from app.dependencies import Role
 from app.schemas.course import (
     CourseResponse,
+    CourseTermsResponse,
     CreateCourseRequest,
     UpdateCourseRequest,
 )
@@ -497,6 +499,24 @@ def update_course(
 
 
 def get_courses(session: Session, current_user: User) -> list[CourseResponse]:
+    courses = _visible_courses(session, current_user)
+    only_student_id = current_user.user_id if current_user.role_id == Role.STUDENT else None
+    return [
+        build_course_response(course, session, only_student_id=only_student_id)
+        for course in courses
+    ]
+
+
+def get_course_terms(session: Session, current_user: User) -> CourseTermsResponse:
+    """Trả các học kỳ/năm học có trong các lớp người dùng được phép xem."""
+    courses = _visible_courses(session, current_user)
+    terms = [_parse_term(course.term) for course in courses]
+    academic_years = sorted({year for _, year in terms}, reverse=True)
+    semesters = sorted({semester for semester, _ in terms})
+    return CourseTermsResponse(academic_years=academic_years, semesters=semesters)
+
+
+def _visible_courses(session: Session, current_user: User) -> list[Course]:
     if current_user.role_id == Role.ADMIN:
         statement = select(Course)
     elif current_user.role_id == Role.TEACHER:
@@ -509,10 +529,11 @@ def get_courses(session: Session, current_user: User) -> list[CourseResponse]:
         )
     else:
         raise ForbiddenError("Bạn không có quyền thực hiện hành động này")
+    return list(session.exec(statement.order_by(Course.course_id)).all())
 
-    courses = session.exec(statement.order_by(Course.course_id)).all()
-    only_student_id = current_user.user_id if current_user.role_id == Role.STUDENT else None
-    return [
-        build_course_response(course, session, only_student_id=only_student_id)
-        for course in courses
-    ]
+
+def _parse_term(term: str) -> tuple[int, str]:
+    match = re.match(r"^HK(\d)\s*[- ]\s*(.+)$", term, re.IGNORECASE)
+    if match is None:
+        return 1, term
+    return int(match.group(1)), match.group(2).strip()

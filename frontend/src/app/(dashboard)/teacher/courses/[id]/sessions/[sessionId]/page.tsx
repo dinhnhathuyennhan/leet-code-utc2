@@ -201,7 +201,7 @@ export default function TeacherSessionDetailPage() {
                       {item.title}
                     </h3>
                     <span className="rounded bg-indigo-50 px-2 py-0.5 font-mono text-xs font-semibold text-indigo-700 dark:bg-indigo-500/20 dark:text-indigo-300">
-                      {item.report ?? "Chưa có mã bài"}
+                      {item.report ?? `Chưa có mã bài · ID ${item.id}`}
                     </span>
                     <span className="rounded bg-emerald-50 px-2 py-0.5 text-xs font-semibold text-emerald-700 dark:bg-emerald-500/20 dark:text-emerald-300">
                       {item.level === "easy" ? "DỄ" : "TRUNG BÌNH"}

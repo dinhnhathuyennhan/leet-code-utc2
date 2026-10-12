@@ -9,13 +9,14 @@ from fastapi import FastAPI  # noqa: E402
 from fastapi.middleware.cors import CORSMiddleware  # noqa: E402
 
 from app.handlers.exception_handlers import register_exception_handlers  # noqa: E402
-from app.routers import auth, course, student, user, classes, enrollment, lesson, problem, submission  # noqa: E402
-from app.seed_data import seed_users  # noqa: E402
+
+from app.routers import auth, course, student, user, classroom, enrollment, lesson, problem, submission  # noqa: E402
+from app.seed_data import seed_data  # noqa: E402
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    seed_users()
+    seed_data()
     yield
 
 
@@ -46,11 +47,13 @@ app.include_router(user.router)
 app.include_router(auth.router)
 app.include_router(course.router)
 app.include_router(student.router)
-app.include_router(classes.router)
+
 app.include_router(enrollment.router)
 app.include_router(lesson.router)
 app.include_router(problem.router)
 app.include_router(submission.router)
+app.include_router(classroom.router)
+
 register_exception_handlers(app)
 
 

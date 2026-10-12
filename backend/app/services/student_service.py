@@ -1,424 +1,341 @@
 """Service xử lý nghiệp vụ liên quan tới sinh viên.
 
 Hiện tại gồm:
-    - ``import_students``: đọc file Excel và tạo hàng loạt tài khoản sinh viên.
+    - ``import_students``: đọc file "Danh sách lớp học phần" (.xls/.xlsx)
+      của phòng đào tạo và tạo hàng loạt tài khoản sinh viên.
 
-Đặc tả import Excel:
-    - Định dạng: .xlsx.
-    - Header (hàng 1) bắt buộc có 5 cột: ``user_id``, ``full_name``,
-      ``date_of_birth`` (dd/mm/yyyy hoặc yyyy-mm-dd), ``email``, ``class_id``.
-    - Mỗi dòng được xử lý **độc lập** (commit theo từng dòng): nếu một
-      dòng lỗi thì chỉ dòng đó bị rollback, các dòng trước vẫn được giữ.
-    - ``class_id`` là bắt buộc và phải tồn tại trong bảng ``class``;
-      dòng nào thiếu hoặc không tồn tại sẽ được liệt kê trong ``errors``.
-    - Mật khẩu tạm thời được sinh từ ngày sinh theo định dạng ``ddmmyyyy``
-      (xem ``app.schemas.user.password_from_date``).
+Mẫu file (mỗi sheet là một lớp học phần):
+    - Hàng tiêu đề nằm trong 20 hàng đầu, có các cột ``STT``,
+      ``Mã sinh viên``, ``Họ và tên`` (gộp 2 ô: họ đệm + tên), ``Lớp``.
+      Các hàng phía trên (tên trường, học kỳ...) và các cột khác
+      (điểm danh, ghi chú) bị bỏ qua.
+    - Dữ liệu bắt đầu ngay dưới hàng tiêu đề. Dòng sinh viên là dòng có ô
+      STT là số hoặc có MSSV; dòng trống thì bỏ qua; gặp dòng có chữ nhưng
+      không có STT lẫn MSSV (phần chân trang "Người lập biểu"...) thì dừng.
+
+Quy tắc:
+    - Email tự sinh ``{MSSV}@st.utc2.edu.vn``, mật khẩu tạm = MSSV.
+    - Lớp hành chính chưa có thì tự tạo từ mã lớp (vd ``CQ.67.CNTT``).
+    - MSSV đã có tài khoản → ``skipped``; dòng sai → ``errors``.
+    - Commit theo từng sinh viên: lỗi DB ở một dòng không làm mất các
+      sinh viên đã tạo trước đó (đặc tả E3).
 """
 
-from datetime import date as _date
-from datetime import datetime as _datetime
-from io import BytesIO
+import logging
+import os
+import unicodedata
+from concurrent.futures import ThreadPoolExecutor
 
-from openpyxl import load_workbook
-from openpyxl.utils.exceptions import InvalidFileException
-from pydantic import BaseModel, EmailStr, ValidationError
+from sqlalchemy.exc import IntegrityError, SQLAlchemyError
 from sqlmodel import Session, select
 
+from app.core.excel import (
+    ExcelFileTooLargeError,
+    ExcelSheet,
+    ExcelWorkbook,
+    InvalidExcelFormatError,
+    read_workbook,
+)
 from app.core.exceptions import AppError
 from app.core.password import hash_password
 from app.dependencies import Role
+from app.schemas.classroom import parse_class_id
 from app.schemas.student import (
     StudentImportCreatedRow,
     StudentImportErrorRow,
     StudentImportResponse,
+    StudentImportRow,
+    StudentImportSkippedRow,
 )
-from app.schemas.user import (
-    parse_date_of_birth,
-    password_from_date,
-)
+from app.schemas.user import student_temp_password
 from models import Class, User
 
-MAX_IMPORT_ROWS = 500
+logger = logging.getLogger(__name__)
 
+STUDENT_EMAIL_DOMAIN = "st.utc2.edu.vn"
+MAX_IMPORT_STUDENTS = 500
+MAX_IMPORT_FILE_BYTES = 5 * 1024 * 1024
+HASH_WORKERS = min(8, os.cpu_count() or 1)
+HEADER_SEARCH_ROWS = 20
 
-class _EmailCheck(BaseModel):
-    """Model phụ để validate email string trong service layer."""
-
-    email: EmailStr
-
-
-class InvalidExcelFormatError(AppError):
-    status_code = 422
-    error_code = "INVALID_EXCEL_FORMAT"
-
-
-class EmptyExcelFileError(AppError):
-    status_code = 400
-    error_code = "EMPTY_EXCEL_FILE"
-
-
-class ExcelFileTooLargeError(AppError):
-    status_code = 400
-    error_code = "EXCEL_FILE_TOO_LARGE"
-
-
-def _parse_excel(
-    contents: bytes, filename: str, max_rows: int
-) -> list[tuple[int, str, str, str, str, str]]:
-    """Đọc file Excel và trả về các giá trị thô của từng dòng dữ liệu.
-
-    Returns:
-        list các tuple ``(row_index, user_id_raw, full_name_raw, date_raw,
-        email_raw, class_id_raw)`` với mọi giá trị đều được strip;
-        ``""`` nếu ô trống.
-
-    Raises:
-        InvalidExcelFormatError, EmptyExcelFileError, ExcelFileTooLargeError.
-    """
-    if not filename or not filename.lower().endswith(".xlsx"):
-        raise InvalidExcelFormatError("File phải có định dạng .xlsx")
-
-    try:
-        workbook = load_workbook(BytesIO(contents), read_only=True, data_only=True)
-    except (InvalidFileException, OSError) as err:
-        raise InvalidExcelFormatError(f"Không đọc được file Excel: {err}") from err
-
-    worksheet = workbook.active
-    if worksheet is None:
-        raise InvalidExcelFormatError("File Excel không có sheet nào")
-
-    rows = list(worksheet.iter_rows(values_only=True))
-    if not rows:
-        raise EmptyExcelFileError("File không có dữ liệu")
-
-    header = rows[0]
-    if header is None or all(cell is None for cell in header):
-        raise InvalidExcelFormatError("File Excel thiếu hàng tiêu đề")
-
-    required_columns = {
-        "user_id": ("user_id", "user id", "mssv", "student id"),
-        "full_name": ("full_name", "full name", "name", "họ tên", "ho ten"),
-        "date_of_birth": (
-            "date_of_birth",
-            "date of birth",
-            "dob",
-            "ngày sinh",
-            "ngay sinh",
-        ),
-        "email": ("email", "e-mail", "mail"),
-        "class_id": ("class_id", "class id", "mã lớp", "ma lop"),
-    }
-    column_indexes: dict[str, int] = {}
-    for index, cell in enumerate(header):
-        if cell is None:
-            continue
-        normalized = str(cell).strip().lower()
-        for canonical, aliases in required_columns.items():
-            if normalized in aliases:
-                column_indexes[canonical] = index
-                break
-
-    missing = [name for name in required_columns if name not in column_indexes]
-    if missing:
-        raise InvalidExcelFormatError(
-            "File Excel thiếu cột bắt buộc: " + ", ".join(missing)
-        )
-
-    data_rows = rows[1:]
-    if len(data_rows) > max_rows:
-        raise ExcelFileTooLargeError(f"File vượt quá giới hạn {max_rows} dòng cho phép")
-    if not data_rows:
-        raise EmptyExcelFileError("File không có dòng dữ liệu nào")
-
-    parsed: list[tuple[int, str, str, str, str, str]] = []
-    for row_index, row in enumerate(data_rows, start=2):
-        user_id_value = (
-            _cell_to_string(row[column_indexes["user_id"]])
-            if column_indexes["user_id"] < len(row)
-            else ""
-        )
-        full_name_value = (
-            _cell_to_string(row[column_indexes["full_name"]])
-            if column_indexes["full_name"] < len(row)
-            else ""
-        )
-        date_value = (
-            _cell_to_string(row[column_indexes["date_of_birth"]])
-            if column_indexes["date_of_birth"] < len(row)
-            else ""
-        )
-        email_value = (
-            _cell_to_string(row[column_indexes["email"]])
-            if column_indexes["email"] < len(row)
-            else ""
-        )
-        class_id_value = (
-            _cell_to_string(row[column_indexes["class_id"]])
-            if column_indexes["class_id"] < len(row)
-            else ""
-        )
-        parsed.append(
-            (
-                row_index,
-                user_id_value,
-                full_name_value,
-                date_value,
-                email_value,
-                class_id_value,
-            )
-        )
-    return parsed
-
-
-def _cell_to_string(cell_value) -> str:
-    """Chuẩn hoá một ô Excel thành chuỗi để truyền cho các bước validate.
-
-    openpyxl trả về kiểu dữ liệu phụ thuộc vào định dạng ô:
-        - Ô format ``Date``: trả về ``datetime.datetime`` hoặc ``datetime.date``.
-          ``str(datetime)`` cho ra ``"yyyy-mm-dd hh:mm:ss"`` không khớp với
-          ``parse_date_of_birth`` (chỉ nhận ``dd/mm/yyyy`` hoặc ``yyyy-mm-dd``),
-          nên ta phải gọi ``.date().isoformat()`` để ra đúng ``yyyy-mm-dd``.
-        - Ô text / số: trả về chuỗi ``str(value).strip()`` như cũ.
-        - Ô rỗng (``None``): trả về ``""``.
-    """
-    if cell_value is None:
-        return ""
-    if isinstance(cell_value, _datetime):
-        return cell_value.date().isoformat()
-    if isinstance(cell_value, _date):
-        return cell_value.isoformat()
-    return str(cell_value).strip()
-
-
-def _validate_row(
-    row_index: int,
-    user_id: str,
-    full_name: str,
-    date_str: str,
-    email: str,
-    class_id: str,
-    seen_user_ids: set[str],
-    seen_emails: set[str],
-    existing_user_ids: set[str],
-    existing_emails: set[str],
-    existing_class_ids: set[str],
-) -> tuple[User | None, str, str, str, str, str | None, str | None, str | None]:
-    """Validate một dòng Excel và trả về dữ liệu đã chuẩn hoá hoặc lỗi.
-
-    Returns:
-        tuple ``(student_or_None, user_id, full_name, email, date_of_birth,
-        class_id_or_None, error_reason_or_None)``.
-
-        Khi ``error_reason`` không phải ``None``, dòng này bị lỗi và
-        sẽ được đưa vào ``errors``. Ngược lại dòng đã sẵn sàng để insert.
-    """
-    if not user_id:
-        return (
-            None, user_id, full_name, email, None, class_id,
-            "user_id không được trống",
-        )
-    if not full_name:
-        return (
-            None, user_id, full_name, email, None, class_id,
-            "Họ tên không được trống",
-        )
-    if not date_str:
-        return (
-            None, user_id, full_name, email, None, class_id,
-            "Ngày sinh không được trống",
-        )
-    if not email:
-        return (
-            None, user_id, full_name, None, None, class_id,
-            "Email không được trống",
-        )
-    if not class_id:
-        return (
-            None, user_id, full_name, email, None, class_id,
-            "Mã lớp không được trống",
-        )
-
-    try:
-        _EmailCheck(email=email)
-    except ValidationError:
-        return (
-            None, user_id, full_name, email, None, class_id,
-            "Email không đúng định dạng",
-        )
-
-    try:
-        parsed_date = parse_date_of_birth(date_str)
-    except ValueError as err:
-        return (
-            None, user_id, full_name, email, None, class_id,
-            str(err),
-        )
-
-    if class_id not in existing_class_ids:
-        return (
-            None, user_id, full_name, email, None, class_id,
-            f"Mã lớp {class_id} không tồn tại trong hệ thống",
-        )
-
-    email_lower = email.lower()
-    user_id_lower = user_id.lower()
-
-    if user_id_lower in seen_user_ids:
-        return (
-            None, user_id, full_name, email, None, class_id,
-            "user_id đã xuất hiện trước đó trong file",
-        )
-    if email_lower in seen_emails:
-        return (
-            None, user_id, full_name, email, None, class_id,
-            "Email đã xuất hiện trước đó trong file",
-        )
-    if user_id_lower in existing_user_ids:
-        return (
-            None, user_id, full_name, email, None, class_id,
-            "user_id đã tồn tại trong hệ thống",
-        )
-    if email_lower in existing_emails:
-        return (
-            None, user_id, full_name, email, None, class_id,
-            "Email đã tồn tại trong hệ thống",
-        )
-
-    student = User(
-        user_id=user_id,
-        full_name=full_name,
-        email=email,
-        hashed_password=hash_password(password_from_date(parsed_date)),
-        must_change_password=True,
-        date_of_birth=parsed_date,
-        role_id=Role.STUDENT,
-        class_id=class_id,
-    )
-    seen_user_ids.add(user_id_lower)
-    seen_emails.add(email_lower)
-    return student, user_id, full_name, email, date_str, class_id, None
+# Tên cột chuẩn → các cách viết tiêu đề được chấp nhận (đã strip + lower)
+HEADER_ALIASES = {
+    "stt": ("stt",),
+    "user_id": ("mã sinh viên", "ma sinh vien", "mssv"),
+    "full_name": ("họ và tên", "ho va ten", "họ tên", "ho ten"),
+    "class_id": ("lớp", "lop"),
+}
 
 
 def import_students(
     session: Session, contents: bytes, filename: str
 ) -> StudentImportResponse:
-    """Import danh sách sinh viên từ file Excel.
+    """Import danh sách sinh viên từ file danh sách lớp học phần."""
+    workbook = read_workbook(contents, filename, MAX_IMPORT_FILE_BYTES)
 
-    Xử lý theo từng dòng (best-effort, commit theo từng dòng):
-        - Mỗi dòng hợp lệ sẽ được ``session.add()`` và ``session.commit()``
-          ngay để đảm bảo một dòng lỗi không rollback cả batch.
-        - Mỗi dòng lỗi sẽ được đưa vào ``errors`` cùng lý do cụ thể.
+    rows, errors = _extract_rows(workbook)
+    students = _dedupe_students(rows, errors)
+    if len(students) > MAX_IMPORT_STUDENTS:
+        raise ExcelFileTooLargeError(
+            f"File có {len(students)} sinh viên, vượt quá giới hạn "
+            f"{MAX_IMPORT_STUDENTS} sinh viên mỗi lần import"
+        )
+
+    to_create, skipped = _split_existing(session, students, errors)
+    _create_missing_classes(session, to_create)
+    created = _save_students(session, to_create, errors)
+
+    sheet_order = {sheet.name: index for index, sheet in enumerate(workbook.sheets)}
+    errors.sort(key=lambda error: (sheet_order.get(error.sheet, 0), error.row))
+    return StudentImportResponse(created=created, skipped=skipped, errors=errors)
+
+
+# ---------- Bốc tách dữ liệu từ JSON của file Excel ----------
+
+
+def _extract_rows(
+    workbook: ExcelWorkbook,
+) -> tuple[list[StudentImportRow], list[StudentImportErrorRow]]:
+    """Duyệt mọi sheet, lấy các dòng sinh viên trong bảng của từng sheet."""
+    rows: list[StudentImportRow] = []
+    errors: list[StudentImportErrorRow] = []
+    found_header = False
+
+    for sheet in workbook.sheets:
+        header = _find_header(sheet)
+        if header is None:
+            continue  # sheet không theo mẫu (vd sheet ghi chú) thì bỏ qua
+        found_header = True
+        header_index, columns = header
+
+        # "Họ và tên" gộp 2 ô: chỉ lấy thêm ô bên phải khi tiêu đề của ô đó trống
+        name_col = columns["full_name"]
+        name_has_two_cells = _cell(sheet.rows[header_index], name_col + 1) == ""
+
+        for index in range(header_index + 1, len(sheet.rows)):
+            row = sheet.rows[index]
+            user_id = _cell(row, columns["user_id"])
+            if not _cell(row, columns["stt"]).isdigit() and not user_id:
+                if any(row):
+                    break  # hết bảng, tới phần chân trang
+                continue  # dòng trống giữa bảng: bỏ qua, đọc tiếp
+
+            name_parts = [_cell(row, name_col)]
+            if name_has_two_cells:
+                name_parts.append(_cell(row, name_col + 1))
+            full_name = " ".join(part for part in name_parts if part)
+            class_id = _cell(row, columns["class_id"])
+            if not (user_id or full_name or class_id):
+                continue  # dòng chỉ có STT, chưa điền gì
+
+            try:
+                rows.append(
+                    StudentImportRow(
+                        sheet=sheet.name,
+                        row=index + 1,
+                        user_id=user_id,
+                        full_name=full_name,
+                        class_id=class_id,
+                    )
+                )
+            except AppError as err:
+                errors.append(
+                    StudentImportErrorRow(
+                        sheet=sheet.name,
+                        row=index + 1,
+                        user_id=user_id or None,
+                        reason=err.message,
+                    )
+                )
+
+    if not found_header:
+        raise InvalidExcelFormatError(
+            "File không đúng mẫu danh sách lớp: không tìm thấy hàng tiêu đề "
+            "có các cột STT, Mã sinh viên, Họ và tên, Lớp"
+        )
+    return rows, errors
+
+
+def _find_header(sheet: ExcelSheet) -> tuple[int, dict[str, int]] | None:
+    """Tìm hàng tiêu đề, trả về ``(chỉ số hàng, {tên cột chuẩn: chỉ số cột})``."""
+    for index, row in enumerate(sheet.rows[:HEADER_SEARCH_ROWS]):
+        columns: dict[str, int] = {}
+        for col, cell in enumerate(row):
+            label = unicodedata.normalize("NFC", cell).strip().lower()
+            for key, aliases in HEADER_ALIASES.items():
+                if label in aliases and key not in columns:
+                    columns[key] = col
+        if len(columns) == len(HEADER_ALIASES):
+            return index, columns
+    return None
+
+
+def _cell(row: list[str], index: int) -> str:
+    """Lấy ô thứ ``index``; hàng ngắn hơn (đã bỏ ô trống cuối) thì trả ``""``."""
+    return row[index] if index < len(row) else ""
+
+
+def _dedupe_students(
+    rows: list[StudentImportRow], errors: list[StudentImportErrorRow]
+) -> list[StudentImportRow]:
+    """Gộp MSSV xuất hiện nhiều lần (một SV học nhiều lớp học phần).
+
+    Cùng họ tên và lớp → giữ lần đầu. Khác thông tin → dòng sau bị lỗi.
     """
-    parsed_rows = _parse_excel(contents, filename, MAX_IMPORT_ROWS)
+    unique: dict[str, StudentImportRow] = {}
+    for row in rows:
+        first = unique.get(row.user_id)
+        if first is None:
+            unique[row.user_id] = row
+        elif (first.full_name, first.class_id) != (row.full_name, row.class_id):
+            errors.append(
+                StudentImportErrorRow(
+                    sheet=row.sheet,
+                    row=row.row,
+                    user_id=row.user_id,
+                    reason=(
+                        f"Mã sinh viên trùng với dòng {first.row} (sheet {first.sheet}) "
+                        "nhưng khác họ tên hoặc lớp"
+                    ),
+                )
+            )
+    return list(unique.values())
 
-    # Tập trung query một lần để check trùng với DB
-    user_ids_to_check = {row[1].lower() for row in parsed_rows if row[1]}
-    emails_to_check = {row[4].lower() for row in parsed_rows if row[4]}
-    class_ids_to_check = {row[5] for row in parsed_rows if row[5]}
 
-    existing_user_ids: set[str] = set()
-    if user_ids_to_check:
-        rows = session.exec(
-            select(User.user_id).where(User.user_id.in_(user_ids_to_check))
-        ).all()
-        existing_user_ids = {r.lower() for r in rows}
+# ---------- Đối chiếu với DB và lưu ----------
 
-    existing_emails: set[str] = set()
-    if emails_to_check:
-        rows = session.exec(
-            select(User.email).where(User.email.in_(emails_to_check))
-        ).all()
-        existing_emails = {r.lower() for r in rows}
 
-    existing_class_ids: set[str] = set()
-    if class_ids_to_check:
-        rows = session.exec(
-            select(Class.class_id).where(Class.class_id.in_(class_ids_to_check))
-        ).all()
-        existing_class_ids = set(rows)
+def _student_email(user_id: str) -> str:
+    return f"{user_id}@{STUDENT_EMAIL_DOMAIN}"
+
+
+def _split_existing(
+    session: Session,
+    students: list[StudentImportRow],
+    errors: list[StudentImportErrorRow],
+) -> tuple[list[StudentImportRow], list[StudentImportSkippedRow]]:
+    """Tách SV đã có tài khoản (skipped) và SV bị trùng email (errors)."""
+    if not students:
+        return [], []
+
+    user_ids = [student.user_id for student in students]
+    emails = [_student_email(user_id) for user_id in user_ids]
+    existing_user_ids = set(
+        session.exec(select(User.user_id).where(User.user_id.in_(user_ids))).all()
+    )
+    taken_emails = set(
+        session.exec(select(User.email).where(User.email.in_(emails))).all()
+    )
+
+    to_create: list[StudentImportRow] = []
+    skipped: list[StudentImportSkippedRow] = []
+    for student in students:
+        if student.user_id in existing_user_ids:
+            skipped.append(
+                StudentImportSkippedRow(
+                    sheet=student.sheet,
+                    row=student.row,
+                    user_id=student.user_id,
+                    reason="Sinh viên đã có tài khoản",
+                )
+            )
+        elif _student_email(student.user_id) in taken_emails:
+            errors.append(
+                StudentImportErrorRow(
+                    sheet=student.sheet,
+                    row=student.row,
+                    user_id=student.user_id,
+                    reason=(
+                        f"Email {_student_email(student.user_id)} "
+                        "đã được dùng cho tài khoản khác"
+                    ),
+                )
+            )
+        else:
+            to_create.append(student)
+    return to_create, skipped
+
+
+def _create_missing_classes(session: Session, students: list[StudentImportRow]) -> None:
+    """Tạo các lớp hành chính chưa có, vd ``CQ.67.CNTT`` → CQ / 67 / CNTT."""
+    class_ids = {student.class_id for student in students}
+    if not class_ids:
+        return
+    existing = set(
+        session.exec(select(Class.class_id).where(Class.class_id.in_(class_ids))).all()
+    )
+    missing = sorted(class_ids - existing)
+    if not missing:
+        return
+
+    for class_id in missing:
+        # StudentImportRow đã kiểm tra mã lớp nên parse ở đây không raise
+        parts = parse_class_id(class_id)
+        session.add(
+            Class(
+                class_id=parts.class_id,
+                type=parts.type,
+                course_number=parts.course_number,
+                department=parts.department,
+            )
+        )
+    session.commit()
+
+
+def _save_students(
+    session: Session,
+    students: list[StudentImportRow],
+    errors: list[StudentImportErrorRow],
+) -> list[StudentImportCreatedRow]:
+    """Băm mật khẩu song song rồi lưu từng sinh viên."""
+    passwords = [student_temp_password(student.user_id) for student in students]
+    # bcrypt nhả GIL khi băm nên các thread chạy song song thật sự
+    with ThreadPoolExecutor(max_workers=HASH_WORKERS) as pool:
+        hashed_passwords = list(pool.map(hash_password, passwords))
 
     created: list[StudentImportCreatedRow] = []
-    errors: list[StudentImportErrorRow] = []
-    seen_user_ids: set[str] = set()
-    seen_emails: set[str] = set()
-
-    for (
-        row_index,
-        user_id,
-        full_name,
-        date_str,
-        email,
-        class_id,
-    ) in parsed_rows:
+    for student, password, hashed in zip(
+        students, passwords, hashed_passwords, strict=True
+    ):
+        email = _student_email(student.user_id)
+        session.add(
+            User(
+                user_id=student.user_id,
+                full_name=student.full_name,
+                email=email,
+                hashed_password=hashed,
+                must_change_password=True,
+                role_id=Role.STUDENT,
+                class_id=student.class_id,
+            )
+        )
         try:
-            (
-                student,
-                final_user_id,
-                final_full_name,
-                final_email,
-                final_date,
-                _final_class_id,
-                error_reason,
-            ) = _validate_row(
-                row_index,
-                user_id,
-                full_name,
-                date_str,
-                email,
-                class_id,
-                seen_user_ids,
-                seen_emails,
-                existing_user_ids,
-                existing_emails,
-                existing_class_ids,
-            )
-        except Exception as err:  # bảo vệ ngoại lệ không lường trước trong validate
-            errors.append(
-                StudentImportErrorRow(
-                    row=row_index,
-                    email=email or None,
-                    date_of_birth=date_str or None,
-                    reason=f"Lỗi không xác định: {err}",
-                )
-            )
-            continue
-
-        if error_reason is not None:
-            errors.append(
-                StudentImportErrorRow(
-                    row=row_index,
-                    email=final_email,
-                    date_of_birth=final_date,
-                    reason=error_reason,
-                )
-            )
-            continue
-
-        # Commit theo từng dòng: lỗi DB ở dòng này không ảnh hưởng dòng khác
-        try:
-            session.add(student)
             session.commit()
-            session.refresh(student)
-        except Exception as err:
+        except IntegrityError:
             session.rollback()
+            errors.append(_save_error(student, "Mã sinh viên hoặc email đã tồn tại"))
+            continue
+        except SQLAlchemyError:
+            session.rollback()
+            logger.exception("Không lưu được sinh viên %s khi import", student.user_id)
             errors.append(
-                StudentImportErrorRow(
-                    row=row_index,
-                    email=final_email,
-                    date_of_birth=final_date,
-                    reason=f"Lỗi khi lưu vào cơ sở dữ liệu: {err}",
-                )
+                _save_error(student, "Không lưu được dòng này, vui lòng thử lại")
             )
             continue
 
         created.append(
             StudentImportCreatedRow(
-                user_id=final_user_id,
-                full_name=final_full_name,
-                email=final_email,
-                date_of_birth=final_date,
-                temporary_password=password_from_date(student.date_of_birth),
+                user_id=student.user_id,
+                full_name=student.full_name,
+                email=email,
+                class_id=student.class_id,
+                temporary_password=password,
             )
         )
+    return created
 
-    return StudentImportResponse(created=created, errors=errors)
+
+def _save_error(student: StudentImportRow, reason: str) -> StudentImportErrorRow:
+    return StudentImportErrorRow(
+        sheet=student.sheet, row=student.row, user_id=student.user_id, reason=reason
+    )

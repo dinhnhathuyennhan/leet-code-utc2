@@ -7,6 +7,7 @@ Hai hàm ngược chiều nhau nên lớp tạo bằng tay và lớp tạo khi i
 cùng một định dạng.
 """
 
+import unicodedata
 from typing import NamedTuple
 
 from pydantic import BaseModel, field_validator, model_validator
@@ -16,6 +17,10 @@ from app.core.Validator import required_text
 
 
 CLASS_ID_MAX_LEN = 50
+DEPARTMENT_RULE = (
+    "chỉ được gồm chữ cái, chữ số và các ký tự . & - "
+    "(dấu chấm không được ở đầu, ở cuối hoặc đứng liền nhau)"
+)
 
 
 class ClassIdParts(NamedTuple):
@@ -35,7 +40,7 @@ def parse_class_id(value) -> ClassIdParts:
 
     ``CQ.67.CNTT`` → CQ / 67 / CNTT; ``CQ.67.KTXDCTGT.2`` → CQ / 67 / KTXDCTGT.2.
     """
-    class_id = required_text(value, "Mã lớp không được trống")
+    class_id = unicodedata.normalize("NFC", required_text(value, "Mã lớp không được trống"))
     _check_class_id_length(class_id)
     parts = class_id.split(".", 2)
     if (
@@ -47,12 +52,28 @@ def parse_class_id(value) -> ClassIdParts:
             f"Mã lớp {class_id} không đúng dạng <hệ>.<khoá>.<ngành> (vd CQ.67.CNTT)"
         )
     class_type, course_number, department = parts
+    if not _is_valid_department(department):
+        raise InvalidFormatError(f"Mã lớp {class_id} có ngành {DEPARTMENT_RULE}")
     return ClassIdParts(class_id, class_type, int(course_number), department)
 
 
 def _check_class_id_length(class_id: str) -> None:
     if len(class_id) > CLASS_ID_MAX_LEN:
         raise InvalidFormatError(f"Mã lớp không được dài quá {CLASS_ID_MAX_LEN} ký tự")
+
+
+def _is_valid_department(department: str) -> bool:
+    """Ngành theo file thật: ``CNTT``, ``KTXDCTGT.2``, ``XDDD&CN.1``, ``TC-NH``, ``ĐK&TTĐSHĐ``.
+
+    Chặn ``/`` (lớp sẽ không gọi được qua ``/classes/{class_id}``), khoảng trắng
+    và các ký tự đặc biệt khác.
+    """
+    return (
+        all(ch.isalpha() or ch in "0123456789.&-" for ch in department)
+        and not department.startswith(".")
+        and not department.endswith(".")
+        and ".." not in department
+    )
 
 
 class CreateClassRequest(BaseModel):
@@ -90,7 +111,14 @@ class CreateClassRequest(BaseModel):
     @field_validator("department", mode="before")
     @classmethod
     def validate_department(cls, value) -> str:
-        return required_text(value, "Ngành không được trống")
+        # required_text gọi str(), nên phải chặn list/dict/số trước,
+        # nếu không ["CNTT"] sẽ thành ngành "['CNTT']"
+        if value is not None and not isinstance(value, str):
+            raise InvalidFormatError("Ngành phải là chuỗi")
+        department = unicodedata.normalize("NFC", required_text(value, "Ngành không được trống"))
+        if not _is_valid_department(department):
+            raise InvalidFormatError(f"Ngành {DEPARTMENT_RULE}")
+        return department
 
     @model_validator(mode="after")
     def validate_class_id_length(self) -> "CreateClassRequest":

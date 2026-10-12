@@ -5,6 +5,8 @@ thành ``ValidationError``). Chỉ lỗi sai kiểu dữ liệu do chính pydant
 (vd ``course_number = "abc"``) mới ra ``ValidationError``.
 """
 
+import unicodedata
+
 import pytest
 from pydantic import ValidationError
 
@@ -62,6 +64,40 @@ def test_parse_class_id_empty_raises(value):
 def test_parse_class_id_wrong_format_raises(value):
     with pytest.raises(InvalidFormatError, match="không đúng dạng"):
         parse_class_id(value)
+
+
+# Ngành theo đúng các dạng có trong file "DS lớp học phần" thật
+REAL_DEPARTMENTS = ["CNTT", "KTXDCTGT.2", "CLC.KTOTO", "XDDD&CN.1", "TC-NH", "ĐK&TTĐSHĐ", "CĐA-CLC"]
+INVALID_DEPARTMENTS = [
+    "CNTT/1",  # "/" làm lớp không gọi được qua /classes/{class_id}
+    "CN TT",
+    "CNTT?x",
+    "CNTT#1",
+    "CNTT_1",
+    "CNTT@",
+    "..",
+    ".CNTT",
+    "CNTT.",
+    "CNTT..1",
+]
+
+
+@pytest.mark.parametrize("department", REAL_DEPARTMENTS)
+def test_parse_class_id_accepts_real_departments(department):
+    assert parse_class_id(f"CQ.67.{department}").department == department
+
+
+@pytest.mark.parametrize("department", INVALID_DEPARTMENTS)
+def test_parse_class_id_rejects_invalid_department(department):
+    with pytest.raises(InvalidFormatError, match="có ngành chỉ được gồm chữ cái, chữ số"):
+        parse_class_id(f"CQ.67.{department}")
+
+
+def test_parse_class_id_normalizes_unicode():
+    """Cùng chữ "Kiến" nhưng gõ kiểu tổ hợp (NFD) vẫn ra cùng một mã lớp."""
+    decomposed = unicodedata.normalize("NFD", "CQ.67.Kiến")
+
+    assert parse_class_id(decomposed).class_id == "CQ.67.Kiến"
 
 
 def test_parse_class_id_too_long_raises():
@@ -154,6 +190,30 @@ def test_create_request_type_must_be_ascii_letters(class_type):
 def test_create_request_empty_department_raises(department):
     with pytest.raises(EmptyFieldError, match="Ngành không được trống"):
         _request(department=department)
+
+
+@pytest.mark.parametrize("department", REAL_DEPARTMENTS)
+def test_create_request_accepts_real_departments(department):
+    assert _request(department=department).class_id == f"CQ.67.{department}"
+
+
+@pytest.mark.parametrize("department", INVALID_DEPARTMENTS)
+def test_create_request_rejects_invalid_department(department):
+    with pytest.raises(InvalidFormatError, match="Ngành chỉ được gồm chữ cái, chữ số"):
+        _request(department=department)
+
+
+@pytest.mark.parametrize("department", [["CNTT"], {"x": 1}, 123])
+def test_create_request_department_must_be_string(department):
+    with pytest.raises(InvalidFormatError, match="Ngành phải là chuỗi"):
+        _request(department=department)
+
+
+def test_create_request_normalizes_unicode_department():
+    request = _request(department=unicodedata.normalize("NFD", "Kiến"))
+
+    assert request.department == "Kiến"
+    assert request.class_id == "CQ.67.Kiến"
 
 
 @pytest.mark.parametrize("course_number", [0, -1, "0", True, False])

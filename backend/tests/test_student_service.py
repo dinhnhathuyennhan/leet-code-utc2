@@ -256,6 +256,9 @@ def test_import_creates_missing_classes(session, class_list_xlsx):
                 ("6751071001", "Nguyễn Văn", "An", "CQ.67.CNTT"),
                 ("6751071002", "Trần Thị", "Bình", "CQ.67.KTXDCTGT.2"),
                 ("6751071003", "Lê", "Cường", "CQ.67.CLC.KTOTO"),
+                ("6751071004", "Phạm", "Dũng", "CQ.67.XDDD&CN.1"),
+                ("6751071005", "Võ", "Em", "CQ.67.TC-NH"),
+                ("6751071006", "Đỗ", "Giang", "CQ.67.ĐK&TTĐSHĐ"),
             ]
         }
     )
@@ -270,6 +273,9 @@ def test_import_creates_missing_classes(session, class_list_xlsx):
         "CQ.67.CNTT": ("CQ", 67, "CNTT"),
         "CQ.67.KTXDCTGT.2": ("CQ", 67, "KTXDCTGT.2"),
         "CQ.67.CLC.KTOTO": ("CQ", 67, "CLC.KTOTO"),
+        "CQ.67.XDDD&CN.1": ("CQ", 67, "XDDD&CN.1"),
+        "CQ.67.TC-NH": ("CQ", 67, "TC-NH"),
+        "CQ.67.ĐK&TTĐSHĐ": ("CQ", 67, "ĐK&TTĐSHĐ"),
     }
 
 
@@ -314,6 +320,9 @@ def test_import_does_not_create_class_for_skipped_or_invalid_rows(session, class
         "C" * 51,
         "CQ.\uff16\uff17.CNTT",  # "67" full-width: isdigit() là True nhưng int() lỗi
         "CQ.\u00b2\u2076.CNTT",  # "²⁶" (số mũ): tương tự
+        "CQ.67.CNTT/1",  # ngành có "/": lớp sẽ không gọi được qua /classes/{class_id}
+        "CQ.67.CN TT",
+        "CQ.67..CNTT",
     ],
 )
 def test_import_rejects_invalid_class_id(session, class_list_xlsx, class_id):

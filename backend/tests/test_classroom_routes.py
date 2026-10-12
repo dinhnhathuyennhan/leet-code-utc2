@@ -134,6 +134,13 @@ def test_create_duplicate_class_returns_409(client, session):
         ({**CNTT_67, "course_number": 0}, "INVALID_FORMAT", "Khoá phải là số nguyên dương"),
         ({**CNTT_67, "course_number": True}, "INVALID_FORMAT", "Khoá phải là số nguyên dương"),
         ({**CNTT_67, "department": "X" * 45}, "INVALID_FORMAT", "Mã lớp không được dài quá 50 ký tự"),
+        (
+            {**CNTT_67, "department": "CNTT/1"},
+            "INVALID_FORMAT",
+            "Ngành chỉ được gồm chữ cái, chữ số và các ký tự . & - "
+            "(dấu chấm không được ở đầu, ở cuối hoặc đứng liền nhau)",
+        ),
+        ({**CNTT_67, "department": ["CNTT"]}, "INVALID_FORMAT", "Ngành phải là chuỗi"),
     ],
 )
 def test_create_class_invalid_body_returns_422_with_message(client, body, error_code, message):

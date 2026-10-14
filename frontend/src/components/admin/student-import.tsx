@@ -1,7 +1,13 @@
 "use client";
 
 import { useRef, useState } from "react";
-import { CheckCircle2, FileSpreadsheet, Loader2, Upload, XCircle } from "lucide-react";
+import {
+  CheckCircle2,
+  FileSpreadsheet,
+  Loader2,
+  Upload,
+  XCircle,
+} from "lucide-react";
 import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
@@ -50,7 +56,11 @@ export function StudentImport() {
         toast.info(summary);
       }
     } catch (error) {
-      toast.error(error instanceof ApiError ? error.detail : "Không thể nhập danh sách sinh viên.");
+      toast.error(
+        error instanceof ApiError
+          ? error.detail
+          : "Không thể nhập danh sách sinh viên.",
+      );
     } finally {
       setIsSubmitting(false);
     }
@@ -59,12 +69,15 @@ export function StudentImport() {
   return (
     <div className="space-y-6">
       <div>
-        <p className="text-sm font-medium text-indigo-700">Quản lý tài khoản / Nhập danh sách từ Excel</p>
+        <p className="text-sm font-medium text-indigo-700">
+          Quản lý tài khoản / Nhập danh sách từ Excel
+        </p>
         <h1 className="mt-1 text-3xl font-bold tracking-tight text-slate-900 dark:text-white">
           Nhập danh sách Sinh viên từ Excel
         </h1>
         <p className="mt-1 text-sm text-slate-500">
-          Tải lên danh sách lớp học phần để kiểm tra dữ liệu và cấp tài khoản sinh viên hàng loạt.
+          Tải lên danh sách lớp học phần để kiểm tra dữ liệu và cấp tài khoản
+          sinh viên hàng loạt.
         </p>
       </div>
 
@@ -72,10 +85,12 @@ export function StudentImport() {
         <span className="rounded-full bg-white/15 px-3 py-1 text-xs font-medium">
           Use-case: Cấp phát tài khoản hàng loạt
         </span>
-        <h2 className="mt-4 text-2xl font-bold">Nhập danh sách Sinh viên từ Excel</h2>
+        <h2 className="mt-4 text-2xl font-bold">
+          Nhập danh sách Sinh viên từ Excel
+        </h2>
         <p className="mt-1 max-w-3xl text-sm text-purple-100">
-          Hệ thống kiểm tra từng dòng, tự sinh email và mật khẩu tạm từ mã sinh viên, đồng thời tạo
-          lớp hành chính chưa có.
+          Hệ thống kiểm tra từng dòng, tự sinh email và mật khẩu tạm từ mã sinh
+          viên, đồng thời tạo lớp hành chính chưa có.
         </p>
       </section>
 
@@ -141,8 +156,16 @@ export function StudentImport() {
               onClick={() => void upload()}
               className="bg-[#352078] hover:bg-[#29175f]"
             >
-              {isSubmitting ? <Loader2 className="size-4 animate-spin" /> : <Upload className="size-4" />}
-              {isSubmitting ? "Đang tạo tài khoản..." : result ? "Đã nhập file" : "Tải lên và tạo tài khoản"}
+              {isSubmitting ? (
+                <Loader2 className="size-4 animate-spin" />
+              ) : (
+                <Upload className="size-4" />
+              )}
+              {isSubmitting
+                ? "Đang tạo tài khoản..."
+                : result
+                  ? "Đã nhập file"
+                  : "Tải lên và tạo tài khoản"}
             </Button>
           </div>
         </section>
@@ -152,7 +175,8 @@ export function StudentImport() {
           <ul className="mt-4 space-y-3 text-sm text-slate-600 dark:text-slate-300">
             <li className="flex gap-2">
               <CheckCircle2 className="mt-0.5 size-4 shrink-0 text-emerald-500" />
-              Dùng mẫu danh sách lớp học phần với các cột STT, Mã sinh viên (MSSV), Họ và tên, Lớp.
+              Dùng mẫu danh sách lớp học phần với các cột STT, Mã sinh viên
+              (MSSV), Họ và tên, Lớp.
             </li>
             <li className="flex gap-2">
               <CheckCircle2 className="mt-0.5 size-4 shrink-0 text-emerald-500" />
@@ -160,11 +184,13 @@ export function StudentImport() {
             </li>
             <li className="flex gap-2">
               <CheckCircle2 className="mt-0.5 size-4 shrink-0 text-emerald-500" />
-              Mã lớp theo dạng &lt;hệ&gt;.&lt;khóa&gt;.&lt;ngành&gt;, ví dụ CQ.67.CNTT.
+              Mã lớp theo dạng &lt;hệ&gt;.&lt;khóa&gt;.&lt;ngành&gt;, ví dụ
+              CQ.67.CNTT.
             </li>
             <li className="flex gap-2">
               <CheckCircle2 className="mt-0.5 size-4 shrink-0 text-emerald-500" />
-              Email có dạng MSSV@st.utc2.edu.vn; mật khẩu tạm là MSSV và phải đổi sau lần đăng nhập đầu.
+              Email có dạng MSSV@st.utc2.edu.vn; mật khẩu tạm là MSSV và phải
+              đổi sau lần đăng nhập đầu.
             </li>
           </ul>
         </section>
@@ -243,7 +269,10 @@ export function StudentImport() {
                 </thead>
                 <tbody>
                   {result.skipped.map((row) => (
-                    <tr key={`${row.sheet}-${row.row}-${row.user_id}`} className="border-t border-amber-100">
+                    <tr
+                      key={`${row.sheet}-${row.row}-${row.user_id}`}
+                      className="border-t border-amber-100"
+                    >
                       <td className="px-4 py-3">{row.sheet}</td>
                       <td className="px-4 py-3">{row.row}</td>
                       <td className="px-4 py-3">{row.user_id}</td>
@@ -272,7 +301,10 @@ export function StudentImport() {
                 </thead>
                 <tbody>
                   {result.errors.map((row) => (
-                    <tr key={`${row.sheet}-${row.row}-${row.user_id ?? ""}`} className="border-t border-rose-100">
+                    <tr
+                      key={`${row.sheet}-${row.row}-${row.user_id ?? ""}`}
+                      className="border-t border-rose-100"
+                    >
                       <td className="px-4 py-3">{row.sheet}</td>
                       <td className="px-4 py-3">{row.row}</td>
                       <td className="px-4 py-3">{row.user_id || "—"}</td>

@@ -13,26 +13,26 @@ export interface StatItem {
 
 export function CourseStatsBar({ items }: { items: StatItem[] }) {
   return (
-    <div className="flex flex-wrap gap-2 rounded-2xl bg-indigo-50/70 p-1.5 dark:bg-slate-800/50">
+    <div className="inline-grid grid-cols-3 gap-2 rounded-xl bg-indigo-50/70 p-2 dark:bg-slate-800/50">
       {items.map(({ icon: Icon, value, label, highlight }) => (
         <div
           key={label}
           className={cn(
-            "flex min-w-40 flex-1 items-center gap-3 rounded-xl px-4 py-3 sm:flex-none sm:pr-8",
+            "flex min-h-[76px] min-w-[145px] items-center gap-3 rounded-lg px-4 py-4",
             highlight ? "bg-amber-100 dark:bg-amber-500/20" : "bg-card",
           )}
         >
           <span
             className={cn(
-              "flex size-10 shrink-0 items-center justify-center rounded-lg",
+              "flex size-11 shrink-0 items-center justify-center rounded-lg",
               highlight ? "bg-amber-400 text-amber-950" : "bg-indigo-100 text-indigo-600 dark:bg-indigo-500/20 dark:text-indigo-300",
             )}
           >
             <Icon className="size-5" />
           </span>
           <div className="leading-tight">
-            <p className="text-xl font-bold">{value}</p>
-            <p className="text-sm text-muted-foreground">{label}</p>
+            <p className="text-2xl font-bold leading-6">{value}</p>
+            <p className="mt-1 text-sm text-muted-foreground">{label}</p>
           </div>
         </div>
       ))}

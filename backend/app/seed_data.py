@@ -1,3 +1,4 @@
+
 import logging
 import os
 from datetime import date, datetime
@@ -6,7 +7,9 @@ from sqlmodel import Session, func, or_, select
 
 from app.core.password import hash_password
 from app.db import engine
+
 from app.dependencies import Role
+from app.schemas.classroom import build_class_id
 from models import (
     Class,
     Course,
@@ -19,6 +22,7 @@ from models import (
 )
 
 logger = logging.getLogger("uvicorn.error")
+SEED_TEACHER_ID = "6451071003"
 
 # ---- Giá trị tự quy ước (models.py không ràng buộc), sửa tại đây nếu cần ----
 IO_TYPE = "string"
@@ -27,13 +31,12 @@ DEFAULT_CONSTRAINTS = "Đọc dữ liệu từ stdin, in kết quả ra stdout."
 
 # ---- Convention của dự án ----
 EMAIL_DOMAIN = "st.utc2.edu.vn"
-CLASS_TYPE = "Chính quy"
+CLASS_TYPE = "CQ"
 MAJOR_ABBR = "CNTT"
-MAJOR_NAME = "Công Nghệ Thông Tin"
 
 
 def class_id_of(course_number: int) -> str:
-    return f"CQ.{course_number}.{MAJOR_ABBR}"
+    return build_class_id(CLASS_TYPE, course_number, MAJOR_ABBR)
 
 
 # ---- Dữ liệu ----
@@ -158,10 +161,276 @@ SUBMISSIONS = [
     ("CS301-2026A", 1, "SV08", "cpp", "wrong_answer", 0, datetime(2026, 9, 19, 16, 45), None, "Chưa xử lý số âm"),
 ]
 
+# ===== LESSONS SEED (for JAVA01) =====
+SEED_LESSONS = [
+    {
+        "lesson_number": 1,
+        "lesson_name": "Biến, kiểu dữ liệu và cấu trúc rẽ nhánh",
+        "course_id": "JAVA01",
+        "total_number_assignment": 3,
+        "total_number_student_finished": 42,
+        "start_date": "2024-09-05",
+        "end_date": "2024-09-11",
+    },
+    {
+        "lesson_number": 2,
+        "lesson_name": "Mảng và vòng lặp",
+        "course_id": "JAVA01",
+        "total_number_assignment": 3,
+        "total_number_student_finished": 39,
+        "start_date": "2024-09-12",
+        "end_date": "2024-09-18",
+    },
+    {
+        "lesson_number": 3,
+        "lesson_name": "Chuỗi ký tự và Xử lý chuỗi (String)",
+        "course_id": "JAVA01",
+        "total_number_assignment": 3,
+        "total_number_student_finished": 0,
+        "start_date": "2024-09-19",
+        "end_date": "2024-09-25",
+    },
+]
+
+# ===== PROBLEMS SEED (for JAVA01, lesson 2 - Mảng và vòng lặp) =====
+SEED_PROBLEMS = [
+    {
+        "lesson_ref": 1,  # index in SEED_LESSONS
+        "title": "Tổng các phần tử trong mảng 1 chiều",
+        "description": "Cho mảng số nguyên A gồm N phần tử. Viết chương trình tính tổng toàn bộ các phần tử dương chẵn nằm trong mảng.",
+        "time_limit_seconds": 1,
+        "start_format_code": "import java.util.*;\npublic class Main {\n    public static void main(String[] args) {\n        // Write your code here\n    }\n}",
+        "constraints": "1 <= N <= 10^5, -10^9 <= A[i] <= 10^9",
+        "level": "easy",
+        "hint": "Duyệt qua từng phần tử, kiểm tra điều kiện dương và chẵn",
+        "complexity": "O(N)",
+        "start_datetime": datetime(2024, 9, 12, 7, 0, 0),
+        "end_datetime": datetime(2024, 9, 18, 23, 59, 59),
+        "total_number_testcase": 12,
+        "report": "ARR_01",
+    },
+    {
+        "lesson_ref": 1,  # index in SEED_LESSONS (lesson 2)
+        "title": "Đếm số phần tử xuất hiện nhiều nhất",
+        "description": "Cho mảng số nguyên A gồm N phần tử. Tìm giá trị xuất hiện nhiều nhất trong mảng.",
+        "time_limit_seconds": 1,
+        "start_format_code": "import java.util.*;\npublic class Main {\n    public static void main(String[] args) {\n        // Write your code here\n    }\n}",
+        "constraints": "1 <= N <= 10^5, 1 <= A[i] <= 10^9",
+        "level": "medium",
+        "hint": "Dùng HashMap để đếm tần suất",
+        "complexity": "O(N)",
+        "start_datetime": datetime(2024, 9, 12, 7, 0, 0),
+        "end_datetime": datetime(2024, 9, 18, 23, 59, 59),
+        "total_number_testcase": 12,
+        "report": "ARR_02",
+    },
+    {
+        "lesson_ref": 1,  # index in SEED_LESSONS (lesson 2)
+        "title": "Sắp xếp mảng MergeSort",
+        "description": "Cho mảng số nguyên A gồm N phần tử. Sắp xếp mảng theo thứ tự không giảm dần bằng thuật toán MergeSort.",
+        "time_limit_seconds": 1,
+        "start_format_code": "import java.util.*;\npublic class Main {\n    public static void main(String[] args) {\n        // Write your code here\n    }\n}",
+        "constraints": "1 <= N <= 10^5, -10^9 <= A[i] <= 10^9",
+        "level": "medium",
+        "hint": "Chia đôi mảng, đệ quy sắp xếp từng nửa, sau đó merge lại",
+        "complexity": "O(N log N)",
+        "start_datetime": datetime(2024, 9, 12, 7, 0, 0),
+        "end_datetime": datetime(2024, 9, 18, 23, 59, 59),
+        "total_number_testcase": 12,
+        "report": "ARR_03",
+    },
+    {
+        "lesson_ref": 2,  # lesson 3 (Chuỗi ký tự)
+        "title": "Đảo ngược chuỗi",
+        "description": "Cho chuỗi ký tự S. Viết chương trình đảo ngược chuỗi đó.",
+        "time_limit_seconds": 1,
+        "start_format_code": "import java.util.*;\npublic class Main {\n    public static void main(String[] args) {\n        // Write your code here\n    }\n}",
+        "constraints": "1 <= |S| <= 10^5",
+        "level": "easy",
+        "hint": "Dùng StringBuilder hoặc duyệt từ cuối về đầu",
+        "complexity": "O(N)",
+        "start_datetime": datetime(2024, 9, 19, 7, 0, 0),
+        "end_datetime": datetime(2024, 9, 25, 23, 59, 59),
+        "total_number_testcase": 10,
+        "report": "STR_01",
+    },
+]
+
+# ===== SUBMISSIONS SEED =====
+SEED_SUBMISSIONS = [
+    # Submissions for problem ARR_01 (lesson 2, problem 1)
+    {
+        "problem_ref": 0,  # index in SEED_PROBLEMS
+        "student_id": "2151129801",
+        "language": "java",
+        "submitted_code": "// Accepted solution\nimport java.util.*;\npublic class Main { public static void main(String[] args) { Scanner sc = new Scanner(System.in); int n = sc.nextInt(); int[] a = new int[n]; for(int i=0;i<n;i++) a[i]=sc.nextInt(); long sum=0; for(int x:a) if(x>0&&x%2==0) sum+=x; System.out.println(sum); } }",
+        "status": "accepted",
+        "passed_count": 12,
+        "submitted_datetime": datetime(2024, 9, 15, 10, 20, 0),
+    },
+    {
+        "problem_ref": 0,
+        "student_id": "2151129802",
+        "language": "java",
+        "submitted_code": "// Wrong answer\nimport java.util.*;\npublic class Main { public static void main(String[] args) { Scanner sc = new Scanner(System.in); int n = sc.nextInt(); long sum=0; for(int i=0;i<n;i++){int x=sc.nextInt(); if(x%2==0) sum+=x;} System.out.println(sum); } }",
+        "status": "wrong_answer",
+        "passed_count": 8,
+        "submitted_datetime": datetime(2024, 9, 13, 14, 45, 0),
+    },
+    {
+        "problem_ref": 0,
+        "student_id": "2151129803",
+        "language": "java",
+        "submitted_code": "// Compile error\nimport java.util.*;\npublic class Main { public static void main(String args) { System.out.println(missing_var); } }",
+        "status": "compile_error",
+        "compile_output": "Main.java:2: error: cannot find symbol\n  System.out.println(missing_var);",
+        "passed_count": 0,
+        "submitted_datetime": datetime(2024, 9, 14, 9, 0, 0),
+    },
+    {
+        "problem_ref": 0,
+        "student_id": "2151129804",
+        "language": "java",
+        "submitted_code": "// Compile error\nimport java.util.*;\npublic class Main { public static void main(String[] args) { int x = ; System.out.println(x); } }",
+        "status": "compile_error",
+        "compile_output": "Main.java:2: error: illegal start of expression",
+        "passed_count": 0,
+        "submitted_datetime": datetime(2024, 9, 14, 16, 30, 0),
+    },
+    {
+        "problem_ref": 0,
+        "student_id": "2151129805",
+        "language": "java",
+        "submitted_code": "// Similarity case\nimport java.util.*;\npublic class Main { public static void main(String[] args) { Scanner sc = new Scanner(System.in); int n = sc.nextInt(); int[] a = new int[n]; for(int i=0;i<n;i++) a[i]=sc.nextInt(); long sum=0; for(int x:a) if(x>0&&x%2==0) sum+=x; System.out.println(sum); } }",
+        "status": "accepted",
+        "passed_count": 12,
+        "submitted_datetime": datetime(2024, 9, 15, 10, 25, 0),
+    },
+    {
+        "problem_ref": 0,
+        "student_id": "2151129806",
+        "language": "java",
+        "submitted_code": "// Same as above - plagiarism\nimport java.util.*;\npublic class Main { public static void main(String[] args) { Scanner sc = new Scanner(System.in); int n = sc.nextInt(); int[] a = new int[n]; for(int i=0;i<n;i++) a[i]=sc.nextInt(); long s=0; for(int x:a) if(x>0&&x%2==0) s+=x; System.out.println(s); } }",
+        "status": "accepted",
+        "passed_count": 12,
+        "submitted_datetime": datetime(2024, 9, 15, 10, 28, 0),
+    },
+    {
+        "problem_ref": 0,
+        "student_id": "2151129807",
+        "language": "java",
+        "submitted_code": "// Wrong answer - late submission",
+        "status": "wrong_answer",
+        "passed_count": 5,
+        "submitted_datetime": datetime(2024, 9, 19, 8, 0, 0),  # late
+    },
+    # More submissions for other students
+    {
+        "problem_ref": 0,
+        "student_id": "2151129808",
+        "language": "java",
+        "submitted_code": "// Accepted",
+        "status": "accepted",
+        "passed_count": 12,
+        "submitted_datetime": datetime(2024, 9, 15, 11, 0, 0),
+    },
+    {
+        "problem_ref": 0,
+        "student_id": "2151129809",
+        "language": "java",
+        "submitted_code": "// Wrong answer",
+        "status": "wrong_answer",
+        "passed_count": 7,
+        "submitted_datetime": datetime(2024, 9, 16, 9, 30, 0),
+    },
+    {
+        "problem_ref": 0,
+        "student_id": "2151129810",
+        "language": "java",
+        "submitted_code": "// Late submission",
+        "status": "accepted",
+        "passed_count": 12,
+        "submitted_datetime": datetime(2024, 9, 19, 7, 30, 0),  # late
+    },
+    # Submissions for problem ARR_02
+    {
+        "problem_ref": 1,
+        "student_id": "2151129801",
+        "language": "java",
+        "submitted_code": "// Accepted solution for freq count",
+        "status": "accepted",
+        "passed_count": 12,
+        "submitted_datetime": datetime(2024, 9, 15, 14, 0, 0),
+    },
+    {
+        "problem_ref": 1,
+        "student_id": "2151129802",
+        "language": "java",
+        "submitted_code": "// Accepted",
+        "status": "accepted",
+        "passed_count": 12,
+        "submitted_datetime": datetime(2024, 9, 15, 14, 30, 0),
+    },
+    {
+        "problem_ref": 1,
+        "student_id": "2151129803",
+        "language": "java",
+        "submitted_code": "// Wrong answer",
+        "status": "wrong_answer",
+        "passed_count": 6,
+        "submitted_datetime": datetime(2024, 9, 16, 10, 0, 0),
+    },
+    # Submissions for ARR_03 (MergeSort) - some missing = deadline warning
+    {
+        "problem_ref": 2,
+        "student_id": "2151129801",
+        "language": "java",
+        "submitted_code": "// MergeSort accepted",
+        "status": "accepted",
+        "passed_count": 12,
+        "submitted_datetime": datetime(2024, 9, 17, 15, 0, 0),
+    },
+    {
+        "problem_ref": 2,
+        "student_id": "2151129802",
+        "language": "java",
+        "submitted_code": "// MergeSort wrong",
+        "status": "wrong_answer",
+        "passed_count": 4,
+        "submitted_datetime": datetime(2024, 9, 17, 16, 0, 0),
+    },
+]
+
+
+def _upsert_user(session: Session, data: dict, hashed_password: str) -> bool:
+    """Insert user nếu chưa tồn tại. Return True nếu tạo mới."""
+    exists = session.exec(
+        select(User).where(
+            or_(User.user_id == data["user_id"], User.email == data["email"])
+        )
+    ).first()
+    if exists:
+        if data.get("class_id") and exists.class_id != data["class_id"]:
+            exists.class_id = data["class_id"]
+            session.add(exists)
+        return False
+    session.add(User(**data, hashed_password=hashed_password))
+    return True
+
+
+def _upsert_course(session: Session, data: dict) -> Course | None:
+    """Insert course nếu chưa tồn tại. Return Course object."""
+    existing = session.get(Course, data["course_id"])
+    if existing:
+        return existing
+    course = Course(**data)
+    session.add(course)
+    session.flush()
+    return course
+
 
 class SeedStepError(Exception):
     """Một bước seed thất bại."""
-
 
 def _report(kind: str, created: list[str], total: int) -> None:
     for item in created:
@@ -185,7 +454,7 @@ def _seed_classes(session: Session) -> None:
                     class_id=class_id,
                     type=CLASS_TYPE,
                     course_number=course_number,
-                    department=MAJOR_NAME,
+                    department=MAJOR_ABBR,
                 )
             )
             created.append(class_id)

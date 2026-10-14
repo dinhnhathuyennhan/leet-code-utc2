@@ -1,5 +1,6 @@
 from fastapi import APIRouter, Depends, Query
 from sqlmodel import Session
+from starlette import status
 
 from app.db import get_session
 from app.dependencies import get_current_user, require_role, Role
@@ -20,7 +21,11 @@ from models import User
 router = APIRouter(tags=["user"])
 
 
-@router.post("/teachers", response_model=UserResponse)
+@router.post(
+    "/teachers",
+    response_model=UserResponse,
+    status_code=status.HTTP_201_CREATED,
+)
 def create_teacher_route(
     data: CreateTeacherRequest,
     session: Session = Depends(get_session),
@@ -30,7 +35,11 @@ def create_teacher_route(
     return user_response(teacher)
 
 
-@router.post("/students", response_model=UserResponse)
+@router.post(
+    "/students",
+    response_model=UserResponse,
+    status_code=status.HTTP_201_CREATED,
+)
 def create_student_route(
     data: CreateStudentRequest,
     session: Session = Depends(get_session),

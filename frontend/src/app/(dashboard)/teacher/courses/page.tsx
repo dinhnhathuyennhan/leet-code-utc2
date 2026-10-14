@@ -16,7 +16,7 @@ export default function TeacherCoursesPage() {
       isFetching={query.isFetching}
       error={query.error}
       onRetry={() => void query.refetch()}
-      hrefFor={(course) => `/teacher/courses/${course.id}`}
+      hrefFor={(course) => `/teacher/courses/${course.code || course.id}`}
     />
   );
 }

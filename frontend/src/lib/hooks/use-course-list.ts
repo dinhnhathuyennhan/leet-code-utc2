@@ -3,7 +3,7 @@
 import { useState } from "react";
 
 import { DEFAULT_TERM } from "@/lib/constants/academic";
-import { useCourses } from "@/lib/hooks/use-courses";
+import { useCourseTerms, useCourses } from "@/lib/hooks/use-courses";
 import { useDebouncedValue } from "@/lib/hooks/use-debounced-value";
 import type { CourseView } from "@/lib/types/course";
 
@@ -12,8 +12,10 @@ export interface CourseFilterState {
   setSearch: (value: string) => void;
   semester: number;
   setSemester: (value: number) => void;
+  semesters: number[];
   year: string;
   setYear: (value: string) => void;
+  years: string[];
   view: CourseView;
   setView: (value: CourseView) => void;
 }
@@ -22,16 +24,34 @@ export interface CourseFilterState {
 export function useCourseList() {
   const [search, setSearch] = useState("");
   const [semester, setSemester] = useState(DEFAULT_TERM.semester);
-  const [year, setYear] = useState(DEFAULT_TERM.academicYear);
+  const [year, setYear] = useState("");
   const [view, setView] = useState<CourseView>("grid");
 
   const debouncedSearch = useDebouncedValue(search, 300);
+  const terms = useCourseTerms();
+  const availableYears = terms.data?.academic_years ?? [];
+  const availableSemesters = terms.data?.semesters ?? [];
+  const selectedYear = availableYears.includes(year) ? year : (availableYears[0] ?? "");
+  const selectedSemester = availableSemesters.includes(semester)
+    ? semester
+    : (availableSemesters[0] ?? DEFAULT_TERM.semester);
   const query = useCourses({
     search: debouncedSearch.trim() || undefined,
-    semester,
-    academic_year: year,
+    semester: selectedSemester || undefined,
+    academic_year: selectedYear || undefined,
   });
 
-  const filters: CourseFilterState = { search, setSearch, semester, setSemester, year, setYear, view, setView };
+  const filters: CourseFilterState = {
+    search,
+    setSearch,
+    semester: selectedSemester,
+    setSemester,
+    year: selectedYear,
+    setYear,
+    semesters: availableSemesters.length ? availableSemesters : [1, 2, 3],
+    years: availableYears,
+    view,
+    setView,
+  };
   return { filters, query };
 }

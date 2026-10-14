@@ -4,8 +4,7 @@ import type { CourseSummary, CourseView } from "@/lib/types/course";
 import { cn } from "@/lib/utils";
 
 const LAYOUT: Record<CourseView, string> = {
-  // auto-fill: tự chia 2–5 cột theo bề rộng, không cần breakpoint thủ công
-  grid: "grid grid-cols-[repeat(auto-fill,minmax(15rem,1fr))] gap-5",
+  grid: "grid grid-cols-1 gap-5 sm:grid-cols-2 xl:grid-cols-5",
   list: "flex flex-col gap-3",
 };
 

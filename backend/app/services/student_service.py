@@ -39,6 +39,7 @@ from app.core.excel import (
 from app.core.exceptions import AppError
 from app.core.password import hash_password
 from app.dependencies import Role
+from app.schemas.classroom import parse_class_id
 from app.schemas.student import (
     StudentImportCreatedRow,
     StudentImportErrorRow,
@@ -268,14 +269,14 @@ def _create_missing_classes(session: Session, students: list[StudentImportRow]) 
         return
 
     for class_id in missing:
-        # StudentImportRow đã kiểm tra mã lớp có đủ 3 phần và khoá là số
-        class_type, course_number, department = class_id.split(".", 2)
+        # StudentImportRow đã kiểm tra mã lớp nên parse ở đây không raise
+        parts = parse_class_id(class_id)
         session.add(
             Class(
-                class_id=class_id,
-                type=class_type,
-                course_number=int(course_number),
-                department=department,
+                class_id=parts.class_id,
+                type=parts.type,
+                course_number=parts.course_number,
+                department=parts.department,
             )
         )
     session.commit()

@@ -133,7 +133,14 @@ export function RouteGuard({ children }: { children: React.ReactNode }) {
     }
   }, [auth, isHydrated, pathname, searchParams, router]);
   if (!isHydrated || auth.status === "loading") {
-    return <div className="h-[100dvh] w-full bg-slate-900" aria-busy="true" />;
+    return (
+      <div
+        className="flex h-[100dvh] w-full items-center justify-center bg-slate-900"
+        aria-busy="true"
+      >
+        <Loader2 className="animate-spin text-white size-8" />
+      </div>
+    );
   }
 
   // --- LUỒNG 2: Xử lý hiển thị màn hình 403 (Sai quyền) ---

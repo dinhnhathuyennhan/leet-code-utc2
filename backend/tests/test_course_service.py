@@ -6,6 +6,7 @@ from fastapi.testclient import TestClient
 from sqlalchemy.pool import StaticPool
 from sqlmodel import Session, SQLModel, create_engine, select
 
+from app.core.datetime_utils import VN_TZ
 from app.core.exceptions import (
     ConflictError,
     EmptyFieldError,
@@ -36,6 +37,11 @@ Sử dụng SQLite in-memory thao tác nhanh, không cần Postgres.
 
 
 # ============================== FIXTURES ==============================
+
+
+def vn(*args: int) -> datetime:
+    """Giờ VN có kèm múi giờ — API và DB không nhận datetime naive."""
+    return datetime(*args, tzinfo=VN_TZ)
 
 
 @pytest.fixture(name="session")
@@ -108,8 +114,8 @@ def course(session: Session, owner_teacher: User) -> Course:
         course_name="Nhập môn lập trình",
         created_by=owner_teacher.user_id,
         term="HK1 2026-2027",
-        start_date=datetime(2026, 9, 7),
-        end_date=datetime(2026, 12, 27),
+        start_date=vn(2026, 9, 7),
+        end_date=vn(2026, 12, 27),
         total_number_student=0,
     )
     session.add(course)
@@ -319,8 +325,8 @@ class TestGetCourseEnrollments:
 
 # ============================== CREATE / UPDATE COURSE ==============================
 
-VALID_START = datetime(2026, 9, 7)
-VALID_END = datetime(2026, 12, 27)
+VALID_START = vn(2026, 9, 7)
+VALID_END = vn(2026, 12, 27)
 
 
 def _make_create_request(
@@ -377,13 +383,13 @@ class TestCreateCourse:
                 course_id="CS303",
                 course_name="Sai ngày",
                 term="HK1 2026-2027",
-                start_date=datetime(2026, 12, 27),
-                end_date=datetime(2026, 9, 7),
+                start_date=vn(2026, 12, 27),
+                end_date=vn(2026, 9, 7),
             )
 
     # start_date bằng end_date cũng reject — validation tại schema layer
     def test_raises_invalid_format_when_start_equals_end(self, session, owner_teacher):
-        same_day = datetime(2026, 9, 7)
+        same_day = vn(2026, 9, 7)
         with pytest.raises(InvalidFormatError, match="start_date phải trước end_date"):
             CreateCourseRequest(
                 course_id="CS304",
@@ -507,17 +513,17 @@ class TestUpdateCourse:
     ):
         with pytest.raises(InvalidFormatError, match="start_date phải trước end_date"):
             UpdateCourseRequest(
-                start_date=datetime(2026, 12, 27),
-                end_date=datetime(2026, 9, 7),
+                start_date=vn(2026, 12, 27),
+                end_date=vn(2026, 9, 7),
             )
 
     # Có thể đổi end_date một mình nếu vẫn sau start_date hiện tại
     def test_can_update_only_end_date(self, session, course, owner_teacher):
-        update = UpdateCourseRequest(end_date=datetime(2027, 1, 15))
+        update = UpdateCourseRequest(end_date=vn(2027, 1, 15))
 
         result = update_course(course.course_id, update, session, owner_teacher)
 
-        assert result.end_date == datetime(2027, 1, 15)
+        assert result.end_date == vn(2027, 1, 15)
         assert result.start_date == course.start_date
 
     # Truyền chuỗi rỗng cho field optional → 422 EmptyFieldError
@@ -545,7 +551,7 @@ class TestUpdateCourse:
         with pytest.raises(InvalidFormatError, match="start_date phải trước end_date"):
             update_course(
                 course.course_id,
-                UpdateCourseRequest(start_date=datetime(2027, 1, 1)),
+                UpdateCourseRequest(start_date=vn(2027, 1, 1)),
                 session,
                 owner_teacher,
             )
@@ -559,7 +565,7 @@ class TestUpdateCourse:
         with pytest.raises(InvalidFormatError, match="start_date phải trước end_date"):
             update_course(
                 course.course_id,
-                UpdateCourseRequest(end_date=datetime(2026, 8, 1)),
+                UpdateCourseRequest(end_date=vn(2026, 8, 1)),
                 session,
                 owner_teacher,
             )
@@ -580,24 +586,65 @@ class TestUpdateCourse:
         assert result.course_name == original_name  # không bị ghi đè thành None
         assert result.term == "HK Mới"
 
-    # PATCH: start_date tz-aware + end_date tz-naive (khi chỉ gửi 1 trong 2)
-    # phải không gây TypeError → so sánh với giá trị DB ổn định
-    def test_update_with_tz_aware_datetime_does_not_raise_type_error(
-        self, session, course, owner_teacher
-    ):
-        # end_date trong DB là naive; gửi start_date tz-aware.
-        # Service phải chuẩn hoá rồi so sánh, không raise TypeError.
-        tz_aware = datetime(2026, 10, 1, tzinfo=UTC)
+
+# ============================== TIMEZONE ==============================
+# Quy ước: input datetime bắt buộc kèm offset, DB lưu UTC, response trả giờ VN (+07:00).
+
+
+class TestCourseTimezone:
+    # POST: start_date không kèm múi giờ → 422 INVALID_FORMAT, nêu đúng tên field
+    def test_create_rejects_naive_start_date(self):
+        with pytest.raises(InvalidFormatError, match="start_date phải kèm múi giờ"):
+            CreateCourseRequest(
+                course_id="CS401",
+                course_name="Thiếu múi giờ",
+                term="HK1 2026-2027",
+                start_date=datetime(2026, 9, 7),
+                end_date=VALID_END,
+            )
+
+    # PATCH: end_date không kèm múi giờ → 422 INVALID_FORMAT
+    def test_update_rejects_naive_end_date(self):
+        with pytest.raises(InvalidFormatError, match="end_date phải kèm múi giờ"):
+            UpdateCourseRequest(end_date=datetime(2027, 1, 15))
+
+    # So sánh start/end theo thời điểm thật, không theo chữ số:
+    # 17:00Z ngày 06/09 chính là 00:00 ngày 07/09 giờ VN → bằng nhau → reject
+    def test_create_compares_instants_across_offsets(self):
+        with pytest.raises(InvalidFormatError, match="start_date phải trước end_date"):
+            CreateCourseRequest(
+                course_id="CS402",
+                course_name="Khác offset",
+                term="HK1 2026-2027",
+                start_date=vn(2026, 9, 7),
+                end_date=datetime(2026, 9, 6, 17, 0, tzinfo=UTC),
+            )
+
+    # Input UTC được lưu đúng thời điểm và trả về theo giờ VN
+    def test_update_with_utc_input_returns_vn_time(self, session, course, owner_teacher):
         result = update_course(
             course.course_id,
-            UpdateCourseRequest(start_date=tz_aware),
+            UpdateCourseRequest(start_date=datetime(2026, 10, 1, 0, 0, tzinfo=UTC)),
             session,
             owner_teacher,
         )
 
-        # So sánh theo giá trị naive (SQLite strip timezone khi ghi).
-        assert result.start_date.replace(tzinfo=None) == datetime(2026, 10, 1)
+        assert result.start_date == vn(2026, 10, 1, 7, 0)
+        assert result.start_date.utcoffset().total_seconds() == 7 * 3600
         assert result.end_date == course.end_date
+
+    # PATCH chỉ gửi end_date (UTC) mà trước start_date trong DB (giờ VN) → vẫn bắt được
+    def test_update_only_end_date_compares_with_db_start_across_offsets(
+        self, session, course, owner_teacher
+    ):
+        # course.start_date = 07/09 00:00 VN = 06/09 17:00Z
+        with pytest.raises(InvalidFormatError, match="start_date phải trước end_date"):
+            update_course(
+                course.course_id,
+                UpdateCourseRequest(end_date=datetime(2026, 9, 6, 16, 0, tzinfo=UTC)),
+                session,
+                owner_teacher,
+            )
 
 
 # ============================== ROUTE LAYER ==============================
@@ -626,8 +673,8 @@ class TestCourseRoutes:
             "course_id": "CS_HTTP_1",
             "course_name": "Qua HTTP",
             "term": "HK1 2026-2027",
-            "start_date": "2026-09-07T00:00:00",
-            "end_date": "2026-12-27T00:00:00",
+            "start_date": "2026-09-07T00:00:00+07:00",
+            "end_date": "2026-12-27T00:00:00+07:00",
         }
         response = client.post("/courses", json=payload)
         assert response.status_code == 201, response.text
@@ -649,8 +696,8 @@ class TestCourseRoutes:
             # thiếu course_name cố ý
             "course_id": "CS_HTTP_BAD",
             "term": "HK1",
-            "start_date": "2026-09-07T00:00:00",
-            "end_date": "2026-12-27T00:00:00",
+            "start_date": "2026-09-07T00:00:00+07:00",
+            "end_date": "2026-12-27T00:00:00+07:00",
         }
         response = client.post("/courses", json=payload)
         assert response.status_code == 422
@@ -668,8 +715,8 @@ class TestCourseRoutes:
             "course_id": course.course_id,  # CS101 — đã tồn tại từ fixture
             "course_name": "Trùng",
             "term": "HK1",
-            "start_date": "2026-09-07T00:00:00",
-            "end_date": "2026-12-27T00:00:00",
+            "start_date": "2026-09-07T00:00:00+07:00",
+            "end_date": "2026-12-27T00:00:00+07:00",
         }
         response = client.post("/courses", json=payload)
         assert response.status_code == 409
@@ -759,9 +806,47 @@ class TestCourseRoutes:
 
         response = client.patch(
             f"/courses/{course.course_id}",
-            json={"start_date": "2027-01-01T00:00:00"},  # sau end_date DB
+            json={"start_date": "2027-01-01T00:00:00+07:00"},  # sau end_date DB
         )
         assert response.status_code == 422
+        app.dependency_overrides.clear()
+
+    # POST /courses — datetime không kèm múi giờ → 422 INVALID_FORMAT qua Global Exception Handler
+    def test_post_courses_naive_datetime_returns_invalid_format(self, client, owner_teacher):
+        from app.dependencies import get_current_user
+
+        app.dependency_overrides[get_current_user] = lambda: owner_teacher
+
+        payload = {
+            "course_id": "CS_HTTP_NAIVE",
+            "course_name": "Thiếu múi giờ",
+            "term": "HK1 2026-2027",
+            "start_date": "2026-09-07T00:00:00",
+            "end_date": "2026-12-27T00:00:00+07:00",
+        }
+        response = client.post("/courses", json=payload)
+
+        assert response.status_code == 422
+        body = response.json()
+        assert body["error_code"] == "INVALID_FORMAT"
+        assert "start_date phải kèm múi giờ" in body["message"]
+        app.dependency_overrides.clear()
+
+    # PATCH /courses/{id} — input "Z" (UTC) được trả về theo giờ VN (+07:00), cùng thời điểm
+    def test_patch_courses_utc_input_returns_vn_offset(self, client, course, owner_teacher):
+        from app.dependencies import get_current_user
+
+        app.dependency_overrides[get_current_user] = lambda: owner_teacher
+
+        response = client.patch(
+            f"/courses/{course.course_id}",
+            json={"end_date": "2027-01-15T00:00:00Z"},
+        )
+
+        assert response.status_code == 200, response.text
+        body = response.json()
+        assert body["end_date"] == "2027-01-15T07:00:00+07:00"
+        assert body["start_date"] == "2026-09-07T00:00:00+07:00"
         app.dependency_overrides.clear()
 
 
@@ -774,8 +859,8 @@ def make_course(session: Session, course_id: str, owner: User) -> Course:
         course_name=f"Lớp {course_id}",
         created_by=owner.user_id,
         term="HK1 2026-2027",
-        start_date=datetime(2026, 9, 7),
-        end_date=datetime(2026, 12, 27),
+        start_date=vn(2026, 9, 7),
+        end_date=vn(2026, 12, 27),
         total_number_student=0,
     )
     session.add(course)

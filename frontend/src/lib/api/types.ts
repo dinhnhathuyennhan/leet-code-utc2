@@ -75,8 +75,22 @@ export interface AccountResponse {
   full_name: string;
   email: string;
   role_id: Role;
-  date_of_birth: string;
+  date_of_birth: string | null;
   class_id?: string | null;
+}
+
+export interface ListUsersParams {
+  role_id?: Role;
+  class_id?: string;
+  page?: number;
+  page_size?: number;
+}
+
+export interface AccountListResponse {
+  items: AccountResponse[];
+  total: number;
+  page: number;
+  page_size: number;
 }
 
 export interface ImportStudentsCreatedRow {

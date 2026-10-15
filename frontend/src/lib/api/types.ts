@@ -54,18 +54,69 @@ export interface CreateAccountResponse {
   temporary_password: string;
 }
 
-export interface ImportStudentsError {
-  row: number;
+export interface ResetPasswordResponse {
+  user_id: string;
+  temporary_password: string;
+}
+
+export interface CreateTeacherRequest {
+  user_id: string;
+  full_name: string;
+  date_of_birth: string;
   email: string;
+}
+
+export interface CreateStudentRequest extends CreateTeacherRequest {
+  class_id: string;
+}
+
+export interface AccountResponse {
+  user_id: string;
+  full_name: string;
+  email: string;
+  role_id: Role;
+  date_of_birth: string | null;
+  class_id?: string | null;
+}
+
+export interface ListUsersParams {
+  role_id?: Role;
+  class_id?: string;
+  page?: number;
+  page_size?: number;
+}
+
+export interface AccountListResponse {
+  items: AccountResponse[];
+  total: number;
+  page: number;
+  page_size: number;
+}
+
+export interface ImportStudentsCreatedRow {
+  user_id: string;
+  full_name: string;
+  email: string;
+  class_id: string;
+  temporary_password: string;
+}
+
+export interface ImportStudentsSkippedRow {
+  sheet: string;
+  row: number;
+  user_id: string;
+  reason: string;
+}
+
+export interface ImportStudentsErrorRow {
+  sheet: string;
+  row: number;
+  user_id: string | null;
   reason: string;
 }
 
 export interface ImportStudentsResponse {
-  created: CreateAccountResponse[];
-  errors: ImportStudentsError[];
-}
-
-export interface ResetPasswordResponse {
-  user_id: string;
-  temporary_password: string;
+  created: ImportStudentsCreatedRow[];
+  skipped: ImportStudentsSkippedRow[];
+  errors: ImportStudentsErrorRow[];
 }

@@ -85,12 +85,12 @@ class UserResponse(BaseModel):
     full_name: str
     email: AppEmailStr
     role_id: int
-    date_of_birth: date
+    date_of_birth: date | None = None
     class_id: str | None = None
 
     @field_serializer("date_of_birth")
-    def serialize_date_of_birth(self, value: date) -> str:
-        return value.strftime("%d/%m/%Y")
+    def serialize_date_of_birth(self, value: date | None) -> str | None:
+        return value.strftime("%d/%m/%Y") if value else None
 
 class UserListResponse(BaseModel):
     items: list[UserResponse]

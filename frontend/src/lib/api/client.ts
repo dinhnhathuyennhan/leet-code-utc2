@@ -25,7 +25,13 @@ function extractErrorDetail(data: unknown, status: number): string {
       return record.error;
     }
 
-    // 4. Dạng AppError lồng nhau: { "detail": { "message": "..." } }
+    // 4. Backend ErrorResponse: { "error_code": "...", "message": "..." }
+    // (message is checked above; keep error_code as a useful fallback.)
+    if (typeof record.error_code === "string" && record.error_code.trim() !== "") {
+      return record.error_code;
+    }
+
+    // 5. Dạng AppError lồng nhau: { "detail": { "message": "..." } }
     if (typeof record.detail === "object" && record.detail !== null) {
       const nested = record.detail as Record<string, unknown>;
       if (typeof nested.message === "string" && nested.message.trim() !== "") {
@@ -36,7 +42,7 @@ function extractErrorDetail(data: unknown, status: number): string {
       }
     }
 
-    // 5. Dạng FastAPI 422 validation errors: { "detail": [{ "msg": "..." }] }
+    // 6. Dạng FastAPI 422 validation errors: { "detail": [{ "msg": "..." }] }
     if (Array.isArray(record.detail)) {
       const items = record.detail as Array<{ msg?: string }>;
       const messages = items
@@ -48,7 +54,7 @@ function extractErrorDetail(data: unknown, status: number): string {
     }
   }
 
-  // 6. Thông báo mặc định theo mã HTTP status khi Backend không gửi body lỗi
+  // 7. Thông báo mặc định theo mã HTTP status khi Backend không gửi body lỗi
   if (status === 401) {
     return "Email hoặc mật khẩu không chính xác.";
   }

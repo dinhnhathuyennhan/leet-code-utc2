@@ -4,7 +4,9 @@ import {
   GraduationCap,
   History,
   LayoutDashboard,
+  Settings,
   ShieldCheck,
+  Users,
   type LucideIcon,
 } from "lucide-react";
 
@@ -29,4 +31,12 @@ export const TEACHER_NAV: NavItem[] = [
 export const STUDENT_NAV: NavItem[] = [
   { label: "Lớp học phần", href: "/", icon: GraduationCap, exact: true, alsoMatch: ["/courses"] },
   { label: "Lịch sử nộp bài", href: "/history", icon: History },
+];
+
+export const ADMIN_NAV: NavItem[] = [
+  { label: "Tổng quan", href: "/admin/dashboard", icon: LayoutDashboard, exact: true },
+  { label: "Lớp học phần", href: "/admin/courses", icon: GraduationCap },
+  { label: "Quản lý tài khoản", href: "/admin/accounts", icon: Users },
+  { label: "Bài nộp", href: "/admin/submissions", icon: FileCheck2 },
+  { label: "Cấu hình", href: "/admin/settings", icon: Settings },
 ];

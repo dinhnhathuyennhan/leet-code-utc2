@@ -18,6 +18,7 @@ import { accountsQueryKey } from "@/lib/query-client";
 const PAGE_SIZE = 20;
 const ACCOUNT_EMAIL_PATTERN = /^[a-zA-Z0-9._%+-]+@st\.utc2\.edu\.vn$/i;
 const ACCOUNT_EMAIL_MESSAGE = "Email phải có đuôi @st.utc2.edu.vn.";
+const USER_LIST_PAGE_SIZE = 100;
 
 type RoleFilter = "all" | "student" | "teacher";
 
@@ -27,6 +28,18 @@ function roleLabel(roleId: Role): string {
 
 function errorMessage(error: unknown, fallback: string): string {
   return error instanceof ApiError ? error.detail : fallback;
+}
+
+async function userIdExists(userId: string): Promise<boolean> {
+  let page = 1;
+  let total = 0;
+  do {
+    const result = await listUsers({ page, page_size: USER_LIST_PAGE_SIZE });
+    total = result.total;
+    if (result.items.some((account) => account.user_id === userId)) return true;
+    page += 1;
+  } while ((page - 1) * USER_LIST_PAGE_SIZE < total);
+  return false;
 }
 
 async function copyPassword(password: string) {
@@ -59,25 +72,42 @@ function AccountModal({ onClose, onCreated }: { onClose: () => void; onCreated: 
   async function submit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (isSubmitting || created) return;
-    if (!ACCOUNT_EMAIL_PATTERN.test(form.email)) {
+    const payload = {
+      user_id: form.user_id.trim(),
+      full_name: form.full_name.trim().replace(/\s+/g, " "),
+      date_of_birth: form.date_of_birth,
+      email: form.email.trim(),
+      class_id: form.class_id.trim(),
+    };
+
+    if (!payload.user_id || !payload.full_name) {
+      toast.error("Mã tài khoản và họ tên không được để trống.");
+      return;
+    }
+    if (!ACCOUNT_EMAIL_PATTERN.test(payload.email)) {
       setEmailError(ACCOUNT_EMAIL_MESSAGE);
       return;
     }
 
     setIsSubmitting(true);
     try {
+      if (await userIdExists(payload.user_id)) {
+        toast.error("Mã tài khoản đã tồn tại.");
+        return;
+      }
+
       const account = roleId === 2
         ? await createTeacher({
-            user_id: form.user_id,
-            full_name: form.full_name,
-            date_of_birth: form.date_of_birth,
-            email: form.email,
+            user_id: payload.user_id,
+            full_name: payload.full_name,
+            date_of_birth: payload.date_of_birth,
+            email: payload.email,
           })
-        : await createStudent({ ...form });
+        : await createStudent(payload);
 
       // POST /teachers and POST /students return UserResponse without a password.
       // These are the same rules used in backend/app/services/user_service.py.
-      const [year, month, day] = form.date_of_birth.split("-");
+      const [year, month, day] = payload.date_of_birth.split("-");
       const temporaryPassword = roleId === 3 ? account.user_id : `${day}${month}${year}`;
       setCreated({ account, temporaryPassword });
       onCreated();
@@ -99,7 +129,7 @@ function AccountModal({ onClose, onCreated }: { onClose: () => void; onCreated: 
               Sinh viên dùng MSSV; giảng viên dùng ngày sinh dạng ddmmyyyy làm mật khẩu tạm.
             </p>
           </div>
-          <Button variant="ghost" size="icon" onClick={onClose} aria-label="Đóng"><X className="size-5" /></Button>
+          <Button variant="ghost" size="icon" onClick={onClose} disabled={isSubmitting} aria-label="Đóng"><X className="size-5" /></Button>
         </div>
 
         {created ? (

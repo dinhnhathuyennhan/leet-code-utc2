@@ -3,7 +3,7 @@ from datetime import datetime
 
 from pydantic import BaseModel, Field, field_validator, model_validator
 
-from app.core.datetime_utils import as_utc
+from app.core.datetime_utils import require_offset
 from app.core.exceptions import EmptyFieldError, InvalidFormatError
 from app.schemas.grade import CourseGradeRowResponse
 
@@ -23,11 +23,11 @@ def _required_str(value: str | None, field_name: str) -> str:
 def _required_datetime(value: datetime | None, field_name: str) -> datetime:
     if value is None:
         raise EmptyFieldError(f"{field_name} không được để trống")
-    return as_utc(value)
+    return require_offset(value, field_name)
 
 
-def _normalize_optional_datetime(value: datetime | None) -> datetime | None:
-    return None if value is None else as_utc(value)
+def _optional_datetime(value: datetime | None, field_name: str) -> datetime | None:
+    return None if value is None else require_offset(value, field_name)
 
 
 class CourseProblemResponse(BaseModel):
@@ -119,25 +119,10 @@ class UpdateCourseRequest(BaseModel):
             raise EmptyFieldError(f"{info.field_name} không được để trống")
         return v.strip()
 
-    @field_validator("start_date", "end_date", mode="before")
+    @field_validator("start_date", "end_date")
     @classmethod
-    def parse_datetime_from_string(cls, v):
-        """Chuyển string ISO datetime → datetime object (pydantic v2 chạy mode=before trước parse)."""
-        if v is None:
-            return None
-        if isinstance(v, datetime):
-            return v
-        if isinstance(v, str):
-            try:
-                return datetime.fromisoformat(v.replace("Z", "+00:00"))
-            except ValueError:
-                return v
-        return v
-
-    @field_validator("start_date", "end_date", mode="after")
-    @classmethod
-    def normalize_optional_datetime(cls, v: datetime | None) -> datetime | None:
-        return _normalize_optional_datetime(v)
+    def validate_optional_datetime(cls, v: datetime | None, info) -> datetime | None:
+        return _optional_datetime(v, info.field_name)
 
     @model_validator(mode="after")
     def validate_date_range(self) -> "UpdateCourseRequest":

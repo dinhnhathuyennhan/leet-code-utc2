@@ -1,8 +1,6 @@
-from datetime import UTC, datetime, time
-
 from sqlmodel import Session, select
 
-from app.core.datetime_utils import now_utc
+from app.core.datetime_utils import now_utc, vn_day_end, vn_day_start
 from app.schemas.course import CourseResponse
 from app.services import grade_service
 from models import Course, Enrollment, Lesson, Problem, User
@@ -10,8 +8,8 @@ from models import Course, Enrollment, Lesson, Problem, User
 
 def lesson_status(lesson: Lesson) -> str:
     now = now_utc()
-    start = datetime.combine(lesson.start_date, time.min, tzinfo=UTC)
-    end = datetime.combine(lesson.end_date, time.max, tzinfo=UTC)
+    start = vn_day_start(lesson.start_date)
+    end = vn_day_end(lesson.end_date)
     if now < start:
         return "upcoming"
     if now > end:
@@ -56,8 +54,8 @@ def build_course_response(
             "order": lesson.lesson_number,
             "title": lesson.lesson_name,
             "status": status,
-            "opens_at": datetime.combine(lesson.start_date, time.min, tzinfo=UTC),
-            "deadline": datetime.combine(lesson.end_date, time.max, tzinfo=UTC),
+            "opens_at": vn_day_start(lesson.start_date),
+            "deadline": vn_day_end(lesson.end_date),
             "problems": [] if hide_problems else [
                 {"id": p.problem_id, "title": p.title, "report": p.report, "level": p.level,
                  "start_datetime": p.start_datetime, "end_datetime": p.end_datetime,

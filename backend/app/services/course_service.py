@@ -470,11 +470,9 @@ def update_course(
 
     # Validate khoảng ngày khi có thay đổi, đối chiếu với giá trị đang lưu
     # trong DB để bắt cả trường hợp client chỉ gửi một trong hai ngày.
-    # Chuẩn hoá giá trị DB về UTC trước khi so sánh (SQLite: naive, Postgres: aware).
-    db_start = as_utc(course.start_date)
-    db_end = as_utc(course.end_date)
-    new_start = update_fields.get("start_date", db_start)
-    new_end = update_fields.get("end_date", db_end)
+    # Cả hai phía đều có múi giờ (DB qua UTCDateTime, input qua require_offset) nên so sánh trực tiếp.
+    new_start = update_fields.get("start_date", course.start_date)
+    new_end = update_fields.get("end_date", course.end_date)
     if new_start >= new_end:
         raise InvalidFormatError("start_date phải trước end_date")
 

@@ -1,6 +1,8 @@
 from datetime import datetime
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
+
+from app.core.datetime_utils import require_offset
 
 
 class ProblemTestcaseResponse(BaseModel):
@@ -52,3 +54,8 @@ class ProblemUpdateRequest(BaseModel):
     end_datetime: datetime | None = None
     starter_code: str | None = None
     testcases: list[ProblemTestcaseUpdate] | None = None
+
+    @field_validator("start_datetime", "end_datetime")
+    @classmethod
+    def validate_optional_datetime(cls, v: datetime | None, info) -> datetime | None:
+        return None if v is None else require_offset(v, info.field_name)

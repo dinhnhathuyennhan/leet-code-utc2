@@ -1,7 +1,8 @@
-from datetime import date, datetime, timedelta
+from datetime import date, timedelta
 
 import pytest
 
+from app.core.datetime_utils import now_utc
 from app.core.exceptions import ConflictError, NotFoundError, InvalidFormatError
 from app.core.password import hash_password, verify_password
 from app.dependencies import Role
@@ -77,8 +78,8 @@ def _make_course(session, course_id: str, teacher):
         course_name=course_id,
         created_by=teacher.user_id,
         term="2026",
-        start_date=datetime.now(),
-        end_date=datetime.now() + timedelta(days=30),
+        start_date=now_utc(),
+        end_date=now_utc() + timedelta(days=30),
         total_number_student=0,
     )
     session.add(course)
@@ -268,7 +269,7 @@ def test_reset_password_admin_can_reset_any_user(session):
 
 
 def test_reset_password_teacher_can_reset_student_in_their_class(session):
-    from datetime import date, datetime, timedelta
+    from datetime import date, timedelta
 
     teacher = _make_user(session, "teacher1", "teacher@example.com", Role.TEACHER)
     student = _make_user(
@@ -285,8 +286,8 @@ def test_reset_password_teacher_can_reset_student_in_their_class(session):
         course_name="Course 1",
         created_by=teacher.user_id,
         term="2026",
-        start_date=datetime.now(),
-        end_date=datetime.now() + timedelta(days=30),
+        start_date=now_utc(),
+        end_date=now_utc() + timedelta(days=30),
         total_number_student=1,
     )
     session.add(course)
@@ -354,7 +355,7 @@ def test_reset_password_increments_token_version_each_time(session):
 
 
 def test_reset_password_teacher_cannot_reset_student_outside_their_class(session):
-    from datetime import date, datetime, timedelta
+    from datetime import date, timedelta
 
     teacher = _make_user(session, "teacher5", "teacher5@example.com", Role.TEACHER)
     other_teacher = _make_user(
@@ -374,8 +375,8 @@ def test_reset_password_teacher_cannot_reset_student_outside_their_class(session
         course_name="Other Course",
         created_by=other_teacher.user_id,
         term="2026",
-        start_date=datetime.now(),
-        end_date=datetime.now() + timedelta(days=30),
+        start_date=now_utc(),
+        end_date=now_utc() + timedelta(days=30),
         total_number_student=1,
     )
     session.add(course)

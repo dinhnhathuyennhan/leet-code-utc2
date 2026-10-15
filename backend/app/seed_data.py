@@ -5,6 +5,7 @@ from datetime import date, datetime
 
 from sqlmodel import Session, func, or_, select
 
+from app.core.datetime_utils import VN_TZ, vn_day_end, vn_day_start
 from app.core.password import hash_password
 from app.db import engine
 
@@ -37,6 +38,11 @@ MAJOR_ABBR = "CNTT"
 
 def class_id_of(course_number: int) -> str:
     return build_class_id(CLASS_TYPE, course_number, MAJOR_ABBR)
+
+
+def vn_datetime(*args: int) -> datetime:
+    """Mốc thời gian trong dữ liệu seed được viết theo giờ VN."""
+    return datetime(*args, tzinfo=VN_TZ)
 
 
 # ---- Dữ liệu ----
@@ -74,15 +80,15 @@ UID = {row[0]: row[1] for row in STAFF + STUDENTS}
 # (course_id, course_name, term, start, end, created_by)
 COURSES = [
     ("CS101-2026A", "Lập trình cơ bản", "HK1 2026-2027",
-     datetime(2026, 9, 7), datetime(2026, 12, 27), "GV01"),
+     vn_datetime(2026, 9, 7), vn_datetime(2026, 12, 27), "GV01"),
     ("CS102-2026A", "Cấu trúc dữ liệu", "HK1 2026-2027",
-     datetime(2026, 9, 7), datetime(2026, 12, 27), "GV01"),
+     vn_datetime(2026, 9, 7), vn_datetime(2026, 12, 27), "GV01"),
     ("CS201-2026A", "Giải thuật", "HK1 2026-2027",
-     datetime(2026, 9, 7), datetime(2026, 12, 27), "GV02"),
+     vn_datetime(2026, 9, 7), vn_datetime(2026, 12, 27), "GV02"),
     ("CS202-2026A", "Lập trình hướng đối tượng", "HK1 2026-2027",
-     datetime(2026, 9, 14), datetime(2027, 1, 10), "GV02"),
+     vn_datetime(2026, 9, 14), vn_datetime(2027, 1, 10), "GV02"),
     ("CS301-2026A", "Cơ sở dữ liệu", "HK1 2026-2027",
-     datetime(2026, 9, 14), datetime(2027, 1, 10), "GV03"),
+     vn_datetime(2026, 9, 14), vn_datetime(2027, 1, 10), "GV03"),
 ]
 
 ENROLLMENTS = {
@@ -145,20 +151,20 @@ PROBLEMS = [
 # (course_id, lesson_number, student_alias, language, status, passed_count,
 #  submitted_datetime, compile_output, feedback)
 SUBMISSIONS = [
-    ("CS101-2026A", 1, "SV01", "python", "accepted", 3, datetime(2026, 9, 10, 9, 15), None, "Đạt 3/3 testcase"),
-    ("CS101-2026A", 1, "SV02", "python", "wrong_answer", 2, datetime(2026, 9, 11, 20, 30), None, "Sai ở testcase số âm"),
-    ("CS101-2026A", 1, "SV02", "python", "accepted", 3, datetime(2026, 9, 11, 20, 45), None, "Đạt 3/3 testcase"),
-    ("CS101-2026A", 1, "SV03", "java", "compile_error", 0, datetime(2026, 9, 12, 14, 0),
+    ("CS101-2026A", 1, "SV01", "python", "accepted", 3, vn_datetime(2026, 9, 10, 9, 15), None, "Đạt 3/3 testcase"),
+    ("CS101-2026A", 1, "SV02", "python", "wrong_answer", 2, vn_datetime(2026, 9, 11, 20, 30), None, "Sai ở testcase số âm"),
+    ("CS101-2026A", 1, "SV02", "python", "accepted", 3, vn_datetime(2026, 9, 11, 20, 45), None, "Đạt 3/3 testcase"),
+    ("CS101-2026A", 1, "SV03", "java", "compile_error", 0, vn_datetime(2026, 9, 12, 14, 0),
      "Main.java:3: error: ';' expected", None),
-    ("CS101-2026A", 2, "SV01", "python", "accepted", 3, datetime(2026, 10, 1, 10, 0), None, "Đạt 3/3 testcase"),
-    ("CS102-2026A", 1, "SV01", "cpp", "accepted", 3, datetime(2026, 9, 15, 8, 40), None, "Đạt 3/3 testcase"),
-    ("CS102-2026A", 1, "SV05", "python", "wrong_answer", 1, datetime(2026, 9, 16, 19, 5), None, "Sai với chuỗi 1 ký tự"),
-    ("CS201-2026A", 1, "SV03", "python", "accepted", 3, datetime(2026, 9, 14, 21, 0), None, "Đạt 3/3 testcase"),
-    ("CS201-2026A", 1, "SV04", "python", "pending", 0, datetime(2026, 9, 20, 22, 10), None, None),
-    ("CS201-2026A", 2, "SV05", "java", "wrong_answer", 2, datetime(2026, 10, 2, 15, 30), None, "Sai khi không tìm thấy phần tử"),
-    ("CS202-2026A", 1, "SV06", "python", "accepted", 3, datetime(2026, 9, 22, 9, 0), None, "Đạt 3/3 testcase"),
-    ("CS301-2026A", 1, "SV07", "python", "accepted", 3, datetime(2026, 9, 18, 13, 20), None, "Đạt 3/3 testcase"),
-    ("CS301-2026A", 1, "SV08", "cpp", "wrong_answer", 0, datetime(2026, 9, 19, 16, 45), None, "Chưa xử lý số âm"),
+    ("CS101-2026A", 2, "SV01", "python", "accepted", 3, vn_datetime(2026, 10, 1, 10, 0), None, "Đạt 3/3 testcase"),
+    ("CS102-2026A", 1, "SV01", "cpp", "accepted", 3, vn_datetime(2026, 9, 15, 8, 40), None, "Đạt 3/3 testcase"),
+    ("CS102-2026A", 1, "SV05", "python", "wrong_answer", 1, vn_datetime(2026, 9, 16, 19, 5), None, "Sai với chuỗi 1 ký tự"),
+    ("CS201-2026A", 1, "SV03", "python", "accepted", 3, vn_datetime(2026, 9, 14, 21, 0), None, "Đạt 3/3 testcase"),
+    ("CS201-2026A", 1, "SV04", "python", "pending", 0, vn_datetime(2026, 9, 20, 22, 10), None, None),
+    ("CS201-2026A", 2, "SV05", "java", "wrong_answer", 2, vn_datetime(2026, 10, 2, 15, 30), None, "Sai khi không tìm thấy phần tử"),
+    ("CS202-2026A", 1, "SV06", "python", "accepted", 3, vn_datetime(2026, 9, 22, 9, 0), None, "Đạt 3/3 testcase"),
+    ("CS301-2026A", 1, "SV07", "python", "accepted", 3, vn_datetime(2026, 9, 18, 13, 20), None, "Đạt 3/3 testcase"),
+    ("CS301-2026A", 1, "SV08", "cpp", "wrong_answer", 0, vn_datetime(2026, 9, 19, 16, 45), None, "Chưa xử lý số âm"),
 ]
 
 # ===== LESSONS SEED (for JAVA01) =====
@@ -588,8 +594,8 @@ def _seed_lessons_problems_testcases(session: Session) -> None:
                 level=level,
                 hint=hint,
                 complexity=complexity,
-                start_datetime=datetime.combine(lesson.start_date, datetime.min.time()),
-                end_datetime=datetime.combine(lesson.end_date, datetime.max.time()).replace(microsecond=0),
+                start_datetime=vn_day_start(lesson.start_date),
+                end_datetime=vn_day_end(lesson.end_date),
             )
             session.add(problem)
             session.commit()

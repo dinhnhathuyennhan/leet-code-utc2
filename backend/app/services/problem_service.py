@@ -1,8 +1,6 @@
-from datetime import datetime, time
-
 from sqlmodel import Session, func, select
 
-from app.core.datetime_utils import as_utc, now_utc
+from app.core.datetime_utils import as_utc, now_utc, vn_day_end, vn_day_start
 from app.core.exceptions import ConflictError, ForbiddenError, InvalidFormatError, NotFoundError
 from app.dependencies import Role
 from app.schemas.problem import ProblemDetailResponse, ProblemUpdateRequest
@@ -57,8 +55,8 @@ def copy_problems_to_lesson(
     for tc in session.exec(select(Testcase).where(Testcase.problem_id.in_(problem_ids))).all():
         testcases_by_source[tc.problem_id].append(tc)
 
-    start_dt = datetime.combine(lesson.start_date, time.min)
-    end_dt = datetime.combine(lesson.end_date, time(23, 59))
+    start_dt = vn_day_start(lesson.start_date)
+    end_dt = vn_day_end(lesson.end_date)
     result: list[Problem] = []
     for pid in problem_ids:
         src = sources[pid]

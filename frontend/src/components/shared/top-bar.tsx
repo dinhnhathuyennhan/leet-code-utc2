@@ -21,7 +21,7 @@ export function Topbar({ homeHref, onMenuClick, onLogout }: TopbarProps) {
   const crumbs = buildBreadcrumbs(pathname, dynamicLabel);
 
   return (
-    <header className="sticky top-0 z-20 flex h-16 items-center justify-between gap-3 border-b bg-card/85 px-4 backdrop-blur sm:px-6 lg:px-8">
+    <header className="sticky top-0 z-20 flex h-[61px] items-center justify-between gap-3 border-b bg-card px-4 backdrop-blur sm:px-6 lg:px-5">
       <div className="flex min-w-0 items-center gap-2">
         <Button variant="ghost" size="icon" onClick={onMenuClick} aria-label="Mở menu" className="lg:hidden">
           <Menu className="size-5" />

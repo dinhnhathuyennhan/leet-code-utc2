@@ -42,7 +42,6 @@ from app.core.token import create_access_token
 from app.db import get_session
 from app.dependencies import Role
 from app.main import app
-from app.seed_data import seed_users  # sẽ tự skip vì SEED_DATA != "true"
 from models import Class, Course, Enrollment, User
 
 

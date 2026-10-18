@@ -116,7 +116,7 @@ export function DashboardCourseCard({
   href,
 }: DashboardCourseCardProps) {
   const theme = LANGUAGE_THEMES[resolveLanguage(language)];
-  const teacher = teacherName?.trim() || course.created_by || "Giảng viên UTC2";
+  const teacher = teacherName?.trim() || course.teacher_name || "Giảng viên UTC2";
 
   return (
     <Link

@@ -9,46 +9,61 @@
  *  - Click card → điều hướng đúng /student/classes/{id}
  *  - Empty state khi filter trả 0 kết quả
  */
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi, beforeEach } from "vitest";
 import { screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 
 import { StudentDashboardPage } from "./student-dashboard-page";
 import { renderWithProviders } from "@/test/utils/render";
 
+// Mock dashboard endpoints để không gọi axios thật trong test.
+vi.mock("@/lib/api/endpoints/dashboard", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@/lib/api/endpoints/dashboard")>();
+  return {
+    ...actual,
+    getStudentOverview: vi.fn(async () => ({
+      total_classes: 4,
+      completed_problems: 5,
+      total_problems: 12,
+      average_score: 7.5,
+      courses: [
+        { id: "CS101", code: "CS101", name: "Nhập môn lập trình", language: "java", status: "ongoing", teacher_name: "Nguyễn Văn A", semester: 1, academic_year: "2024-2025", group: 1 },
+        { id: "CS201", code: "CS201", name: "Cấu trúc dữ liệu và giải thuật", language: "java", status: "ongoing", teacher_name: "Trần Thị B", semester: 1, academic_year: "2024-2025", group: 1 },
+        { id: "PY101", code: "PY101", name: "Lập trình Python cơ bản", language: "python", status: "ongoing", teacher_name: "Lê Văn C", semester: 2, academic_year: "2024-2025", group: 1 },
+        { id: "JS101", code: "JS101", name: "JavaScript nâng cao", language: "javascript", status: "upcoming", teacher_name: "Phạm Thị D", semester: 2, academic_year: "2024-2025", group: 1 },
+      ],
+    })),
+  };
+});
+
 describe("StudentDashboardPage", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
   it("renders the toolbar without the old surrounding card border", async () => {
     const { container } = renderWithProviders(<StudentDashboardPage />);
 
-    // Toolbar xuất hiện ngay (không cần data) — chỉ search + filter
-    const search = await screen.findByPlaceholderText(
-      "Tìm kiếm lớp học phần…",
-      {},
-      { timeout: 5000 },
-    );
+    const search = await screen.findByPlaceholderText("Tìm kiếm lớp học phần…");
     const toolbar = search.closest("section");
     expect(toolbar).toBeInTheDocument();
     expect(toolbar?.className ?? "").not.toMatch(
       /rounded-2xl\s+border\s+border-border\s+bg-card/,
     );
 
-    // Đợi data load để chứng minh query work
-    await screen.findByText("Nhập môn lập trình", {}, { timeout: 5000 });
+    await screen.findByText("Nhập môn lập trình");
     expect(container.textContent).toContain("Nhập môn lập trình");
   });
 
   it("search input is on the left, dropdowns + view switcher on the right", async () => {
     renderWithProviders(<StudentDashboardPage />);
 
-    // Search exists (luôn render)
-    const search = await screen.findByPlaceholderText("Tìm kiếm lớp học phần…", {}, { timeout: 3000 });
+    const search = await screen.findByPlaceholderText("Tìm kiếm lớp học phần…");
     expect(search).toBeInTheDocument();
 
-    // 2 dropdown
     expect(screen.getByLabelText("Học kỳ")).toBeInTheDocument();
     expect(screen.getByLabelText("Năm học")).toBeInTheDocument();
 
-    // 2 view buttons
     expect(screen.getByRole("button", { name: "Xem dạng lưới" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Xem dạng danh sách" })).toBeInTheDocument();
   });
@@ -57,18 +72,14 @@ describe("StudentDashboardPage", () => {
     const user = userEvent.setup();
     renderWithProviders(<StudentDashboardPage />);
 
-    // Đợi card đầu tiên render
-    await screen.findByText("Nhập môn lập trình", {}, { timeout: 5000 });
+    await screen.findByText("Nhập môn lập trình");
 
     const search = screen.getByPlaceholderText("Tìm kiếm lớp học phần…");
     await user.type(search, "Python");
 
-    await waitFor(
-      () => {
-        expect(screen.getByText("Lập trình Python cơ bản")).toBeInTheDocument();
-      },
-      { timeout: 3000 },
-    );
+    await waitFor(() => {
+      expect(screen.getByText("Lập trình Python cơ bản")).toBeInTheDocument();
+    });
     expect(screen.queryByText("Nhập môn lập trình")).toBeNull();
   });
 
@@ -76,30 +87,21 @@ describe("StudentDashboardPage", () => {
     const user = userEvent.setup();
     renderWithProviders(<StudentDashboardPage />);
 
-    await screen.findByText("Nhập môn lập trình", {}, { timeout: 5000 });
+    await screen.findByText("Nhập môn lập trình");
 
-    // Mặc định grid → 4 link tới /student/classes (Link bao toàn card)
     const gridLinks = screen.getAllByRole("link", { name: /CS101|CS201|PY101|JS101/ });
     expect(gridLinks.length).toBeGreaterThan(0);
 
-    // Switch sang list
     await user.click(screen.getByRole("button", { name: "Xem dạng danh sách" }));
-    expect(screen.getByRole("button", { name: "Xem dạng danh sách" })).toHaveAttribute(
-      "aria-pressed",
-      "true",
-    );
+    expect(screen.getByRole("button", { name: "Xem dạng danh sách" })).toHaveAttribute("aria-pressed", "true");
 
-    // Switch lại grid
     await user.click(screen.getByRole("button", { name: "Xem dạng lưới" }));
-    expect(screen.getByRole("button", { name: "Xem dạng lưới" })).toHaveAttribute(
-      "aria-pressed",
-      "true",
-    );
+    expect(screen.getByRole("button", { name: "Xem dạng lưới" })).toHaveAttribute("aria-pressed", "true");
   });
 
   it("navigates to /student/classes/{id} when clicking a card", async () => {
     renderWithProviders(<StudentDashboardPage />);
-    await screen.findByText("Nhập môn lập trình", {}, { timeout: 5000 });
+    await screen.findByText("Nhập môn lập trình");
 
     const card = screen.getByRole("link", { name: /CS101/ });
     expect(card).toHaveAttribute("href", "/student/classes/CS101");
@@ -109,22 +111,18 @@ describe("StudentDashboardPage", () => {
     const user = userEvent.setup();
     renderWithProviders(<StudentDashboardPage />);
 
-    await screen.findByText("Nhập môn lập trình", {}, { timeout: 5000 });
+    await screen.findByText("Nhập môn lập trình");
 
     const search = screen.getByPlaceholderText("Tìm kiếm lớp học phần…");
     await user.type(search, "khong-co-lop-nao-ca");
 
-    await waitFor(
-      () => {
-        expect(screen.getByText(/Chưa có lớp học phần nào/)).toBeInTheDocument();
-      },
-      { timeout: 3000 },
-    );
+    await waitFor(() => {
+      expect(screen.getByText(/Chưa có lớp học phần nào/)).toBeInTheDocument();
+    });
   });
 
   it("renders the 3 mini-stat cards on top", async () => {
     renderWithProviders(<StudentDashboardPage />);
-    // Stats render ngay, không cần data
     expect(screen.getByText("Lớp đang ký")).toBeInTheDocument();
     expect(screen.getByText("Bài hoàn thành")).toBeInTheDocument();
     expect(screen.getByText("Hạn tuần này")).toBeInTheDocument();

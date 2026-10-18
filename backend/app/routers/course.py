@@ -10,6 +10,7 @@ from app.schemas.course import (
     AddStudentToCourseRequest,
     AddStudentToCourseResponse,
     CourseResponse,
+    CourseTermsResponse,
     CreateCourseRequest,
     GetStudentListResponse,
     StudentDashboardResponse,
@@ -21,8 +22,9 @@ from app.services.course_service import (
     create_course as _create_course,
     delete_student_from_course as _delete_student_from_course,
     get_course as _get_course,
-    get_course_enrollments,
+    get_course_terms as _get_course_terms,
     get_courses as _get_courses,
+    get_course_enrollments,
     get_student_courses as _get_student_courses,
     get_student_dashboard as _get_student_dashboard,
     get_student_enrollments as _get_student_enrollments,
@@ -49,6 +51,17 @@ def create_course_route(
         session=session,
         current_user=current_user,
     )
+
+
+@router.get(
+    "/courses/terms",
+    response_model=CourseTermsResponse,
+)
+def get_course_terms_route(
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+) -> CourseTermsResponse:
+    return _get_course_terms(session=session, current_user=current_user)
 
 
 @router.get(

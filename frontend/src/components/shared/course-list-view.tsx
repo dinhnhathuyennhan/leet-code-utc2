@@ -36,7 +36,7 @@ export function CourseListView({
   const heading = role === "teacher" ? "Lớp phụ trách" : "Lớp đang học";
 
   function renderBody() {
-    if (isLoading) return <CourseGridSkeleton />;
+    if (isLoading) return <CourseGridSkeleton view={filters.view} />;
     if (error && !courses) return <ErrorState error={error} onRetry={onRetry} />;
     if (!courses?.length) {
       return (
@@ -49,6 +49,7 @@ export function CourseListView({
     }
     return (
       <CourseGrid
+        view={filters.view}
         courses={courses}
         hrefFor={hrefFor}
         className={cn("transition-opacity duration-200", isFetching && "opacity-60")}

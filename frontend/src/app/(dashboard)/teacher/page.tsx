@@ -21,7 +21,7 @@ export default function TeacherDashboardPage() {
 
   // 3 query độc lập: mỗi khối tự loading/lỗi, không khối nào chặn khối khác.
   const overview = useTeacherOverview();
-  const pending = usePendingSubmissions({ filter, search: debouncedSearch.trim() || undefined, limit: 5 });
+  const pending = usePendingSubmissions({ filter, search: debouncedSearch.trim() || undefined, limit: 8 });
   const plagiarism = usePlagiarismAlerts();
 
   return (
@@ -35,7 +35,7 @@ export default function TeacherDashboardPage() {
         {overview.isPending ? (
           <RecentCoursesSkeleton />
         ) : (
-          overview.data && <RecentCourses courses={overview.data.recent_courses} hrefFor={(c) => `/teacher/courses/${c.id}`} />
+          overview.data && <RecentCourses courses={overview.data.recent_courses} hrefFor={(c) => `/teacher/courses/${c.code || c.id}`} />
         )}
       </section>
 

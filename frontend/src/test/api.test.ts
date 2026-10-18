@@ -15,7 +15,7 @@ import { setAccessToken } from "@/lib/auth/token-store";
 import { login } from "@/lib/api/endpoints/auth";
 import { getStudentOverview } from "@/lib/api/endpoints/dashboard";
 import { ApiError } from "@/lib/api/error";
-import { mockCoursesRaw, mockCourses } from "@/test/fixtures/courses";
+import { mockCoursesRaw } from "@/test/fixtures/courses";
 
 afterEach(() => {
   server.resetHandlers();
@@ -51,23 +51,22 @@ describe("API: auth/login", () => {
 });
 
 describe("API: getStudentOverview", () => {
-  it("transforms raw course_id → id and returns courses array", async () => {
+  it("returns courses array from the API response", async () => {
     setAccessToken("any-token");
     const data = await getStudentOverview("stu-001");
 
     expect(data.courses).toHaveLength(mockCoursesRaw.length);
     expect(data.courses[0]).toMatchObject({
-      id: "CS101",
-      code: "CS101",
-      name: "Nhập môn lập trình",
+      course_id: "CS101",
+      course_name: "Nhập môn lập trình",
       total_number_student: 60,
     });
   });
 
-  it("matches the CourseSummary shape (transformer output)", async () => {
+  it("passes through the raw CourseResponseRaw shape from backend", async () => {
     setAccessToken("any-token");
     const data = await getStudentOverview("stu-001");
-    expect(data.courses).toEqual(mockCourses);
+    expect(data.courses).toEqual(mockCoursesRaw);
   });
 
   it("passes through stats fields from the API response", async () => {

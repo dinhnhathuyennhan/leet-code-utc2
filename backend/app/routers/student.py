@@ -1,16 +1,13 @@
-import logging
-
 from fastapi import APIRouter, Depends, File, UploadFile
 from sqlmodel import Session
 
 from app.db import get_session
 from app.dependencies import Role, require_role
 from app.schemas.student import StudentImportResponse
-from app.services.student_service import import_students
+from app.services.student_service import MAX_IMPORT_FILE_BYTES, import_students
 from models import User
 
 router = APIRouter()
-logger = logging.getLogger(__name__)
 
 
 @router.post(
@@ -21,9 +18,9 @@ logger = logging.getLogger(__name__)
 def import_students_route(
     file: UploadFile = File(...),
     session: Session = Depends(get_session),
-    current_user: User = Depends(
-        require_role(Role.ADMIN, Role.TEACHER)
-    ),
+    current_user: User = Depends(require_role(Role.ADMIN, Role.TEACHER)),
 ):
-    contents = file.file.read()
+    # Đọc tối đa giới hạn + 1 byte: đủ để service biết file vượt giới hạn
+    # mà không phải nạp cả file quá lớn vào bộ nhớ
+    contents = file.file.read(MAX_IMPORT_FILE_BYTES + 1)
     return import_students(session, contents, file.filename or "")

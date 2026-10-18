@@ -39,6 +39,34 @@ export interface PendingSubmissionsResponse {
   counts: Record<PendingFilter, number>;
 }
 
+export interface SubmissionTestcase {
+  id: number;
+  input: string;
+  expected_output: string;
+  is_sample: boolean;
+}
+
+export interface SubmissionDetail {
+  id: number;
+  student_name: string;
+  student_code: string;
+  class_id: string | null;
+  course_code: string;
+  course_name: string;
+  session_label: string;
+  problem_code: string | null;
+  problem_title: string;
+  language: string;
+  submitted_code: string;
+  status: string;
+  compile_output: string | null;
+  feedback: string | null;
+  passed_count: number;
+  total_testcases: number;
+  submitted_datetime: string;
+  testcases: SubmissionTestcase[];
+}
+
 export interface PlagiarismAlert {
   id: number;
   problem_code: string;

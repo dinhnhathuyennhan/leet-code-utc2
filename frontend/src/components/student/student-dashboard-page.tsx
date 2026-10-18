@@ -24,18 +24,15 @@ import {
 import { useAuth } from "@/context/auth-context";
 import { useStudentOverview } from "@/lib/hooks/use-dashboard";
 import { cn } from "@/lib/utils";
-import type { CourseView } from "@/lib/types/course";
+import type { CourseSummary, CourseView } from "@/lib/types/course";
 
 /**
- * Trang Dashboard sinh viên — "Modern Minimal + Developer Tool" theo Figma.
+ * Trang Dashboard sinh viên.
  *
  * Layout:
- *  - Trên cùng: 3 MiniStat card (Lớp đang ký, Bài hoàn thành, Hạn tuần này).
- *  - Toolbar: search tròn + 2 dropdown filter + 2 nút view (grid/list).
- *  - Grid card lớp học phần (4 cột) — mỗi card có banner ngôn ngữ gradient + meta + 2 nút.
- *
- * Khác với AppShell: ở đây ta không render sidebar/topbar vì layout cha đã làm rồi.
- * Tránh hydration mismatch bằng cờ `mounted`.
+ *  - Stats row: lớp đang ký, bài hoàn thành, hạn tuần này.
+ *  - Toolbar: search + filter học kỳ + năm học + view switcher.
+ *  - Grid/List card lớp học phần.
  */
 export function StudentDashboardPage() {
   const auth = useAuth();
@@ -48,14 +45,9 @@ export function StudentDashboardPage() {
     () => false,
   );
 
-  // Decorate dữ liệu (mock language, status). Thay bằng API thật khi BE xong.
-  const coursesWithMeta = useMemo(() => {
+  const coursesWithMeta: CourseSummary[] = useMemo(() => {
     if (!overview.data) return [];
-    return overview.data.courses.map((c, i) => ({
-      ...c,
-      language: ["Java", "Python", "JavaScript", "C"][i % 4] ?? "Java",
-      status: (i % 3 === 0 ? "upcoming" : "ongoing") as "ongoing" | "upcoming" | "closed",
-    }));
+    return overview.data.courses;
   }, [overview.data]);
 
   // Filter state
@@ -66,30 +58,35 @@ export function StudentDashboardPage() {
 
   const terms = useMemo(() => {
     const set = new Set<string>();
-    coursesWithMeta.forEach((c) => set.add(c.term));
+    coursesWithMeta.forEach((c) => {
+      const key = `${c.semester} (${c.academic_year})`;
+      set.add(key);
+    });
     return Array.from(set);
   }, [coursesWithMeta]);
 
   const filteredCourses = useMemo(() => {
     const q = search.trim().toLowerCase();
     return coursesWithMeta.filter((c) => {
-      if (term && c.term !== term) return false;
+      if (term) {
+        const key = `${c.semester} (${c.academic_year})`;
+        if (key !== term) return false;
+      }
       if (q) {
-        const hay = `${c.code} ${c.name} ${c.created_by}`.toLowerCase();
+        const hay = `${c.code} ${c.name} ${c.teacher_name}`.toLowerCase();
         if (!hay.includes(q)) return false;
       }
       return true;
     });
   }, [coursesWithMeta, search, term]);
 
-  // Số liệu hiển thị trên stats: lấy từ API (overview) + mock "hạn tuần này".
   const statsData = useMemo(() => {
     return {
       classes: overview.data?.total_classes ?? 0,
       progress: overview.data
         ? `${overview.data.completed_problems}/${overview.data.total_problems}`
         : "—",
-      dueThisWeek: 2, // mock — BE chưa trả, thay khi có API
+      dueThisWeek: 2, // mock — BE chưa trả
     };
   }, [overview.data]);
 
@@ -117,9 +114,8 @@ export function StudentDashboardPage() {
         />
       </section>
 
-      {/* ── Toolbar (ảnh 1: không border bao quanh; search trái, filter + view phải) ─ */}
+      {/* ── Toolbar ────────────────────────────────────────────── */}
       <section className="flex flex-col items-stretch gap-3 lg:flex-row lg:items-center">
-        {/* Search bar — đứng 1 mình bên trái, tối đa ~320px */}
         <div className="relative w-full lg:max-w-sm">
           <Search className="pointer-events-none absolute left-3.5 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
           <input
@@ -132,9 +128,7 @@ export function StudentDashboardPage() {
           />
         </div>
 
-        {/* Bên phải: dropdown + view switcher */}
         <div className="flex flex-wrap items-center gap-2 lg:ml-auto">
-          {/* Filter: Học kỳ */}
           <FilterDropdown
             label="Học kỳ"
             value={term}
@@ -145,7 +139,6 @@ export function StudentDashboardPage() {
             ]}
           />
 
-          {/* Filter: Năm học */}
           <FilterDropdown
             label="Năm học"
             value={year}
@@ -157,7 +150,6 @@ export function StudentDashboardPage() {
             ]}
           />
 
-          {/* Extra filter button (decorative) */}
           <button
             type="button"
             title="Bộ lọc nâng cao"
@@ -167,7 +159,6 @@ export function StudentDashboardPage() {
             <SlidersHorizontal className="size-4" />
           </button>
 
-          {/* View switcher */}
           <div className="inline-flex shrink-0 rounded-lg border border-border bg-background p-0.5">
             <button
               type="button"
@@ -212,11 +203,11 @@ export function StudentDashboardPage() {
                 key={c.id}
                 course={c}
                 language={c.language}
-                teacherName={c.created_by}
+                teacherName={c.teacher_name}
                 status={c.status}
                 messageCount={(i + 1) * 3}
-                memberCount={c.total_number_student}
-                href={`/student/classes/${encodeURIComponent(c.id)}`}
+                memberCount={0}
+                href={`/student/classes/${encodeURIComponent(String(c.id))}`}
               />
             ))}
           </div>
@@ -302,24 +293,7 @@ function EmptyState({ mounted }: { mounted: boolean }) {
   );
 }
 
-// ─── Course List view (dạng hàng ngang) ─────────────────────────────
-
-interface CourseListProps {
-  courses: Array<{
-    id: string;
-    code: string;
-    name: string;
-    term: string;
-    start_date: string;
-    total_number_student: number;
-    created_by: string;
-    avt_link: string | null;
-    language: string;
-    status: "ongoing" | "upcoming" | "closed";
-  }>;
-}
-
-function CourseList({ courses }: CourseListProps) {
+function CourseList({ courses }: { courses: CourseSummary[] }) {
   return (
     <ul className="overflow-hidden rounded-2xl bg-card shadow-sm">
       {courses.map((c, i) => {
@@ -333,10 +307,9 @@ function CourseList({ courses }: CourseListProps) {
             )}
           >
             <Link
-              href={`/student/classes/${encodeURIComponent(c.id)}`}
+              href={`/student/classes/${encodeURIComponent(String(c.id))}`}
               className="flex items-center gap-4 px-4 py-3 outline-none focus-visible:ring-2 focus-visible:ring-[#352078]"
             >
-              {/* Language chip */}
               <div
                 className={cn(
                   "flex h-12 w-14 shrink-0 items-center justify-center rounded-lg bg-gradient-to-br text-xs font-bold text-white",
@@ -351,7 +324,7 @@ function CourseList({ courses }: CourseListProps) {
                   <span className="truncate text-sm font-semibold text-foreground">{c.name}</span>
                 </div>
                 <p className="mt-0.5 truncate text-xs text-muted-foreground">
-                  {c.term} · {c.total_number_student} SV
+                  Học kỳ {c.semester} ({c.academic_year.replace("-", " - ")})
                 </p>
               </div>
             </Link>
@@ -363,5 +336,4 @@ function CourseList({ courses }: CourseListProps) {
 }
 
 // ─── Re-exports (cho callers cũ) ──────────────────────────────────
-// Tránh vỡ import nếu file khác đang dùng.
 export { Bell };

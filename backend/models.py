@@ -2,6 +2,8 @@ from datetime import date, datetime
 
 from sqlmodel import Field, Relationship, SQLModel
 
+from app.core.datetime_utils import UTCDateTime
+
 
 # ==================== CLASS ====================
 class Class(SQLModel, table=True):
@@ -44,8 +46,8 @@ class Course(SQLModel, table=True):
     avt_link: str | None = Field(default=None, max_length=2048)
     created_by: str = Field(foreign_key="user.user_id", max_length=50)
     term: str
-    start_date: datetime
-    end_date: datetime
+    start_date: datetime = Field(sa_type=UTCDateTime)
+    end_date: datetime = Field(sa_type=UTCDateTime)
     total_number_student: int = Field(default=0)
 
     creator: User | None = Relationship(back_populates="created_courses")
@@ -90,8 +92,8 @@ class Problem(SQLModel, table=True):
     level: str
     hint: str | None = None
     complexity: str | None = None
-    start_datetime: datetime
-    end_datetime: datetime
+    start_datetime: datetime = Field(sa_type=UTCDateTime)
+    end_datetime: datetime = Field(sa_type=UTCDateTime)
     total_number_testcase: int = Field(default=0)
     report: str | None = None
 
@@ -125,7 +127,7 @@ class Submission(SQLModel, table=True):
     compile_output: str | None = None
     feedback: str | None = None
     passed_count: int = Field(default=0)
-    submitted_datetime: datetime
+    submitted_datetime: datetime = Field(sa_type=UTCDateTime)
 
     problem: Problem | None = Relationship(back_populates="submissions")
     student: User | None = Relationship(back_populates="submissions")

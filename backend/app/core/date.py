@@ -1,5 +1,6 @@
 from datetime import date
 
+from app.core.datetime_utils import today_vn
 from app.core.exceptions import InvalidFormatError
 
 INVALID_DATE_MESSAGE = "Ngày sinh lưu vào cơ sở dữ liệu phải có định dạng yyyy-mm-dd"
@@ -33,7 +34,7 @@ def build_date(day: int, month: int, year: int) -> date:
 def age_calculation(day: int, month: int, year: int) -> int:
     birth_date = build_date(day, month, year)
 
-    today = date.today()
+    today = today_vn()
 
     age = today.year - birth_date.year
 

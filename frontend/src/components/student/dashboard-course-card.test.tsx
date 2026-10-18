@@ -16,12 +16,12 @@ const baseCourse: CourseSummary = {
   id: "CS101",
   code: "CS101.K64",
   name: "Nhập môn lập trình",
-  term: "2024-2025 - HK1",
-  start_date: "2024-09-01",
-  end_date: "2025-01-15",
-  avt_link: null,
-  created_by: "Nguyễn Văn A",
-  total_number_student: 60,
+  language: "java",
+  status: "ongoing",
+  teacher_name: "Nguyễn Văn A",
+  semester: 1,
+  academic_year: "2024-2025",
+  group: 1,
 };
 
 function renderCard(overrides: Partial<React.ComponentProps<typeof DashboardCourseCard>> = {}) {
@@ -109,8 +109,8 @@ describe("DashboardCourseCard", () => {
     expect(screen.getByText(/Nguyễn Văn A/)).toBeInTheDocument();
   });
 
-  it("falls back to 'Giảng viên UTC2' when BOTH teacherName and created_by are empty", () => {
-    const courseNoTeacher: CourseSummary = { ...baseCourse, created_by: "" };
+  it("falls back to 'Giảng viên UTC2' when BOTH teacherName and teacher_name are empty", () => {
+    const courseNoTeacher: CourseSummary = { ...baseCourse, teacher_name: "" };
     render(
       <DashboardCourseCard
         course={courseNoTeacher}

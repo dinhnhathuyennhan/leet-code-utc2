@@ -12,14 +12,14 @@ import { StudentCourseHeaderCard } from "@/components/student/course-header-card
 import { StudentCourseInfoPanel } from "@/components/student/course-info-panel";
 import { StudentRosterTable } from "@/components/student/student-roster-table";
 import { ApiError } from "@/lib/api/error";
-import { useCourse, useCourseStudents } from "@/lib/hooks/use-courses";
+import { useCourse, useCourseEnrollments } from "@/lib/hooks/use-courses";
 
 export default function StudentCourseDetailPage() {
   const { id } = useParams<{ id: string }>();
   const courseId = typeof id === "string" ? id : Array.isArray(id) ? id[0] : undefined;
 
   const courseQuery = useCourse(courseId);
-  const studentsQuery = useCourseStudents(courseId);
+  const studentsQuery = useCourseEnrollments(courseId);
   const [tab, setTab] = useState<StudentCourseTab>("info");
 
   // Ưu tiên course_id từ URL làm nhãn dự phòng.

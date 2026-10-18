@@ -1,108 +1,54 @@
+import Image from "next/image";
 import Link from "next/link";
-import { CalendarDays, Code2, Users } from "lucide-react";
+import { CalendarDays, CircleUser } from "lucide-react";
 
-import { Badge } from "@/components/ui/badge";
-import { formatDate } from "@/lib/helpers/format";
-import type { CourseSummary } from "@/lib/types/course";
+import { StatusBadge } from "@/components/shared/status-badge";
+import { COURSE_COVERS } from "@/lib/constants/course-covers";
+import { COURSE_STATUS } from "@/lib/constants/status";
+import { formatTerm } from "@/lib/helpers/format";
+import type { CourseSummary, CourseView } from "@/lib/types/course";
 import { cn } from "@/lib/utils";
 
 interface CourseCardProps {
   course: CourseSummary;
   href: string;
-  /** Ngôn ngữ chính của lớp — mặc định "Java" theo Figma. */
-  language?: string;
-  /** Tên giảng viên — fallback "Giảng viên UTC2". */
-  teacherName?: string;
-  /** Số bài hoàn thành / tổng. Để undefined nếu BE chưa trả. */
-  progress?: { done: number; total: number };
+  view: CourseView;
 }
 
-/**
- * Thẻ lớp học phần — phiên bản "Modern Minimal + Developer Tool" theo Figma.
- *
- * Cấu trúc:
- *  - Banner ngôn ngữ (gradient + icon) phía trên
- *  - Mã lớp (badge) + tên lớp
- *  - Giảng viên, sĩ số, ngày bắt đầu
- *  - Thanh tiến độ + nhãn "X bài / Y bài"
- */
-export function CourseCard({ course, href, language = "Java", teacherName, progress }: CourseCardProps) {
-  const teacher = teacherName?.trim() || course.created_by || "Giảng viên UTC2";
-  const p = progress ?? { done: 0, total: 0 };
-  const pct = p.total > 0 ? Math.min(100, Math.round((p.done / p.total) * 100)) : 0;
+/** Thẻ lớp học phần — dùng chung cho giảng viên và sinh viên, có 2 kiểu hiển thị lưới/danh sách. */
+export function CourseCard({ course, href, view }: CourseCardProps) {
+  const status = COURSE_STATUS[course.status];
+  const isList = view === "list";
 
   return (
     <Link
       href={href}
-      className="group flex flex-col overflow-hidden rounded-2xl border border-border bg-card shadow-sm outline-none transition-all duration-200 hover:-translate-y-0.5 hover:shadow-md focus-visible:ring-2 focus-visible:ring-[#352078]"
+      className={cn(
+        "group overflow-hidden rounded-lg border-0 bg-card shadow-none outline-none transition duration-200 hover:-translate-y-0.5 hover:shadow-lg focus-visible:ring-2 focus-visible:ring-indigo-500",
+        isList ? "flex items-stretch" : "block",
+      )}
     >
-      {/* Language banner — gradient tím thương hiệu */}
-      <div className="relative flex h-24 items-center justify-between bg-gradient-to-br from-[#352078] via-[#4a2a9a] to-[#6a3fb5] px-5 text-white">
-        <div className="flex flex-col">
-          <span className="text-[10px] font-medium uppercase tracking-widest text-white/70">
-            Ngôn ngữ
-          </span>
-          <span className="text-2xl font-bold tracking-tight">{language}</span>
-        </div>
-        <div className="flex size-12 items-center justify-center rounded-xl bg-white/15 backdrop-blur-sm">
-          <Code2 className="size-6" />
-        </div>
-        {/* Decorative shape */}
-        <div
-          aria-hidden
-          className="absolute -right-6 -top-6 size-20 rounded-full bg-white/8"
-        />
-        <div
-          aria-hidden
-          className="absolute -bottom-8 -left-4 size-16 rounded-full bg-white/5"
+      <div className={cn("relative shrink-0 overflow-hidden bg-slate-900", isList ? "w-40 sm:w-56" : "aspect-[13/5] w-full")}>
+        <Image
+          src={COURSE_COVERS[course.language]}
+          alt=""
+          fill
+          sizes={isList ? "224px" : "(min-width: 1536px) 20vw, (min-width: 1024px) 30vw, 90vw"}
+          className="object-cover transition-transform duration-300 group-hover:scale-105"
         />
       </div>
 
-      {/* Body */}
-      <div className="flex flex-1 flex-col gap-3 p-4">
-        <div className="space-y-1.5">
-          <Badge
-            variant="outline"
-            className="border-[#352078]/25 bg-[#352078]/8 font-mono text-[10px] text-[#352078]"
-          >
-            {course.code}
-          </Badge>
-          <h3 className="line-clamp-2 text-base font-semibold leading-snug text-foreground">
-            {course.name}
-          </h3>
-          <p className="line-clamp-1 text-xs text-muted-foreground">
-            GV: <span className="font-medium text-foreground/80">{teacher}</span>
-          </p>
-        </div>
-
-        <div className="grid grid-cols-2 gap-2 text-xs text-muted-foreground">
-          <p className="flex items-center gap-1.5">
-            <CalendarDays className="size-3.5 shrink-0" />
-            <span className="truncate">{formatDate(course.start_date)}</span>
-          </p>
-          <p className="flex items-center gap-1.5">
-            <Users className="size-3.5 shrink-0" />
-            <span className="truncate">{course.total_number_student} SV</span>
-          </p>
-        </div>
-
-        {/* Progress */}
-        <div className="mt-auto space-y-1.5 border-t border-border/60 pt-3">
-          <div className="flex items-center justify-between text-[11px]">
-            <span className="font-medium text-muted-foreground">Tiến độ</span>
-            <span className="font-semibold text-foreground">
-              {p.done}/{p.total} bài
-            </span>
-          </div>
-          <div className="h-1.5 w-full overflow-hidden rounded-full bg-muted">
-            <div
-              className={cn(
-                "h-full rounded-full bg-gradient-to-r from-[#352078] to-[#5b3aa8] transition-all",
-              )}
-              style={{ width: `${pct}%` }}
-            />
-          </div>
-        </div>
+      <div className={cn("min-h-[142px] space-y-3 p-4", isList && "flex flex-1 flex-col justify-center")}>
+        <StatusBadge label={status.label} tone={status.tone} className="w-fit" />
+        <h3 className="text-[15px] font-semibold leading-snug">{course.name}</h3>
+        <p className="flex items-center gap-2 text-sm font-medium">
+          <CircleUser className="size-4 shrink-0 text-muted-foreground" />
+          <span className="truncate">{course.teacher_name}</span>
+        </p>
+        <p className="flex items-center gap-2 text-sm text-muted-foreground">
+          <CalendarDays className="size-4 shrink-0" />
+          <span className="truncate">{formatTerm(course)}</span>
+        </p>
       </div>
     </Link>
   );

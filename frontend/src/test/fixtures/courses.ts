@@ -49,12 +49,12 @@ export const mockCourses: CourseSummary[] = rawCourses.map((r) => ({
   id: r.course_id,
   code: r.course_id,
   name: r.course_name,
-  term: r.term,
-  start_date: r.start_date,
-  end_date: r.end_date,
-  avt_link: r.avt_link,
-  created_by: r.created_by,
-  total_number_student: r.total_number_student,
+  language: "java" as const,
+  status: "ongoing" as const,
+  teacher_name: r.created_by,
+  semester: 1,
+  academic_year: "2024-2025",
+  group: 1,
 }));
 
 /** Mock theo shape API raw (CourseResponseRaw[]) — dùng cho endpoint test. */

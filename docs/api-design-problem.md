@@ -6,7 +6,7 @@
 - Problem trong bank là nguồn dùng chung, chưa thuộc Course nào. Khi thêm vào Lesson, hệ thống tạo một Problem mới cho Lesson; không đổi `lesson_id` của bản nguồn.
 - Chưa có `created_by` cho Problem, Topic, archive hoặc Assignment snapshot.
 - Problem gắn Lesson chỉ được quản lý bởi Admin hoặc Teacher chủ Course.
-- Datetime dùng giờ Việt Nam, không có offset. `start_datetime` mở đề; `end_datetime` chỉ chặn Submit và không chặn xem đề.
+- Datetime request phải kèm UTC offset; response dùng giờ Việt Nam với offset `+07:00`. `start_datetime` mở đề; `end_datetime` chỉ chặn Submit và không chặn xem đề.
 
 ## POST /problems — Tạo Problem trong bank
 
@@ -21,8 +21,8 @@
 | level | string | có | Chỉ `easy`, `medium`, `hard` |
 | time_limit_seconds | int | có | >= 1 |
 | starter_codes | object | có | Phải có code không rỗng cho `python`, `c`, `cpp`, `java`; Python là ngôn ngữ chấm ban đầu |
-| start_datetime | datetime | có | Giờ Việt Nam, không kèm offset; quyết định lúc mở đề |
-| end_datetime | datetime | có | Giờ Việt Nam, không kèm offset; chỉ là hạn Submit; phải sau start |
+| start_datetime | datetime | có | Phải có UTC offset; quyết định lúc mở đề |
+| end_datetime | datetime | có | Phải có UTC offset; chỉ là hạn Submit; phải sau start |
 | hint | string \| null | không | |
 | complexity | string \| null | không | |
 | testcases | array | có | Ít nhất 1 testcase; `input` là mảng đối số JSON theo thứ tự tham số, `expected_output` là giá trị JSON; `is_sample` mặc định `false` |
@@ -88,7 +88,7 @@ Student chỉ xem Problem từ `start_datetime` trở đi và chỉ nhận testc
 | starter_codes | object \| null | Nếu gửi phải có code không rỗng cho `python`, `c`, `cpp`, `java`; null bỏ qua |
 | testcases | array \| null | Nếu gửi, phải có ít nhất 1 testcase JSON và thay toàn bộ danh sách; null bỏ qua |
 
-Nếu thay đổi lịch: datetime phải theo giờ Việt Nam, không có offset và `start_datetime < end_datetime`. Không áp giới hạn tương lai hoặc khoảng cách tối đa. Khi Problem đã có Submission, thay đổi testcase, `function_name`, starter code hoặc `time_limit_seconds` bị chặn với 409 để giữ nguyên hợp đồng chấm lịch sử. Không thể xóa testcase cuối cùng.
+Nếu thay đổi lịch: datetime phải có UTC offset và `start_datetime < end_datetime`. Không áp giới hạn tương lai hoặc khoảng cách tối đa. Khi Problem đã có Submission, thay đổi testcase, `function_name`, starter code hoặc `time_limit_seconds` bị chặn với 409 để giữ nguyên hợp đồng chấm lịch sử. Không thể xóa testcase cuối cùng.
 
 **Response 200 OK**: `ProblemDetailResponse`.
 

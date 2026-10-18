@@ -2,7 +2,8 @@ from typing import Any
 
 from pydantic import BaseModel, field_validator
 
-from app.schemas.problem import validate_json_value
+from app.modules.problems.schemas import validate_json_value
+
 
 
 class TestcaseResponse(BaseModel):

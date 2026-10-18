@@ -10,8 +10,8 @@
 | **Trigger** | Admin/Giáo viên chọn chức năng tạo Problem |
 | **Pre-condition** | Đã đăng nhập với vai trò Admin hoặc Teacher |
 | **Post-condition** | Problem được tạo với `lesson_id = null`, chưa thuộc Course nào; ít nhất một testcase được lưu cùng Problem để dùng khi sao chép vào Lesson |
-| **Basic flow** | 1. Người dùng nhập tiêu đề, đề bài, ràng buộc, function name, mức độ, giới hạn thời gian, starter code cho Python/C/C++/Java và thời gian mở/hạn<br>2. Người dùng gửi ít nhất một testcase JSON: mảng đối số và output mong đợi<br>3. Hệ thống kiểm tra field, mức độ, datetime Việt Nam không có offset, function name, đủ starter code, JSON hợp lệ và `start_datetime < end_datetime`<br>4. Hệ thống tạo Problem và các testcase<br>5. Hệ thống trả ProblemDetailResponse |
-| **Exception flow** | **E1. Dữ liệu sai, testcase rỗng, gửi datetime kèm offset hoặc lịch không hợp lệ**: hệ thống trả lỗi 422, không tạo Problem<br>**E2. Lỗi lưu dữ liệu**: hệ thống trả lỗi và không tạo dữ liệu một phần |
+| **Basic flow** | 1. Người dùng nhập tiêu đề, đề bài, ràng buộc, function name, mức độ, giới hạn thời gian, starter code cho Python/C/C++/Java và thời gian mở/hạn<br>2. Người dùng gửi ít nhất một testcase JSON: mảng đối số và output mong đợi<br>3. Hệ thống kiểm tra field, mức độ, datetime có UTC offset, function name, đủ starter code, JSON hợp lệ và `start_datetime < end_datetime`<br>4. Hệ thống tạo Problem và các testcase<br>5. Hệ thống trả ProblemDetailResponse |
+| **Exception flow** | **E1. Dữ liệu sai, testcase rỗng, thiếu UTC offset hoặc lịch không hợp lệ**: hệ thống trả lỗi 422, không tạo Problem<br>**E2. Lỗi lưu dữ liệu**: hệ thống trả lỗi và không tạo dữ liệu một phần |
 
 ### Use-case: Tìm Problem
 

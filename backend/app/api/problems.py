@@ -8,7 +8,7 @@ from app.core.exceptions import InvalidFormatError
 from app.modules.problems.schemas import ProblemDetailResponse, ProblemUpdateRequest, ProblemCreateRequest, \
     ProblemListResponse
 from app.modules.problems import service as problem_service
-from app.modules.problems.testcase_import import MAX_UPLOAD_BYTES, parse_testcases
+from app.modules.testcases.testcase_import import MAX_UPLOAD_BYTES, parse_testcases
 from app.models import User
 
 router = APIRouter(tags=["problem"])

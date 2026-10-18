@@ -5,12 +5,11 @@ from starlette import status
 from app.core.database import get_session
 from app.core.dependencies import get_current_user, require_role, Role
 from app.models import User
-from app.modules.testcases import service
 from app.modules.problems.schemas import ProblemDetailResponse, ProblemTestcaseUpdate
 from app.modules.testcases.schemas import TestcaseListResponse, TestcasePreviewRequest, TestcasePreviewResponse, \
     TestcaseUpdateRequest, TestcaseBatchRequest
-
-router = APIRouter(tags=["testcase"])
+from app.modules.testcases import service as testcase_service
+router = APIRouter(tags=["testcases"])
 BASE = "/courses/{course_id}/lessons/{lesson_id}/problems/{problem_id}/testcases"
 EXPORT_MEDIA_TYPES = {"json": "application/json", "zip": "application/zip"}
 

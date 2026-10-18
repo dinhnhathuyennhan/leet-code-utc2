@@ -3,7 +3,7 @@ from sqlmodel import Session, func, select, or_
 from app.core.utils.datetime_utils import as_utc, now_utc, vn_day_end, vn_day_start
 from app.core.exceptions import ConflictError, ForbiddenError, InvalidFormatError, NotFoundError
 from app.core.dependencies import Role
-from app.modules.courses.testcase_format import testcase_to_storage, testcase_to_api_values
+from app.modules.testcases.testcase_format import testcase_to_storage, testcase_to_api_values
 from app.modules.problems.schemas import ProblemDetailResponse, ProblemUpdateRequest, ProblemCreateRequest, \
     ProblemListResponse, validate_problem_schedule
 from app.modules.courses.access import (

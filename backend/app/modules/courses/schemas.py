@@ -4,7 +4,6 @@ from datetime import datetime
 from pydantic import BaseModel, Field, field_validator, model_validator
 
 from app.core.utils.datetime_utils import require_offset
-from app.core.utils.datetime_utils import require_vietnam_local_datetime
 from app.core.exceptions import EmptyFieldError, InvalidFormatError
 
 # SỬA: Giữ riêng trạng thái đã nộp để phân biệt điểm 0 với bài chưa làm.
@@ -38,11 +37,11 @@ def _required_str(value: str | None, field_name: str) -> str:
 def _required_datetime(value: datetime | None, field_name: str) -> datetime:
     if value is None:
         raise EmptyFieldError(f"{field_name} không được để trống")
-    return require_vietnam_local_datetime(value, field_name)
+    return require_offset(value, field_name)
 
 
 def _optional_datetime(value: datetime | None, field_name: str) -> datetime | None:
-    return None if value is None else require_vietnam_local_datetime(value, field_name)
+    return None if value is None else require_offset(value, field_name)
 
 
 class CourseProblemResponse(BaseModel):
@@ -81,24 +80,6 @@ class StudentEnrollmentResponse(BaseModel):
     start_date: datetime
     end_date: datetime
     total_number_student: int
-
-
-class AddStudentToCourseResponse(BaseModel):
-    enrollment_id: int
-    course_id: str
-    student_id: str
-
-
-class AddStudentToCourseRequest(BaseModel):
-    student_id: str
-
-
-class GetStudentListResponse(BaseModel):
-    enrollment_id: int
-    student_id: str
-    full_name: str
-    email: str
-
 
 
 class StudentDashboardResponse(BaseModel):

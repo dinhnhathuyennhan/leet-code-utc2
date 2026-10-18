@@ -7,7 +7,7 @@ from typing import Any, Literal
 from pydantic import BaseModel, Field, field_validator, model_validator
 
 from app.core.exceptions import EmptyFieldError, InvalidFormatError
-from app.core.utils.datetime_utils import is_vietnam_local_datetime
+from app.core.utils.datetime_utils import require_offset
 
 SUPPORTED_STARTER_LANGUAGES = ("python", "c", "cpp", "java")
 _FUNCTION_IDENTIFIER = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
@@ -35,10 +35,8 @@ def validate_problem_schedule(start_datetime: datetime, end_datetime: datetime) 
         raise InvalidFormatError("start_datetime phải trước end_datetime.")
 
 
-def validate_vietnam_datetime(value: datetime) -> datetime:
-    if not is_vietnam_local_datetime(value):
-        raise InvalidFormatError("Datetime phải dùng giờ Việt Nam và không kèm timezone offset")
-    return value
+def validate_datetime_offset(value: datetime, field_name: str) -> datetime:
+    return require_offset(value, field_name)
 
 def validate_function_name(value: str) -> str:
     if (
@@ -141,8 +139,8 @@ class ProblemCreateRequest(BaseModel):
 
     @field_validator("start_datetime", "end_datetime")
     @classmethod
-    def validate_local_schedule_datetime(cls, value: datetime) -> datetime:
-        return validate_vietnam_datetime(value)
+    def validate_local_schedule_datetime(cls, value: datetime, info) -> datetime:
+        return validate_datetime_offset(value, info.field_name)
 
     @field_validator("starter_codes")
     @classmethod
@@ -224,8 +222,8 @@ class ProblemUpdateRequest(BaseModel):
 
     @field_validator("start_datetime", "end_datetime")
     @classmethod
-    def validate_optional_local_schedule_datetime(cls, value: datetime | None) -> datetime | None:
-        return None if value is None else validate_vietnam_datetime(value)
+    def validate_optional_local_schedule_datetime(cls, value: datetime | None, info) -> datetime | None:
+        return None if value is None else validate_datetime_offset(value, info.field_name)
 
     @model_validator(mode="after")
     def require_templates_when_renaming_function(self) -> "ProblemUpdateRequest":

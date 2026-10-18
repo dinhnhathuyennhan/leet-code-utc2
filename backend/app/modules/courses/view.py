@@ -8,8 +8,8 @@ from app.models import Course, Enrollment, Lesson, Problem, User
 
 def lesson_status(lesson: Lesson) -> str:
     now = now_utc()
-    start = vn_day_start(lesson.start_date)
-    end = vn_day_end(lesson.end_date)
+    start = as_utc(vn_day_start(lesson.start_date))
+    end = as_utc(vn_day_end(lesson.end_date))
     if now < start:
         return "upcoming"
     if now > end:

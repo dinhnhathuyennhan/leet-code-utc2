@@ -2,7 +2,7 @@ from sqlmodel import Session, select
 
 from app.core.exceptions import InvalidFormatError, NotFoundError
 from app.core.dependencies import Role
-from app.modules.courses.testcase_format import testcase_to_api_values
+from app.modules.testcases.testcase_format import testcase_to_api_values
 from app.modules.submissions.schemas import (
     PendingSubmissionListResponse,
     PendingSubmissionResponse,

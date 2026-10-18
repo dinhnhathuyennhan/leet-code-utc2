@@ -2,7 +2,7 @@ from sqlmodel import Session, func, select
 
 from app.core.dependencies import Role
 from app.core.exceptions import ConflictError, InvalidFormatError, NotFoundError, ForbiddenError
-from app.core.utils.datetime_utils import as_utc
+from app.core.utils.datetime_utils import as_utc, now_utc
 from app.modules.courses.schemas import CourseResponse
 from app.modules.lessons.schemas import LessonCreateRequest, LessonDetailResponse, LessonUpdateRequest, \
     LessonDuplicateRequest, LessonReorderRequest
@@ -11,6 +11,7 @@ from app.modules.courses.access import get_lesson_in_course, get_manageable_cour
 from app.modules.courses.view import build_course_response
 from app.modules.problems.service import copy_problems_to_lesson, refresh_assignment_count
 from app.models import Enrollment, Lesson, Problem, Submission, Testcase, User, Course
+from app.modules.testcases.testcase_format import testcase_to_api_values
 
 
 def create_lesson(session: Session, course_id: str, data: LessonCreateRequest, current_user: User) -> CourseResponse:

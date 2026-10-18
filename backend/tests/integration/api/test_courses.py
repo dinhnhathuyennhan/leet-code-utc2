@@ -3,13 +3,14 @@
 from app.core.dependencies import get_current_user
 from app.main import app
 
+from tests.support.fixtures.course_fixtures import make_course
+from tests.support.fixtures.user_fixtures import make_user
+
 pytest_plugins = (
     "tests.support.fixtures.api_fixtures",
     "tests.support.fixtures.user_fixtures",
     "tests.support.fixtures.course_fixtures",
 )
-from tests.support.fixtures.course_fixtures import make_course
-from tests.support.fixtures.user_fixtures import make_user
 
 
 # ============================== ROUTE LAYER ==============================

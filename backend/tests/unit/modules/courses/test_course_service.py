@@ -23,15 +23,16 @@ from app.modules.courses.service import (
 from app.modules.courses.view import build_course_response
 from app.models import Course
 
+from tests.support.fixtures.user_fixtures import make_user, vn
+from tests.support.fixtures.builders import make_enrollment, make_lesson, make_problem
+from tests.support.fixtures.enrollment_fixtures import enroll_directly
+from tests.support.fixtures.course_fixtures import make_course
+
 pytest_plugins = (
     "tests.support.fixtures.user_fixtures",
     "tests.support.fixtures.course_fixtures",
 )
-from tests.support.fixtures.course_fixtures import make_course
-from tests.support.fixtures.enrollment_fixtures import enroll_directly
-from tests.support.fixtures.user_fixtures import make_user, vn
 
-from tests.support.fixtures.builders import make_enrollment, make_lesson, make_problem
 
 
 # ============================== CREATE / UPDATE COURSE ==============================

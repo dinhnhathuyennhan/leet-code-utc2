@@ -9,6 +9,7 @@ from app.schemas.submission import (
     SubmissionTestcaseResponse,
     SubmissionUpdateRequest,
 )
+from app.services.testcase_format import testcase_to_api_values
 from models import Course, Lesson, Problem, Submission, Testcase, User
 
 
@@ -76,7 +77,6 @@ def list_pending_submissions(
     rows = _submission_rows(session, current_user)
     rows = [row for row in rows if row[0].status.lower() in _VISIBLE_STATUSES]
 
-    counts = {"all": len(rows), "late_appeal": 0, "similarity": 0, "error": 0}
     if search:
         query = search.strip().lower()
         rows = [
@@ -88,6 +88,13 @@ def list_pending_submissions(
             or query in (row[1].report or "").lower()
             or query in row[1].title.lower()
         ]
+
+    counts = {
+        "all": len(rows),
+        "late_appeal": 0,
+        "similarity": 0,
+        "error": sum(1 for row in rows if row[0].status.lower() == "compile_error"),
+    }
 
     if filter_name == "error":
         filtered = [row for row in rows if row[0].status.lower() == "compile_error"]
@@ -147,8 +154,7 @@ def get_submission_detail(
         testcases=[
             SubmissionTestcaseResponse(
                 id=testcase.testcase_id,
-                input=testcase.input,
-                expected_output=testcase.expected_output,
+                **testcase_to_api_values(testcase),
                 is_sample=testcase.is_sample,
             )
             for testcase in testcases

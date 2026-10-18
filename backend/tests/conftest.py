@@ -5,6 +5,7 @@ from io import BytesIO
 from pathlib import Path
 
 import pytest
+import models  # noqa: F401
 from openpyxl import Workbook
 from sqlmodel import Session, SQLModel, create_engine
 from sqlmodel.pool import StaticPool
@@ -22,8 +23,6 @@ if _root_env.exists():
 # Fallback nếu vẫn None (an toàn cho test).
 if not os.getenv("JWT_SECRET_KEY"):
     os.environ["JWT_SECRET_KEY"] = "test-secret-key-for-pytest"
-
-import models  # noqa: E401,F401
 
 # Phần đầu sheet giống file "DS lớp học phần" thật của phòng đào tạo (hàng 1-10)
 CLASS_LIST_PREAMBLE = [

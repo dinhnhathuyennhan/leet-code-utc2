@@ -29,20 +29,21 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 _root_env = Path(__file__).resolve().parents[1].parent / ".env"
 if _root_env.exists():
     from dotenv import load_dotenv
+
     load_dotenv(_root_env, override=False)
 if not os.getenv("JWT_SECRET_KEY"):
     os.environ["JWT_SECRET_KEY"] = "test-secret-key-for-pytest"
 
-from fastapi.testclient import TestClient
-from sqlalchemy.pool import StaticPool
-from sqlmodel import Session, SQLModel, create_engine
+from fastapi.testclient import TestClient  # noqa: E402
+from sqlalchemy.pool import StaticPool  # noqa: E402
+from sqlmodel import Session, SQLModel, create_engine  # noqa: E402
 
-from app.core.password import hash_password
-from app.core.token import create_access_token
-from app.db import get_session
-from app.dependencies import Role
-from app.main import app
-from models import Class, Course, Enrollment, User
+from app.core.password import hash_password  # noqa: E402
+from app.core.token import create_access_token  # noqa: E402
+from app.db import get_session  # noqa: E402
+from app.dependencies import Role  # noqa: E402
+from app.main import app  # noqa: E402
+from models import Class, Course, Enrollment, User  # noqa: E402
 
 
 # ============================== SETUP DB ==============================
@@ -157,7 +158,6 @@ def setup_test_db() -> Session:
         ]
     )
     # Update total_number_student
-    session.execute.__self__ if False else None  # noop
     for c in courses:
         c.total_number_student = sum(
             1
@@ -201,7 +201,7 @@ def main() -> None:
 
     with TestClient(app) as client:
         headers_student_a = make_headers("SV001", Role.STUDENT)
-        headers_student_b = make_headers("SV002", Role.STUDENT)
+        _headers_student_b = make_headers("SV002", Role.STUDENT)
         headers_teacher_a = make_headers("GV001", Role.TEACHER)
         headers_teacher_b = make_headers("GV002", Role.TEACHER)
         headers_admin = make_headers("AD001", Role.ADMIN)

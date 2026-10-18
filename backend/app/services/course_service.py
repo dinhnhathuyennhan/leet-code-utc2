@@ -16,6 +16,7 @@ from app.core.exceptions import (
 from app.dependencies import Role
 from app.schemas.classroom import ClassResponse, ClassStudentResponse
 from app.schemas.course import (
+    AddStudentToCourseResponse,
     CourseResponse,
     CourseTermsResponse,
     CreateCourseRequest,

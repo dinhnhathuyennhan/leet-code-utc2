@@ -46,3 +46,18 @@ export interface PlagiarismAlert {
   reason: string;
   similarity: number;
 }
+
+// ─── Student Dashboard ──────────────────────────────────────────────
+
+/**
+ * Response cho `GET /students/{student_id}/dashboard`.
+ * Cấu trúc trùng với `StudentDashboardResponse` ở backend.
+ */
+export interface StudentOverview {
+  total_classes: number;
+  completed_problems: number;
+  total_problems: number;
+  /** 0-10; `null` khi SV chưa có submission nào. */
+  average_score: number | null;
+  courses: CourseSummary[];
+}

@@ -1,6 +1,6 @@
 from datetime import UTC, datetime
 
-from sqlmodel import Session, or_, select
+from sqlmodel import Session, func, or_, select
 
 from app.core.exceptions import (
     ConflictError,
@@ -14,10 +14,11 @@ from app.schemas.course import (
     CourseResponse,
     CreateCourseRequest,
     GetStudentListResponse,
+    StudentDashboardResponse,
     StudentEnrollmentResponse,
     UpdateCourseRequest,
 )
-from models import Course, Enrollment, User
+from models import Course, Enrollment, Lesson, Problem, Submission, User
 
 
 def get_course_enrollments(
@@ -280,21 +281,21 @@ def get_courses(
         raise ForbiddenError("Bạn không có quyền thực hiện hành động này")
 
     if term:
-        # contains() → SQL LIKE %term%; escape ký tự đặc biệt để tránh SQL injection.
-        # (sqlmodel/SQLAlchemy đã tự parameter hóa; chỉ cần thoát \, %, _.)
-        escaped = term.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
-        statement = statement.where(Course.term.contains(escaped))
+        # contains() → SQL LIKE %term%; SQLAlchemy `contains(autoescape=True)` tự escape
+        # ký tự đặc biệt (%, _, \) bằng `escape='\\'` — khớp với mọi dialect
+        # (Postgres, SQLite, MySQL). Trước đây escape thủ công nhưng KHÔNG truyền
+        # `escape='\\'`, nên SQLite coi `\` là ký tự literal → sai kết quả
+        # (vd search='CS_100' tạo pattern '%CS_100%' khớp chuỗi có backslash).
+        statement = statement.where(Course.term.contains(term, autoescape=True))
 
     if search:
-        needle = search.strip()
-        if needle:
-            escaped = needle.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
-            statement = statement.where(
-                or_(
-                    Course.course_id.contains(escaped),
-                    Course.course_name.contains(escaped),
-                )
+        # Tương tự term — dùng autoescape=True để chuyển `\\%` → match exact `%`.
+        statement = statement.where(
+            or_(
+                Course.course_id.contains(search, autoescape=True),
+                Course.course_name.contains(search, autoescape=True),
             )
+        )
 
     courses = session.exec(statement.order_by(Course.course_id)).all()
     return [_to_response(course) for course in courses]
@@ -314,23 +315,32 @@ def _check_can_view_student_courses(
         - STUDENT: chỉ xem của chính mình.
 
     Raises:
-        NotFoundError: SV không tồn tại hoặc không phải role student.
-        ForbiddenError: current_user không đủ quyền.
+        NotFoundError: SV không tồn tại hoặc không phải role student (chỉ với ADMIN).
+        ForbiddenError: current_user không đủ quyền (áp dụng chung cho mọi role,
+            kể cả khi user tồn tại nhưng không có quyền — tránh lộ thông tin
+            user_id nào tồn tại, user_id nào là student).
+
+    Lưu ý bảo mật (Lỗi 9 — leader review):
+        Trước đây function check sự tồn tại của user trước → kẻ tấn công có thể
+        dò xem `user_id` nào tồn tại / là sinh viên (phân biệt 404 vs 403).
+        Fix: với STUDENT, check `current_user == target` trước;
+        với TEACHER, check overlap enrollment trước;
+        chỉ ADMIN mới được trả 404 khi target không tồn tại.
     """
-    target = session.get(User, target_student_id)
-    if target is None or target.role_id != Role.STUDENT:
-        raise NotFoundError("Không tìm thấy sinh viên")
-
-    if current_user.role_id == Role.ADMIN:
-        return
-
+    # STUDENT: check quyền trước (kể cả target không tồn tại cũng trả 403 đồng nhất).
     if current_user.role_id == Role.STUDENT:
         if current_user.user_id != target_student_id:
-            raise ForbiddenError("Bạn chỉ có thể xem thông tin của chính mình")
+            raise ForbiddenError("Bạn không có quyền xem thông tin sinh viên này")
+        # Sau khi đã chắc chắn target là chính mình, mới check user tồn tại.
+        target = session.get(User, target_student_id)
+        if target is None or target.role_id != Role.STUDENT:
+            # Self không tồn tại → lỗi thật, nhưng thực tế không thể xảy ra
+            # (current_user lấy từ token đã qua auth). Để phòng hờ.
+            raise NotFoundError("Không tìm thấy sinh viên")
         return
 
+    # TEACHER: check overlap enrollment trước (kể cả target không tồn tại cũng trả 403).
     if current_user.role_id == Role.TEACHER:
-        # Teacher chỉ xem được SV enroll lớp do mình tạo.
         overlap = session.exec(
             select(Enrollment)
             .join(Course, Course.course_id == Enrollment.course_id)
@@ -340,9 +350,15 @@ def _check_can_view_student_courses(
             )
         ).first()
         if overlap is None:
-            raise ForbiddenError(
-                "Bạn không có quyền xem thông tin sinh viên này"
-            )
+            # Trả 403 đồng nhất: không phân biệt target không tồn tại vs không có quyền.
+            raise ForbiddenError("Bạn không có quyền xem thông tin sinh viên này")
+        return
+
+    # ADMIN: được phép phân biệt 404 (user không tồn tại) vs 403 (user không phải SV).
+    if current_user.role_id == Role.ADMIN:
+        target = session.get(User, target_student_id)
+        if target is None or target.role_id != Role.STUDENT:
+            raise NotFoundError("Không tìm thấy sinh viên")
         return
 
     raise ForbiddenError("Bạn không có quyền thực hiện hành động này")
@@ -411,3 +427,102 @@ def get_student_enrollments(
         )
         for enrollment, course in rows
     ]
+
+
+def get_student_dashboard(
+    session: Session, student_id: str, current_user: User
+) -> StudentDashboardResponse:
+    """Lấy thống kê tổng quan cho trang Student Dashboard.
+
+    Bao gồm:
+        - ``total_classes``: số lớp SV đang enroll.
+        - ``total_problems``: tổng số bài tập thuộc các lớp đó.
+        - ``completed_problems``: số bài đã nộp và đạt (status = "accepted").
+        - ``average_score``: điểm TB (0-10) = mean(passed_count / total_testcases * 10).
+        - ``courses``: danh sách lớp (CourseResponse) để FE render grid card.
+
+    Quyền xem (giống các endpoint khác của student):
+        - STUDENT: chỉ xem của chính mình.
+        - TEACHER: chỉ xem SV enroll lớp mình tạo.
+        - ADMIN: xem tất cả.
+    """
+    _check_can_view_student_courses(session, current_user, student_id)
+
+    # Lấy courses của SV (lọc lại theo role teacher tương tự get_student_courses).
+    course_statement = (
+        select(Course)
+        .join(Enrollment, Enrollment.course_id == Course.course_id)
+        .where(Enrollment.student_id == student_id)
+        .distinct()
+    )
+    if current_user.role_id == Role.TEACHER:
+        course_statement = course_statement.where(
+            Course.created_by == current_user.user_id
+        )
+    courses = session.exec(course_statement.order_by(Course.course_id)).all()
+    course_responses = [_to_response(course) for course in courses]
+
+    total_classes = len(course_responses)
+    if total_classes == 0:
+        return StudentDashboardResponse(
+            total_classes=0,
+            completed_problems=0,
+            total_problems=0,
+            average_score=None,
+            courses=[],
+        )
+
+    # Tổng số bài tập thuộc các lớp đang học.
+    problem_count_statement = (
+        select(func.count(Problem.problem_id))
+        .join(Lesson, Lesson.lesson_id == Problem.lesson_id)
+        .join(Course, Course.course_id == Lesson.course_id)
+        .join(Enrollment, Enrollment.course_id == Course.course_id)
+        .where(Enrollment.student_id == student_id)
+    )
+    if current_user.role_id == Role.TEACHER:
+        problem_count_statement = problem_count_statement.where(
+            Course.created_by == current_user.user_id
+        )
+    total_problems = session.exec(problem_count_statement).one() or 0
+
+    # Số bài SV đã nộp và đạt (status="accepted" — bài được full testcase pass).
+    completed_statement = (
+        select(func.count(Submission.submission_id))
+        .where(
+            Submission.student_id == student_id,
+            Submission.status == "accepted",
+        )
+    )
+    completed_problems = session.exec(completed_statement).one() or 0
+
+    # Điểm trung bình: sum(passed_count / total_testcases * 10) / count(submissions có testcase > 0)
+    # Chỉ tính trên submission có problem.total_number_testcase > 0 để tránh chia 0.
+    # Trả về None nếu không có submission hợp lệ nào.
+    average_statement = (
+        select(
+            func.sum(Submission.passed_count),
+            func.count(Submission.submission_id),
+        )
+        .join(Problem, Problem.problem_id == Submission.problem_id)
+        .where(
+            Submission.student_id == student_id,
+            Problem.total_number_testcase > 0,
+        )
+    )
+    passed_sum, total_subs = session.exec(average_statement).one()
+    if not total_subs:
+        average_score: float | None = None
+    else:
+        # Tổng tỉ lệ passed/total: mỗi submission đóng góp passed/total_testcases * 10.
+        # Chia cho số lượng submission (không phải sum) để có điểm trung bình theo lần nộp.
+        ratio = (passed_sum or 0) / float(total_subs)
+        average_score = round(ratio, 2)
+
+    return StudentDashboardResponse(
+        total_classes=total_classes,
+        completed_problems=int(completed_problems),
+        total_problems=int(total_problems),
+        average_score=average_score,
+        courses=course_responses,
+    )

@@ -44,8 +44,8 @@ export function CourseFilters({ filters }: { filters: CourseFilterState }) {
         <div className="flex items-center gap-2">
           <Filter className="size-4 text-muted-foreground" aria-hidden />
           <Select
-            value={term || "__all__"}
-            onValueChange={(value) => setTerm(value === "__all__" || value == null ? "" : value)}
+            value={term}
+            onValueChange={(value) => setTerm(value ?? "")}
           >
             <SelectTrigger
               className="h-11 min-w-48 bg-card"
@@ -54,7 +54,6 @@ export function CourseFilters({ filters }: { filters: CourseFilterState }) {
               <SelectValue placeholder="Tất cả học kỳ" />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="__all__">Tất cả học kỳ</SelectItem>
               {availableTerms.map((t) => (
                 <SelectItem key={t} value={t}>
                   {t}

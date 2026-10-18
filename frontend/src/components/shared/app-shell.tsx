@@ -42,7 +42,7 @@ export function AppShell({ navItems, homeHref, user, onLogout, children }: AppSh
 
         <div className="lg:pl-72">
           <Topbar homeHref={homeHref} onMenuClick={() => setMenuOpen(true)} onLogout={onLogout} />
-          <main className="mx-auto w-full max-w-[120rem] p-4 sm:p-6 lg:p-8">{children}</main>
+          <main className="mx-auto w-full max-w-[120rem] px-4 pb-8 pt-3 sm:px-6 sm:pt-4 lg:px-8 lg:pt-5">{children}</main>
         </div>
 
         <BackToTop />

@@ -4,8 +4,13 @@ import type {
   PendingSubmissionParams,
   PendingSubmissionsResponse,
   PlagiarismAlert,
+  StudentOverview,
   TeacherOverview,
 } from "@/lib/types/dashboard";
+import {
+  toCourseSummary,
+  type CourseResponseRaw,
+} from "@/lib/api/transformers/course";
 
 // Dashboard endpoints are kept together so query hooks share one typed API contract.
 
@@ -13,6 +18,25 @@ export async function getTeacherOverview(): Promise<TeacherOverview> {
   try {
     const response = await axiosInstance.get<TeacherOverview>("/teacher/dashboard/overview");
     return response.data;
+  } catch (error) {
+    throw wrapAxiosError(error);
+  }
+}
+
+/**
+ * GET /students/{student_id}/dashboard
+ * Transform `courses[]` từ `CourseResponseRaw` → `CourseSummary`
+ * (backend trả `course_id`, FE cần `id` + `name`).
+ */
+export async function getStudentOverview(studentId: string): Promise<StudentOverview> {
+  try {
+    const response = await axiosInstance.get<{ courses: CourseResponseRaw[] } & Omit<StudentOverview, "courses">>(
+      `/students/${encodeURIComponent(studentId)}/dashboard`,
+    );
+    return {
+      ...response.data,
+      courses: response.data.courses.map(toCourseSummary),
+    };
   } catch (error) {
     throw wrapAxiosError(error);
   }

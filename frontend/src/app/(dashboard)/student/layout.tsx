@@ -17,7 +17,7 @@ export default function StudentLayout({ children }: { children: ReactNode }) {
   const { user, logout } = useShellUser("student");
 
   return (
-    <AppShell navItems={STUDENT_NAV} homeHref="/" user={user} onLogout={logout}>
+    <AppShell navItems={STUDENT_NAV} homeHref="/student/dashboard" user={user} onLogout={logout}>
       {children}
     </AppShell>
   );

@@ -12,6 +12,7 @@ from app.schemas.course import (
     CourseResponse,
     CreateCourseRequest,
     GetStudentListResponse,
+    StudentDashboardResponse,
     StudentEnrollmentResponse,
     UpdateCourseRequest,
 )
@@ -23,6 +24,7 @@ from app.services.course_service import (
     get_course_enrollments,
     get_courses as _get_courses,
     get_student_courses as _get_student_courses,
+    get_student_dashboard as _get_student_dashboard,
     get_student_enrollments as _get_student_enrollments,
     update_course as _update_course,
 )
@@ -200,6 +202,32 @@ def get_student_enrollments_route(
     dùng cho "Lịch sử đăng ký" hoặc để gọi API xoá enrollment sau này.
     """
     return _get_student_enrollments(
+        session=session,
+        student_id=student_id,
+        current_user=current_user,
+    )
+
+
+# ─── Student Dashboard ───────────────────────────────────────────────────
+
+
+@router.get(
+    "/students/{student_id}/dashboard",
+    response_model=StudentDashboardResponse,
+)
+def get_student_dashboard_route(
+    student_id: str,
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+) -> StudentDashboardResponse:
+    """Trả về thống kê tổng quan cho trang Student Dashboard.
+
+    Quyền (giống các endpoint student khác):
+        - STUDENT: chỉ xem của chính mình.
+        - TEACHER: chỉ xem SV enroll lớp do mình tạo.
+        - ADMIN: xem tất cả.
+    """
+    return _get_student_dashboard(
         session=session,
         student_id=student_id,
         current_user=current_user,

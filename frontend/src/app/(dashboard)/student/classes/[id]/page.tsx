@@ -22,13 +22,26 @@ export default function StudentCourseDetailPage() {
   const studentsQuery = useCourseStudents(courseId);
   const [tab, setTab] = useState<StudentCourseTab>("info");
 
-  useBreadcrumbLabel(courseQuery.data?.code);
+  // Ưu tiên course_id từ URL làm nhãn dự phòng.
+  // Khi data về, dùng `code` (alias của course_id từ BE) — vẫn là "CS101".
+  useBreadcrumbLabel(courseQuery.data?.code ?? courseId);
 
   if (courseQuery.isPending) return <CourseDetailSkeleton />;
 
   if (courseQuery.error || !courseQuery.data) {
-    if (courseQuery.error instanceof ApiError && courseQuery.error.status === 404) {
-      return <EmptyState icon={SearchX} title="Không tìm thấy lớp học phần" description="Lớp này không tồn tại hoặc bạn không có quyền xem." />;
+    // Gộp 403 + 404: cả hai đều hiện EmptyState (mô tả đã nói "không tồn tại hoặc bạn không có quyền xem").
+    // Không hiện nút "Thử lại" với 403/404 vì retry không có tác dụng.
+    if (
+      courseQuery.error instanceof ApiError &&
+      (courseQuery.error.status === 404 || courseQuery.error.status === 403)
+    ) {
+      return (
+        <EmptyState
+          icon={SearchX}
+          title="Không tìm thấy lớp học phần"
+          description="Lớp này không tồn tại hoặc bạn không có quyền xem."
+        />
+      );
     }
     return <ErrorState error={courseQuery.error} onRetry={() => void courseQuery.refetch()} />;
   }
@@ -39,7 +52,7 @@ export default function StudentCourseDetailPage() {
       <StudentCourseDetailTabs
         value={tab}
         onValueChange={setTab}
-        info={<StudentCourseInfoPanel />}
+        info={<StudentCourseInfoPanel courseId={courseId ?? ""} />}
         roster={
           <StudentRosterTable
             students={studentsQuery.data}

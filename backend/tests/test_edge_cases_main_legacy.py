@@ -28,16 +28,16 @@ if _root_env.exists():
 if not os.getenv("JWT_SECRET_KEY"):
     os.environ["JWT_SECRET_KEY"] = "test-secret-key-for-pytest"
 
-from fastapi.testclient import TestClient
-from sqlalchemy.pool import StaticPool
-from sqlmodel import Session, SQLModel, create_engine
+from fastapi.testclient import TestClient  # noqa: E402
+from sqlalchemy.pool import StaticPool  # noqa: E402
+from sqlmodel import Session, SQLModel, create_engine  # noqa: E402
 
-from app.core.password import hash_password
-from app.core.token import create_access_token
-from app.db import get_session
-from app.dependencies import Role
-from app.main import app
-from models import Class, Course, Enrollment, User
+from app.core.password import hash_password  # noqa: E402
+from app.core.token import create_access_token  # noqa: E402
+from app.db import get_session  # noqa: E402
+from app.dependencies import Role  # noqa: E402
+from app.main import app  # noqa: E402
+from models import Class, Course, User  # noqa: E402
 
 
 def setup_edge_db() -> Session:
@@ -185,7 +185,7 @@ def main():
         print("\n[7] Token invalid")
         r = client.get("/courses", headers={"Authorization": "Bearer FAKE_TOKEN"})
         assert r.status_code == 401
-        print(f"  OK: 401 cho token giả")
+        print("  OK: 401 cho token giả")
 
         # Test 8: Token hết hạn (giả lập với token tự tạo có exp quá khứ)
         print("\n[8] Token thiếu field bắt buộc")
@@ -198,7 +198,7 @@ def main():
         r = client.get("/courses", headers={"Authorization": f"Bearer {bad_token}"})
         # Token thiếu 'tv' → 401
         assert r.status_code == 401
-        print(f"  OK: 401 cho token thiếu claim")
+        print("  OK: 401 cho token thiếu claim")
 
         # Test 9: Role không hợp lệ trong DB
         print("\n[9] User với role_id không hợp lệ (giả lập trong DB)")
@@ -232,7 +232,7 @@ def main():
             headers=h_stud,
         )
         assert r.status_code == 403
-        print(f"  OK: 403 cho student cố tạo course")
+        print("  OK: 403 cho student cố tạo course")
 
         # Test 11: PATCH course không tồn tại
         print("\n[11] PATCH /courses/NOT_EXIST")
@@ -242,7 +242,7 @@ def main():
             headers=h_admin,
         )
         assert r.status_code == 404
-        print(f"  OK: 404 cho course không tồn tại")
+        print("  OK: 404 cho course không tồn tại")
 
         # Test 12: PATCH với start_date >= end_date
         print("\n[12] PATCH với date không hợp lệ (start >= end)")

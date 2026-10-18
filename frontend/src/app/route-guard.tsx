@@ -110,9 +110,11 @@ export function RouteGuard({
     }
   },[auth, pathname, searchParams, router]);
   if (auth.status === "loading") {
-    return (
-      <div className="h-[100dvh] w-full bg-slate-900" aria-busy="true" />
-    );
+    // Trả về children với wrapper trong suốt để tránh hydration mismatch:
+    //   - SSR: status = "loading" → render children (cùng markup client render sau).
+    //   - Client: useEffect sẽ chạy auth bootstrap → state chuyển → re-render.
+    // Không thể return div khác (bg-slate-900) vì client render sẽ khác HTML.
+    return <Fragment key={pathname}>{children}</Fragment>;
   }
 
   // --- LUỒNG 2: Xử lý hiển thị màn hình 403 (Sai quyền) ---

@@ -25,22 +25,22 @@ if _root_env.exists():
 if not os.getenv("JWT_SECRET_KEY"):
     os.environ["JWT_SECRET_KEY"] = "test-secret-key-for-pytest"
 
-import pytest
-from fastapi.testclient import TestClient
-from sqlalchemy.pool import StaticPool
-from sqlmodel import Session, SQLModel, create_engine
+import pytest  # noqa: E402
+from fastapi.testclient import TestClient  # noqa: E402
+from sqlalchemy.pool import StaticPool  # noqa: E402
+from sqlmodel import Session, SQLModel, create_engine  # noqa: E402
 
 from app.core.exceptions import ForbiddenError, NotFoundError  # noqa: E402
-from app.core.password import hash_password
-from app.core.token import create_access_token
-from app.dependencies import Role
-from app.main import app
-from app.services.course_service import (
+from app.core.password import hash_password  # noqa: E402
+from app.core.token import create_access_token  # noqa: E402
+from app.dependencies import Role  # noqa: E402
+from app.main import app  # noqa: E402
+from app.services.course_service import (  # noqa: E402
     get_courses,
     get_student_courses,
     get_student_enrollments,
 )
-from models import Course, Enrollment, User
+from models import Course, Enrollment, User  # noqa: E402
 
 
 # ============================== FIXTURES CHUNG ==============================
@@ -279,6 +279,7 @@ class TestGetCoursesFilter:
     ):
         """Lỗi 6: enrollment trùng (nếu có sẵn) phải được dedupe ở query student."""
         c1 = make_course(session, "CS101", teacher_a)
+        assert c1.course_id == "CS101"
 
         # Insert 2 enrollment cùng course/student (giả lập data bẩn)
         session.add(Enrollment(course_id="CS101", student_id=student_a.user_id))
@@ -303,7 +304,6 @@ class TestGetStudentCourses:
     ):
         c1 = make_course(session, "CS101", teacher_a)
         c2 = make_course(session, "CS102", teacher_a)
-        c3 = make_course(session, "CS103", teacher_a)
         enroll(session, c1.course_id, student_a.user_id)
         enroll(session, c2.course_id, student_a.user_id)
         # student_a không enroll c3
@@ -354,7 +354,7 @@ class TestGetStudentCourses:
         c1 = make_course(session, "CS101", teacher_a)
         enroll(session, c1.course_id, student_b.user_id)
 
-        with pytest.raises(ForbiddenError, match="Bạn chỉ có thể xem thông tin của chính mình"):
+        with pytest.raises(ForbiddenError, match="Bạn không có quyền xem thông tin sinh viên này"):
             get_student_courses(session, student_b.user_id, student_a)
 
     def test_raises_not_found_for_nonexistent_student(self, session, admin):

@@ -1,5 +1,5 @@
 import type { ReactNode } from "react";
-import { CalendarCheck, CalendarPlus, UserCheck, Users } from "lucide-react";
+import { CalendarCheck, UserCheck, Users } from "lucide-react";
 
 import { formatDate } from "@/lib/helpers/format";
 import type { CourseDetail } from "@/lib/types/course";
@@ -30,13 +30,8 @@ export function StudentCourseHeaderCard({ course }: { course: CourseDetail }) {
           <MetaItem icon={<CalendarCheck className="size-4" />}>Bắt đầu: <strong>{formatDate(course.start_date)}</strong></MetaItem>
           <MetaItem icon={<CalendarCheck className="size-4" />}>Kết thúc: <strong>{formatDate(course.end_date)}</strong></MetaItem>
           <MetaItem icon={<UserCheck className="size-4" />}>Sĩ số: <strong>{course.total_number_student} sinh viên</strong></MetaItem>
-          <MetaItem icon={<Users className="size-4" />}>Giảng viên: <strong>{course.created_by}</strong></MetaItem>
+          <MetaItem icon={<Users className="size-4" />}>Người tạo: <strong>{course.created_by}</strong></MetaItem>
         </div>
-      </div>
-
-      <div className="flex w-full items-center gap-2 self-end text-sm text-muted-foreground sm:w-auto sm:flex-col sm:items-end sm:text-right">
-        <CalendarPlus className="size-5 shrink-0 text-indigo-600 sm:order-2" />
-        <p className="sm:order-1">Buổi học & bài tập sẽ đến ở Phase 2.</p>
       </div>
     </section>
   );

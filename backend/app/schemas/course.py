@@ -51,6 +51,61 @@ class CourseLessonResponse(BaseModel):
     participant_count: int | None
 
 
+
+class StudentEnrollmentResponse(BaseModel):
+    """Response cho `GET /students/{student_id}/enrollments` (Lỗi 8).
+
+    Trả về thông tin enrollment kèm thông tin lớp tương ứng,
+    để client hiển thị "Sinh viên X đã đăng ký lớp Y".
+    """
+
+    enrollment_id: int
+    course_id: str
+    course_name: str
+    term: str
+    start_date: datetime
+    end_date: datetime
+    total_number_student: int
+
+
+class AddStudentToCourseResponse(BaseModel):
+    enrollment_id: int
+    course_id: str
+    student_id: str
+
+
+class AddStudentToCourseRequest(BaseModel):
+    student_id: str
+
+
+class GetStudentListResponse(BaseModel):
+    enrollment_id: int
+    student_id: str
+    full_name: str
+    email: str
+
+
+
+class StudentDashboardResponse(BaseModel):
+    """Response cho `GET /students/{student_id}/dashboard`.
+
+    Trả về các thống kê tổng quan của sinh viên để hiển thị trang
+    "Tổng quan" (Student Dashboard).
+
+    - ``total_classes``: số lớp đang học (đã enroll).
+    - ``completed_problems``: số bài tập đã nộp và đạt (status = "accepted").
+    - ``total_problems``: tổng số bài tập của tất cả các lớp đang học.
+    - ``average_score``: điểm trung bình (0-10) tính theo passed_count / total_number_testcase.
+      Trả về ``None`` nếu sinh viên chưa có submission nào.
+    - ``courses``: danh sách các lớp đang học (kèm thông tin cơ bản) để FE dựng grid card.
+    """
+
+    total_classes: int
+    completed_problems: int
+    total_problems: int
+    average_score: float | None
+    courses: list["CourseResponse"]
+
 class CourseResponse(BaseModel):
     """Response chuẩn cho mọi endpoint thuộc module Course (cùng shape với `POST /courses`)."""
 

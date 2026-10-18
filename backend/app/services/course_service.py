@@ -3,20 +3,10 @@ import json
 import re
 import zipfile
 
-from app.services.course_view import build_course_response
-from sqlmodel import Session, func, select
 from fastapi import UploadFile
-from app.schemas.classroom import ClassResponse, ClassStudentResponse
-from app.schemas.lesson import LessonCreateRequest, LessonDetailResponse, LessonUpdateRequest
-from app.schemas.problem import ProblemDetailResponse, ProblemUpdateRequest
-from app.core.datetime_utils import as_utc, now_utc
-from app.services.course_access import (
-    get_lesson_in_course,
-    get_manageable_course,
-    get_problem_in_lesson,
-    get_viewable_course,
-)
+from sqlmodel import Session, func, or_, select
 
+from app.core.datetime_utils import as_utc, now_utc
 from app.core.exceptions import (
     ConflictError,
     ForbiddenError,
@@ -24,13 +14,41 @@ from app.core.exceptions import (
     NotFoundError,
 )
 from app.dependencies import Role
+from app.schemas.classroom import ClassResponse, ClassStudentResponse
 from app.schemas.course import (
+    AddStudentToCourseResponse,
     CourseResponse,
     CourseTermsResponse,
     CreateCourseRequest,
+    GetStudentListResponse,
+    StudentDashboardResponse,
+    StudentEnrollmentResponse,
     UpdateCourseRequest,
 )
-from models import Class, Course, Enrollment, Lesson, Problem, Submission, Testcase, User
+from app.schemas.lesson import (
+    LessonCreateRequest,
+    LessonDetailResponse,
+    LessonUpdateRequest,
+)
+from app.schemas.problem import ProblemDetailResponse, ProblemUpdateRequest
+from app.services.course_access import (
+    get_lesson_in_course,
+    get_manageable_course,
+    get_problem_in_lesson,
+    get_viewable_course,
+)
+from app.services.course_view import build_course_response
+from models import (
+    Class,
+    Course,
+    Enrollment,
+    Lesson,
+    Problem,
+    Submission,
+    Testcase,
+    User,
+)
+
 
 def _assert_can_copy_problems(
     session: Session,
@@ -43,7 +61,6 @@ def _assert_can_copy_problems(
     - Admin: được dùng mọi bài.
     - Bài đã nằm sẵn trong buổi đích (source_lesson_id == target_lesson_id): luôn được.
     - Bài ở buổi khác: chủ lớp chứa bài đó phải là current_user.
-    (Sau này có kho UTC2: thêm điều kiện cho phép course_id == "BANK-UTC2" ở đây.)
     """
     if not problem_ids or current_user.role_id == Role.ADMIN:
         return
@@ -68,11 +85,12 @@ def _assert_can_copy_problems(
 
 def _refresh_assignment_count(session: Session, lesson: Lesson) -> None:
     """Đếm số bài thật đang có trong buổi rồi ghi vào total_number_assignment."""
-    session.flush()  # đảm bảo các bài vừa clone đã được đếm
+    session.flush()
     lesson.total_number_assignment = session.exec(
         select(func.count()).select_from(Problem).where(Problem.lesson_id == lesson.lesson_id)
     ).one()
     session.add(lesson)
+
 
 # SỬA: Clone bài tập khi tái sử dụng ở Lesson khác để Submission cũ không bị tính sang buổi mới.
 def _get_lesson_problems(session: Session, problem_ids: list[int], lesson_id: int | None = None) -> list[Problem]:
@@ -92,8 +110,6 @@ def _get_lesson_problems(session: Session, problem_ids: list[int], lesson_id: in
             selected.append(problem)
             continue
 
-        # SỬA: Mỗi lần gắn bài từ Lesson khác phải tạo problem_id mới; Submission
-        # của bài nguồn vẫn giữ nguyên Lesson cũ và không “đi theo” bài mới.
         cloned_problem = Problem(
             lesson_id=lesson_id,
             title=problem.title,
@@ -195,6 +211,7 @@ def get_lesson_detail(
         ],
     )
 
+
 # SỬA: Lấy danh sách lớp theo mã để dropdown ổn định và dễ cache ở frontend.
 def get_classes(session: Session, current_user: User) -> list[ClassResponse]:
     del current_user
@@ -215,7 +232,7 @@ def get_class_students(session: Session, class_id: str, current_user: User) -> l
     ]
 
 
-# SỬA: Lấy đầy đủ nội dung một bài tập thuộc đúng course/lesson, sinh viên chỉ thấy testcase mẫu, và chỉ khi bài đã mở
+# SỬA: Lấy đầy đủ nội dung một bài tập thuộc đúng course/lesson
 def get_problem_detail(
     session: Session, course_id: str, lesson_id: int, problem_id: int, current_user: User
 ) -> ProblemDetailResponse:
@@ -225,7 +242,7 @@ def get_problem_detail(
 
     is_student = current_user.role_id == Role.STUDENT
     if is_student and as_utc(problem.start_datetime) > now_utc():
-        raise NotFoundError("Không tìm thấy bài tập trong buổi học")  # chưa mở thì coi như chưa tồn tại
+        raise NotFoundError("Không tìm thấy bài tập trong buổi học")
 
     testcases = session.exec(
         select(Testcase).where(Testcase.problem_id == problem_id).order_by(Testcase.testcase_id)
@@ -249,7 +266,7 @@ def get_problem_detail(
     )
 
 
-# SỬA: Cập nhật bài tập và testcase bằng các cột/model hiện có; không sửa models.py.
+# SỬA: Cập nhật bài tập và testcase
 def update_problem(
     session: Session,
     course_id: str,
@@ -271,7 +288,6 @@ def update_problem(
         raise InvalidFormatError("start_datetime phải trước hoặc bằng end_datetime")
 
     if data.testcases is not None:
-        # SỬA: Thay toàn bộ testcase trong một transaction để tránh dữ liệu cũ còn sót.
         old_testcases = session.exec(select(Testcase).where(Testcase.problem_id == problem_id)).all()
         for testcase in old_testcases:
             session.delete(testcase)
@@ -286,7 +302,7 @@ def update_problem(
     return get_problem_detail(session, course_id, lesson_id, problem_id, current_user)
 
 
-# SỬA: Đọc testcase từ JSON hoặc ZIP JSON và thay dữ liệu testcase của Problem trong một transaction.
+# SỬA: Đọc testcase từ JSON hoặc ZIP JSON
 def upload_problem_testcases(
     session: Session,
     course_id: str,
@@ -341,7 +357,7 @@ def upload_problem_testcases(
     return get_problem_detail(session, course_id, lesson_id, problem_id, current_user)
 
 
-# SỬA: Tạo Lesson bằng dữ liệu hiện có trong models.py, không thay đổi cấu trúc database.
+# SỬA: Tạo Lesson
 def create_lesson(session: Session, course_id: str, data: LessonCreateRequest, current_user: User) -> CourseResponse:
     course = get_manageable_course(course_id, session, current_user, "Bạn không có quyền tạo buổi học")
     _assert_can_copy_problems(session, data.problem_ids, current_user)
@@ -365,7 +381,7 @@ def create_lesson(session: Session, course_id: str, data: LessonCreateRequest, c
     return build_course_response(course, session)
 
 
-# SỬA: Cập nhật Lesson và các bài tập được chọn trong form sửa buổi học.
+# SỬA: Cập nhật Lesson
 def update_lesson(session: Session, course_id: str, lesson_id: int, data: LessonUpdateRequest, current_user: User) -> CourseResponse:
     course = get_manageable_course(course_id, session, current_user, "Bạn không có quyền sửa buổi học")
     lesson = get_lesson_in_course(session, course_id, lesson_id)
@@ -380,7 +396,7 @@ def update_lesson(session: Session, course_id: str, lesson_id: int, data: Lesson
     if data.problem_ids is not None:
         _assert_can_copy_problems(session, data.problem_ids, current_user, lesson.lesson_id)
         _get_lesson_problems(session, data.problem_ids, lesson.lesson_id)
-        _refresh_assignment_count(session, lesson)  # MỚI: thay cho len(data.problem_ids)
+        _refresh_assignment_count(session, lesson)
 
     session.add(lesson)
     session.commit()
@@ -388,7 +404,7 @@ def update_lesson(session: Session, course_id: str, lesson_id: int, data: Lesson
     return build_course_response(course, session)
 
 
-# SỬA: Xoá Lesson nếu không còn ràng buộc Problem; tránh xoá mất submission lịch sử.
+# SỬA: Xoá Lesson
 def delete_lesson(session: Session, course_id: str, lesson_id: int, current_user: User) -> None:
     get_manageable_course(course_id, session, current_user, "Bạn không có quyền xoá buổi học")
     lesson = get_lesson_in_course(session, course_id, lesson_id)
@@ -397,24 +413,113 @@ def delete_lesson(session: Session, course_id: str, lesson_id: int, current_user
     session.delete(lesson)
     session.commit()
 
+
+def _find_enrollment(
+    session: Session, course_id: str, student_id: str
+) -> Enrollment | None:
+    return session.exec(
+        select(Enrollment).where(
+            Enrollment.course_id == course_id,
+            Enrollment.student_id == student_id,
+        )
+    ).first()
+
+
+def get_course_enrollments(
+    session: Session, course_id: str, current_user: User
+) -> list[GetStudentListResponse]:
+    """Lấy danh sách sinh viên đang enroll 1 lớp (cho teacher xem roster)."""
+    course = session.get(Course, course_id)
+    if course is None:
+        raise NotFoundError("Không tìm thấy lớp học")
+
+    if current_user.role_id == Role.ADMIN:
+        can_view = True
+    elif current_user.role_id == Role.TEACHER:
+        can_view = course.created_by == current_user.user_id
+    elif current_user.role_id == Role.STUDENT:
+        can_view = _find_enrollment(session, course_id, current_user.user_id) is not None
+    else:
+        can_view = False
+
+    if not can_view:
+        raise ForbiddenError("Bạn không có quyền xem lớp học này")
+
+    statement = (
+        select(Enrollment, User)
+        .join(User, Enrollment.student_id == User.user_id)
+        .where(Enrollment.course_id == course_id)
+    )
+    return [
+        GetStudentListResponse(
+            enrollment_id=enrollment.enrollment_id,
+            student_id=student.user_id,
+            full_name=student.full_name,
+            email=student.email,
+        )
+        for enrollment, student in session.exec(statement).all()
+    ]
+
+
+def add_student_to_course(
+    student_id: str, course_id: str, session: Session, current_user: User
+) -> AddStudentToCourseResponse:
+    course = session.get(Course, course_id)
+    if course is None:
+        raise NotFoundError("Không tìm thấy lớp học")
+    if current_user.role_id != Role.ADMIN and course.created_by != current_user.user_id:
+        raise ForbiddenError("Bạn không có quyền thêm sinh viên vào lớp này")
+
+    student = session.get(User, student_id)
+    if not student or student.role_id != Role.STUDENT:
+        raise NotFoundError("Không tìm thấy sinh viên")
+
+    if _find_enrollment(session, course_id, student_id):
+        raise ConflictError("Sinh viên đã có trong lớp học")
+
+    enrollment = Enrollment(course_id=course_id, student_id=student_id)
+    course.total_number_student += 1
+    session.add(enrollment)
+    session.commit()
+    session.refresh(enrollment)
+
+    return AddStudentToCourseResponse(
+        student_id=student_id,
+        course_id=course_id,
+        enrollment_id=enrollment.enrollment_id,
+    )
+
+
+def delete_student_from_course(
+    student_id: str, course_id: str, session: Session, current_user: User
+) -> None:
+    course = session.get(Course, course_id)
+    if course is None:
+        raise NotFoundError("Không tìm thấy lớp học")
+    if current_user.role_id != Role.ADMIN and course.created_by != current_user.user_id:
+        raise ForbiddenError("Bạn không có quyền thực hiện hành động này")
+
+    enrollment = _find_enrollment(session, course_id, student_id)
+    if not enrollment:
+        raise NotFoundError("Sinh viên không thuộc lớp học này")
+
+    session.delete(enrollment)
+    course.total_number_student -= 1
+    session.commit()
+
+
 def get_course(session: Session, course_id: str, current_user: User) -> CourseResponse:
     course = get_viewable_course(session, course_id, current_user)
     only_student_id = current_user.user_id if current_user.role_id == Role.STUDENT else None
     return build_course_response(course, session, only_student_id=only_student_id)
+
 
 def create_course(
     data: CreateCourseRequest,
     session: Session,
     current_user: User,
 ) -> CourseResponse:
-    """Tạo lớp học mới.
-
-    Quy tắc nghiệp vụ (theo api-design-course.md):
-    - `created_by` luôn lấy từ `current_user.user_id`, KHÔNG nhận từ client.
-    - `total_number_student` luôn khởi tạo = 0.
-    - `course_id` phải duy nhất — nếu trùng raise `ConflictError`.
-    - Quyền: Admin hoặc Teacher (đã được `require_role` chặn ở router).
-    """
+    """Tạo lớp học mới."""
     if session.get(Course, data.course_id):
         raise ConflictError("Mã lớp học đã tồn tại")
 
@@ -433,21 +538,14 @@ def create_course(
     session.refresh(course)
     return build_course_response(course)
 
+
 def update_course(
     course_id: str,
     data: UpdateCourseRequest,
     session: Session,
     current_user: User,
 ) -> CourseResponse:
-    """Cập nhật 1 phần thông tin lớp học.
-
-    Quy tắc nghiệp vụ (theo api-design-course.md):
-    - Không cho sửa `course_id`, `created_by`, `total_number_student`.
-    - Chỉ field nào client gửi (và không null) mới được cập nhật.
-    - Nếu thay đổi ngày, phải bảo đảm `start_date < end_date` khi đối chiếu
-      với giá trị đang lưu trong DB (kể cả khi client chỉ gửi một trong hai).
-    - Quyền: Admin mọi lớp, hoặc Teacher là chủ lớp (`created_by`).
-    """
+    """Cập nhật 1 phần thông tin lớp học."""
     course = get_manageable_course(
         course_id,
         session,
@@ -455,9 +553,6 @@ def update_course(
         "Bạn không có quyền thực hiện hành động này",
     )
 
-    # `exclude_unset=True` chỉ chứa các field client thực sự gửi trong body.
-    # Tuy nhiên nếu client gửi field=null thì key vẫn xuất hiện trong dict
-    # với giá trị None — ta phải loại None để tránh ghi đè cột NOT NULL.
     update_fields = {
         key: value
         for key, value in data.model_dump(exclude_unset=True).items()
@@ -465,12 +560,8 @@ def update_course(
     }
 
     if not update_fields:
-        # Body trống hoặc toàn null → no-op, trả về trạng thái hiện tại.
         return build_course_response(course)
 
-    # Validate khoảng ngày khi có thay đổi, đối chiếu với giá trị đang lưu
-    # trong DB để bắt cả trường hợp client chỉ gửi một trong hai ngày.
-    # Cả hai phía đều có múi giờ (DB qua UTCDateTime, input qua require_offset) nên so sánh trực tiếp.
     new_start = update_fields.get("start_date", course.start_date)
     new_end = update_fields.get("end_date", course.end_date)
     if new_start >= new_end:
@@ -485,31 +576,16 @@ def update_course(
     return build_course_response(course)
 
 
-# def get_course(session: Session, course_id: str, current_user: User) -> CourseResponse:
-#     course = get_viewable_course(session, course_id, current_user)
-#     only_student_id = current_user.user_id if current_user.role_id == Role.STUDENT else None  # MỚI
-#     return build_course_response(course, session, only_student_id=only_student_id)
-
-
-def get_courses(session: Session, current_user: User) -> list[CourseResponse]:
-    courses = _visible_courses(session, current_user)
-    only_student_id = current_user.user_id if current_user.role_id == Role.STUDENT else None
-    return [
-        build_course_response(course, session, only_student_id=only_student_id)
-        for course in courses
-    ]
-
-
-def get_course_terms(session: Session, current_user: User) -> CourseTermsResponse:
-    """Trả các học kỳ/năm học có trong các lớp người dùng được phép xem."""
-    courses = _visible_courses(session, current_user)
-    terms = [_parse_term(course.term) for course in courses]
-    academic_years = sorted({year for _, year in terms}, reverse=True)
-    semesters = sorted({semester for semester, _ in terms})
-    return CourseTermsResponse(academic_years=academic_years, semesters=semesters)
+def _parse_term(term: str) -> tuple[int, str]:
+    """Tách học kỳ + năm học từ chuỗi term như 'HK1 - 2024'."""
+    match = re.match(r"^HK(\d)\s*[- ]\s*(.+)$", term, re.IGNORECASE)
+    if match is None:
+        return 1, term
+    return int(match.group(1)), match.group(2).strip()
 
 
 def _visible_courses(session: Session, current_user: User) -> list[Course]:
+    """Lấy danh sách course mà user được phép xem, theo role."""
     if current_user.role_id == Role.ADMIN:
         statement = select(Course)
     elif current_user.role_id == Role.TEACHER:
@@ -519,14 +595,245 @@ def _visible_courses(session: Session, current_user: User) -> list[Course]:
             select(Course)
             .join(Enrollment, Enrollment.course_id == Course.course_id)
             .where(Enrollment.student_id == current_user.user_id)
+            .distinct()
         )
     else:
         raise ForbiddenError("Bạn không có quyền thực hiện hành động này")
     return list(session.exec(statement.order_by(Course.course_id)).all())
 
 
-def _parse_term(term: str) -> tuple[int, str]:
-    match = re.match(r"^HK(\d)\s*[- ]\s*(.+)$", term, re.IGNORECASE)
-    if match is None:
-        return 1, term
-    return int(match.group(1)), match.group(2).strip()
+def get_courses(
+    session: Session,
+    current_user: User,
+    *,
+    term: str | None = None,
+    search: str | None = None,
+) -> list[CourseResponse]:
+    """Lấy danh sách lớp theo role, kèm filter server-side.
+
+    Filter:
+        - ``term``: LIKE %%term%% trên cột ``Course.term``.
+        - ``search``: LIKE %%search%% trên ``course_id`` HOẶC ``course_name``.
+    """
+    statement = select(Course)
+
+    if current_user.role_id == Role.ADMIN:
+        pass
+    elif current_user.role_id == Role.TEACHER:
+        statement = statement.where(Course.created_by == current_user.user_id)
+    elif current_user.role_id == Role.STUDENT:
+        statement = (
+            statement
+            .join(Enrollment, Enrollment.course_id == Course.course_id)
+            .where(Enrollment.student_id == current_user.user_id)
+            .distinct()
+        )
+    else:
+        raise ForbiddenError("Bạn không có quyền thực hiện hành động này")
+
+    if term:
+        statement = statement.where(Course.term.contains(term, autoescape=True))
+
+    if search:
+        statement = statement.where(
+            or_(
+                Course.course_id.contains(search, autoescape=True),
+                Course.course_name.contains(search, autoescape=True),
+            )
+        )
+
+    only_student_id = current_user.user_id if current_user.role_id == Role.STUDENT else None
+    courses = session.exec(statement.order_by(Course.course_id)).all()
+    return [
+        build_course_response(course, session, only_student_id=only_student_id)
+        for course in courses
+    ]
+
+
+def get_course_terms(session: Session, current_user: User) -> CourseTermsResponse:
+    """Trả các học kỳ/năm học có trong các lớp người dùng được phép xem."""
+    courses = _visible_courses(session, current_user)
+    terms = [_parse_term(course.term) for course in courses if course.term]
+    academic_years = sorted({year for _, year in terms}, reverse=True)
+    semesters = sorted({semester for semester, _ in terms})
+    return CourseTermsResponse(academic_years=academic_years, semesters=semesters)
+
+
+# ─── Helpers dùng chung cho 2 endpoint mới (Lỗi 7 + Lỗi 8) ──────────────
+
+
+def _check_can_view_student_courses(
+    session: Session, current_user: User, target_student_id: str
+) -> None:
+    """Check quyền xem lớp/enrollments của 1 sinh viên.
+
+    Quy tắc (theo role của current_user):
+        - ADMIN: xem được mọi SV.
+        - TEACHER: chỉ xem SV đang enroll ít nhất 1 lớp do mình tạo.
+        - STUDENT: chỉ xem của chính mình.
+    """
+    if current_user.role_id == Role.STUDENT:
+        if current_user.user_id != target_student_id:
+            raise ForbiddenError("Bạn không có quyền xem thông tin sinh viên này")
+        target = session.get(User, target_student_id)
+        if target is None or target.role_id != Role.STUDENT:
+            raise NotFoundError("Không tìm thấy sinh viên")
+        return
+
+    if current_user.role_id == Role.TEACHER:
+        overlap = session.exec(
+            select(Enrollment)
+            .join(Course, Course.course_id == Enrollment.course_id)
+            .where(
+                Enrollment.student_id == target_student_id,
+                Course.created_by == current_user.user_id,
+            )
+        ).first()
+        if overlap is None:
+            raise ForbiddenError("Bạn không có quyền xem thông tin sinh viên này")
+        return
+
+    if current_user.role_id == Role.ADMIN:
+        target = session.get(User, target_student_id)
+        if target is None or target.role_id != Role.STUDENT:
+            raise NotFoundError("Không tìm thấy sinh viên")
+        return
+
+    raise ForbiddenError("Bạn không có quyền thực hiện hành động này")
+
+
+def get_student_courses(
+    session: Session, student_id: str, current_user: User
+) -> list[CourseResponse]:
+    """Lấy danh sách lớp mà 1 sinh viên đang học (Lỗi 7)."""
+    _check_can_view_student_courses(session, current_user, student_id)
+
+    statement = (
+        select(Course)
+        .join(Enrollment, Enrollment.course_id == Course.course_id)
+        .where(Enrollment.student_id == student_id)
+        .distinct()
+    )
+    if current_user.role_id == Role.TEACHER:
+        statement = statement.where(Course.created_by == current_user.user_id)
+
+    only_student_id = student_id if current_user.role_id == Role.STUDENT else None
+    courses = session.exec(statement.order_by(Course.course_id)).all()
+    return [
+        build_course_response(course, session, only_student_id=only_student_id)
+        for course in courses
+    ]
+
+
+def get_student_enrollments(
+    session: Session, student_id: str, current_user: User
+) -> list[StudentEnrollmentResponse]:
+    """Lấy danh sách enrollment (kèm thông tin lớp) của 1 sinh viên (Lỗi 8)."""
+    _check_can_view_student_courses(session, current_user, student_id)
+
+    statement = (
+        select(Enrollment, Course)
+        .join(Course, Course.course_id == Enrollment.course_id)
+        .where(Enrollment.student_id == student_id)
+    )
+    if current_user.role_id == Role.TEACHER:
+        statement = statement.where(Course.created_by == current_user.user_id)
+    statement = statement.order_by(Enrollment.enrollment_id.desc())
+
+    rows = session.exec(statement).all()
+
+    return [
+        StudentEnrollmentResponse(
+            enrollment_id=enrollment.enrollment_id,
+            course_id=course.course_id,
+            course_name=course.course_name,
+            term=course.term,
+            start_date=course.start_date,
+            end_date=course.end_date,
+            total_number_student=course.total_number_student,
+        )
+        for enrollment, course in rows
+    ]
+
+
+def get_student_dashboard(
+    session: Session, student_id: str, current_user: User
+) -> StudentDashboardResponse:
+    """Lấy thống kê tổng quan cho trang Student Dashboard."""
+    _check_can_view_student_courses(session, current_user, student_id)
+
+    course_statement = (
+        select(Course)
+        .join(Enrollment, Enrollment.course_id == Course.course_id)
+        .where(Enrollment.student_id == student_id)
+        .distinct()
+    )
+    if current_user.role_id == Role.TEACHER:
+        course_statement = course_statement.where(
+            Course.created_by == current_user.user_id
+        )
+    courses = session.exec(course_statement.order_by(Course.course_id)).all()
+
+    only_student_id = student_id if current_user.role_id == Role.STUDENT else None
+    course_responses = [
+        build_course_response(course, session, only_student_id=only_student_id)
+        for course in courses
+    ]
+
+    total_classes = len(course_responses)
+    if total_classes == 0:
+        return StudentDashboardResponse(
+            total_classes=0,
+            completed_problems=0,
+            total_problems=0,
+            average_score=None,
+            courses=[],
+        )
+
+    problem_count_statement = (
+        select(func.count(Problem.problem_id))
+        .join(Lesson, Lesson.lesson_id == Problem.lesson_id)
+        .join(Course, Course.course_id == Lesson.course_id)
+        .join(Enrollment, Enrollment.course_id == Course.course_id)
+        .where(Enrollment.student_id == student_id)
+    )
+    if current_user.role_id == Role.TEACHER:
+        problem_count_statement = problem_count_statement.where(
+            Course.created_by == current_user.user_id
+        )
+    total_problems = session.exec(problem_count_statement).one() or 0
+
+    completed_statement = (
+        select(func.count(Submission.submission_id))
+        .where(
+            Submission.student_id == student_id,
+            Submission.status == "accepted",
+        )
+    )
+    completed_problems = session.exec(completed_statement).one() or 0
+
+    average_statement = (
+        select(
+            func.sum(Submission.passed_count),
+            func.count(Submission.submission_id),
+        )
+        .join(Problem, Problem.problem_id == Submission.problem_id)
+        .where(
+            Submission.student_id == student_id,
+            Problem.total_number_testcase > 0,
+        )
+    )
+    passed_sum, total_subs = session.exec(average_statement).one()
+    if not total_subs:
+        average_score: float | None = None
+    else:
+        ratio = (passed_sum or 0) / float(total_subs)
+        average_score = round(ratio, 2)
+
+    return StudentDashboardResponse(
+        total_classes=total_classes,
+        completed_problems=int(completed_problems),
+        total_problems=int(total_problems),
+        average_score=average_score,
+        courses=course_responses,
+    )

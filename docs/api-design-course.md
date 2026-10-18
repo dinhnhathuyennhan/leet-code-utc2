@@ -2,18 +2,18 @@
 
 ## Quy ước thời gian
 
-Áp dụng cho mọi field kiểu `datetime` trong API: `start_date`/`end_date` của course, `start_datetime`/`end_datetime` của problem, `opens_at`/`deadline` của buổi học, `submitted_datetime` của bài nộp.
+Áp dụng cho các field `datetime` của Course, Problem và Submission.
 
-- **Gửi lên: bắt buộc kèm offset.**
-  - Ví dụ hợp lệ: `"2026-09-07T00:00:00+07:00"` (giờ VN) hoặc `"2026-09-06T17:00:00Z"` (UTC). Hai giá trị này là cùng một thời điểm.
-  - Thiếu offset (vd: `"2026-09-07T00:00:00"`) → `422`, `error_code: "INVALID_FORMAT"`, message `"<field> phải kèm múi giờ, vd: 2026-09-07T00:00:00+07:00"`.
-- **Trả về: luôn kèm offset giờ VN `+07:00`**, bất kể client đã gửi lên offset nào. Ví dụ gửi `"2027-01-15T00:00:00Z"` thì nhận lại `"2027-01-15T07:00:00+07:00"`.
-- **So sánh theo thời điểm thật**, không theo chuỗi. Ví dụ `start_date` phải trước `end_date` được xét sau khi quy về cùng một thời điểm.
-- **DB** lưu các cột này dạng `timestamptz` (UTC).
-- **Field kiểu `date`** (`start_date`/`end_date` của buổi học, `date_of_birth`) là **ngày theo lịch VN**, không có giờ và không có offset (vd: `"2026-09-07"`).
-  - Buổi học mở lúc 00:00:00 giờ VN của `start_date` và đóng lúc 23:59:59.999999 giờ VN của `end_date`. Đây chính là `opens_at`/`deadline` trong response.
-  - Bài tập gắn vào buổi học lấy cùng khung thời gian đó.
-- **Phía FE**: khi hiển thị, dùng `timeZone: "Asia/Ho_Chi_Minh"`, để không phụ thuộc múi giờ của trình duyệt.
+- Client gửi và nhận giờ địa phương Việt Nam, **không kèm UTC offset** (vd: `"2026-09-07T00:00:00"`). Request có offset hoặc hậu tố `Z` bị từ chối với 422.
+- Backend diễn giải datetime naive theo `Asia/Ho_Chi_Minh`; khi so sánh với thời điểm hiện tại, backend quy đổi sang UTC.
+- Database lưu các thời điểm dưới dạng `timestamptz` theo UTC. Khi đọc, backend trả lại giờ Việt Nam dạng naive.
+- Field kiểu `date` (ngày Course/Lesson và `date_of_birth`) là ngày lịch, không có giờ hay offset. Lesson mở lúc 00:00 giờ Việt Nam ngày `start_date`, hết hạn lúc 23:59:59.999999 ngày `end_date`; `opens_at` và `deadline` trả giờ Việt Nam dạng naive.
+- Với Problem, `start_datetime` quyết định lúc mở đề; `end_datetime` chỉ chặn Submit, không chặn xem đề.
+- Phía FE hiển thị theo `Asia/Ho_Chi_Minh` để không phụ thuộc múi giờ trình duyệt.
+
+## Quan hệ với Problem bank
+
+Problem bank có `lesson_id = null` nên chưa thuộc Course; bản nguồn không xuất hiện trong `sessions[].problems` hoặc dữ liệu điểm của Course. Khi thêm bài bank vào Lesson, hệ thống tạo Problem bản sao gắn với Lesson đích; Course response và thống kê dùng bản sao đó.
 
 ## POST /courses — Tạo lớp học
 

@@ -5,12 +5,13 @@ from io import BytesIO
 from pathlib import Path
 
 import pytest
-import models  # noqa: F401
 from openpyxl import Workbook
 from sqlmodel import Session, SQLModel, create_engine
 from sqlmodel.pool import StaticPool
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+
+import models  # noqa: F401  # phải sau sys.path.insert để tìm được module 'models' ở backend/
 
 # Load .env ở root project TRƯỚC khi import app modules
 # (cần cho JWT_SECRET_KEY — create_access_token require string, không được None).

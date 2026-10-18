@@ -32,7 +32,7 @@
 |---|---|---|
 | `input` | string, tối đa 10.000 ký tự | dữ liệu đầu vào chương trình (stdin). Có thể rỗng `""` (bài không đọc input) |
 | `expected_output` | string, tối đa 10.000 ký tự | kết quả mong đợi trên stdout. Có thể rỗng `""` |
-| `input_type` | enum string: `"text"` \| `"number"` \| `"json"` (**cột mới**, model `Testcase` hiện tại trong `backend/models.py` chỉ có `input, expected_output, is_sample` — cần thêm trong migration Alembic) | mô tả kiểu dữ liệu của `input` để FE render đúng widget. Mặc định `"text"` |
+| `input_type` | enum string: `"text"` \| `"number"` \| `"json"` (**cột mới**, model `Testcase` hiện tại trong `backend/app/models/entities.py` chỉ có `input, expected_output, is_sample` — cần thêm trong migration Alembic) | mô tả kiểu dữ liệu của `input` để FE render đúng widget. Mặc định `"text"` |
 | `expected_output_type` | enum string: `"text"` \| `"number"` \| `"json"` (**cột mới**) | mô tả kiểu dữ liệu của `expected_output`. Mặc định `"text"` |
 | `is_sample` | bool | mặc định `false` khi tạo (testcase ẩn). Teacher đánh dấu `true` cho testcase muốn public cho Student |
 
@@ -70,7 +70,7 @@
 - Lỗi dùng chung (xem [api-design-lesson.md](api-design-lesson.md), [api-design-problem.md](api-design-problem.md)):
   - `ProblemNotFoundError` (404 `PROBLEM_NOT_FOUND`)
   - `ForbiddenError` (403 `FORBIDDEN`, message cụ thể theo ngữ cảnh)
-- Lỗi riêng của domain `testcase` (đặt trong `backend/app/services/testcase_service.py`):
+- Lỗi riêng của domain `testcase` (đặt trong `backend/app/modules/problems/testcase_service.py`):
   - `TestcaseNotFoundError` (404 `TESTCASE_NOT_FOUND`, message `"Không tìm thấy testcase"`) — cũng dùng cho Student cố truy cập testcase ẩn (giả vờ không tồn tại)
   - `TestcaseInvalidTypeError` (422 `INVALID_TESTCASE_TYPE`, message `"input_type và expected_output_type phải là text, number hoặc json"`)
   - `TestcaseBulkEmptyError` (400 `EMPTY_TESTCASE_BULK`, message `"Danh sách testcase không được rỗng"`) — khi `POST /testcases/bulk` body có `testcases = []`

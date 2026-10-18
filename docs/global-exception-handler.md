@@ -17,14 +17,13 @@ Global Exception Handler giải quyết việc này bằng cách xử lý **tậ
 ```
 backend/app/
 ├── core/
-│   └── exceptions.py          # Base exception AppError
-├── handlers/
-│   └── exception_handlers.py  # Đăng ký & xử lý exception tập trung
-├── schemas/
-│   └── error.py               # Format response lỗi chuẩn (ErrorResponse)
-├── services/
-│   └── auth_service.py        # Exception riêng của từng domain, kế thừa AppError
-├── routers/
+│   ├── exceptions.py          # Base exception AppError
+│   ├── exception_handlers.py  # Đăng ký & xử lý exception tập trung
+│   └── schemas.py             # Format response lỗi chuẩn (ErrorResponse)
+├── modules/
+│   └── auth/
+│       └── service.py         # Exception riêng của từng domain, kế thừa AppError
+├── api/
 │   └── auth.py                 # Không còn try/except, để lỗi tự bay lên
 └── main.py                     # Gọi register_exception_handlers(app)
 ```
@@ -73,7 +72,7 @@ Mọi exception nghiệp vụ trong hệ thống nên kế thừa từ class nà
 ### Bước 2 — Mỗi service tự định nghĩa exception riêng, kế thừa `AppError`
 
 ```python
-# app/services/auth_service.py
+# app/modules/auth/service.py
 from app.core.exceptions import AppError
 
 class InvalidCredentialsError(AppError):
@@ -89,14 +88,14 @@ class SamePasswordError(AppError):
     error_code = "SAME_PASSWORD"
 ```
 
-**Quy ước cho member khi thêm domain mới** (VD: `student_service.py`):
+**Quy ước cho member khi thêm domain mới** (VD: `modules/students/service.py`):
 - Nếu lỗi chỉ đặc thù cho 1 domain → định nghĩa ngay trong file service đó, kế thừa `AppError`
 - Nếu lỗi dùng chung cho nhiều domain (VD: `NotFoundError`, `UnauthorizedError`) → cân nhắc đưa vào `core/exceptions.py`
 
 ### Bước 3 — Format response lỗi chuẩn
 
 ```python
-# app/schemas/error.py
+# app/core/schemas.py
 from pydantic import BaseModel
 
 class ErrorResponse(BaseModel):
@@ -109,12 +108,12 @@ Mọi lỗi trong toàn hệ thống, bất kể route nào, đều trả về �
 ### Bước 4 — Handler tập trung
 
 ```python
-# app/handlers/exception_handlers.py
+# app/core/exception_handlers.py
 import logging
 from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
 from app.core.exceptions import AppError
-from app.schemas.error import ErrorResponse
+from app.core.schemas import ErrorResponse
 
 logger = logging.getLogger(__name__)
 
@@ -139,7 +138,7 @@ def register_exception_handlers(app: FastAPI) -> None:
 
 ```python
 # app/main.py
-from app.handlers.exception_handlers import register_exception_handlers
+from app.core.exception_handlers import register_exception_handlers
 
 app = FastAPI()
 register_exception_handlers(app)

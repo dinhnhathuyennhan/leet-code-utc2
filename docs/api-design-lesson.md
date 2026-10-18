@@ -44,10 +44,10 @@
 ### Quy tắc slug & response
 
 - `lesson_number` là số nguyên dương, **duy nhất trong phạm vi 1 course** (2 lesson cùng course không được trùng số). Không cần duy nhất global.
-- **Quan trọng**: model `Lesson` hiện tại (`backend/models.py`) **không có unique constraint** trên `(course_id, lesson_number)`. Khi implement service phải check trùng lặp trước khi insert (`SELECT ... WHERE course_id = ? AND lesson_number = ?`); nếu tìm thấy → raise `LessonNumberConflictError`. Có thể cân nhắc thêm unique constraint vào migration Alembic sau khi Phase 2 ổn định (rủi ro: migration fail nếu DB đã có data trùng).
+- **Quan trọng**: model `Lesson` hiện tại (`backend/app/models/entities.py`) **không có unique constraint** trên `(course_id, lesson_number)`. Khi implement service phải check trùng lặp trước khi insert (`SELECT ... WHERE course_id = ? AND lesson_number = ?`); nếu tìm thấy → raise `LessonNumberConflictError`. Có thể cân nhắc thêm unique constraint vào migration Alembic sau khi Phase 2 ổn định (rủi ro: migration fail nếu DB đã có data trùng).
 - Response **luôn dùng `response_model`** đã khai báo, không trả field thừa từ model.
 - Các field lạ trong request body `POST`/`PATCH` sẽ bị Pydantic bỏ qua theo cấu hình `model_config` (giống `course_service.py`).
-- `created_by` (FK user) chưa có trong model `Lesson` hiện tại (`backend/models.py` — chỉ có `lesson_id, lesson_number, lesson_name, course_id, total_number_assignment, total_number_student_finished, start_date, end_date`). **Cần thêm cột `created_by` trong migration Alembic trước khi implement**, set = `current_user.user_id` khi tạo. Phase 3 có thể tận dụng cột này để thống kê "GV nào soạn bài nhiều nhất". Nếu cố tình không thêm → docs này sẽ được cập nhật để bỏ field khỏi response.
+- `created_by` (FK user) chưa có trong model `Lesson` hiện tại (`backend/app/models/entities.py` — chỉ có `lesson_id, lesson_number, lesson_name, course_id, total_number_assignment, total_number_student_finished, start_date, end_date`). **Cần thêm cột `created_by` trong migration Alembic trước khi implement**, set = `current_user.user_id` khi tạo. Phase 3 có thể tận dụng cột này để thống kê "GV nào soạn bài nhiều nhất". Nếu cố tình không thêm → docs này sẽ được cập nhật để bỏ field khỏi response.
 
 ### Xử lý lỗi
 
@@ -58,7 +58,7 @@
   - `ForbiddenError` (403 `FORBIDDEN`, message cụ thể theo ngữ cảnh — `"Bạn không có quyền thêm bài học vào lớp này"` / `"Bạn không có quyền xem bài học này"` / ...).
   - `EmptyFieldError` (422 `EMPTY_FIELD`).
   - `InvalidFormatError` (422 `INVALID_FORMAT`).
-- Lỗi riêng của domain `lesson` (đặt trong `backend/app/services/lesson_service.py`):
+- Lỗi riêng của domain `lesson` (đặt trong `backend/app/modules/lessons/service.py`):
   - `LessonNotFoundError` (404 `LESSON_NOT_FOUND`, message `"Không tìm thấy bài học"`)
   - `LessonNumberConflictError` (409 `LESSON_NUMBER_CONFLICT`, message `"Số thứ tự bài học đã tồn tại trong lớp này"`)
   - `LessonOutOfCourseRangeError` (422 `LESSON_OUT_OF_COURSE_RANGE`, message `"Ngày bài học phải nằm trong khoảng thời gian của lớp"`)

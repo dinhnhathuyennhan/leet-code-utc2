@@ -1,4 +1,5 @@
 import { BookOpen, ClipboardCheck, Timer } from "lucide-react";
+import type { ReactNode } from "react";
 
 import { CourseFilters } from "@/components/shared/course-filters";
 import { CourseGrid, CourseGridSkeleton } from "@/components/shared/course-grid";
@@ -19,18 +20,19 @@ interface CourseListViewProps {
   error: unknown;
   onRetry: () => void;
   hrefFor: (course: CourseSummary) => string;
+  actions?: ReactNode;
 }
 
 function buildStats(role: CourseListViewProps["role"], stats: CourseListStats): StatItem[] {
   return [
-    { icon: BookOpen, value: String(stats.course_count), label: role === "teacher" ? "Lớp phụ trách" : "Lớp đăng ký" },
-    { icon: ClipboardCheck, value: `${stats.completed_problems}/${stats.total_problems}`, label: "Bài hoàn thành" },
+    { icon: BookOpen, value: String(stats.active_course_count), label: role === "teacher" ? "Lớp phụ trách" : "Lớp đang học" },
+    { icon: ClipboardCheck, value: String(stats.upcoming_courses), label: "Lớp sắp mở" },
     { icon: Timer, value: String(stats.due_this_week), label: "Hạn tuần này", highlight: true },
   ];
 }
 
 /** Màn hình danh sách lớp — thuần hiển thị, dữ liệu do page truyền xuống. */
-export function CourseListView({ role, filters, courses, stats, isLoading, isFetching, error, onRetry, hrefFor }: CourseListViewProps) {
+export function CourseListView({ role, filters, courses, stats, isLoading, isFetching, error, onRetry, hrefFor, actions }: CourseListViewProps) {
   function renderBody() {
     if (isLoading) return <CourseGridSkeleton view={filters.view} />;
     if (error && !courses) return <ErrorState error={error} onRetry={onRetry} />;
@@ -54,6 +56,7 @@ export function CourseListView({ role, filters, courses, stats, isLoading, isFet
 
   return (
     <div className="space-y-6">
+      {actions && <div className="flex justify-end">{actions}</div>}
       {isLoading || !stats ? <CourseStatsBarSkeleton /> : <CourseStatsBar items={buildStats(role, stats)} />}
       <CourseFilters filters={filters} />
       {renderBody()}

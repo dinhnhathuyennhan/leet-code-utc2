@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { createLesson, updateLesson } from "@/lib/api/endpoints/courses";
+import { toDateInput } from "@/lib/helpers/datetime";
 import type { CourseDetail, CourseSession, LessonMutationRequest } from "@/lib/types/course";
 import { toast } from "sonner";
 
@@ -18,12 +19,11 @@ interface SessionEditorDialogProps {
   onSaved: () => void;
 }
 
-const dateOnly = (value: string | null | undefined) => value ? value.slice(0, 10) : "";
-
+// F4: Dùng toDateInput() thay cho slice(0, 10) để lấy đúng ngày theo giờ VN.
 export function SessionEditorDialog({ course, session, open, onOpenChange, onSaved }: SessionEditorDialogProps) {
   const [title, setTitle] = useState(session?.title ?? "");
-  const [startDate, setStartDate] = useState(dateOnly(session?.opens_at));
-  const [endDate, setEndDate] = useState(dateOnly(session?.deadline));
+  const [startDate, setStartDate] = useState(session?.opens_at ? toDateInput(session.opens_at) : "");
+  const [endDate, setEndDate] = useState(session?.deadline ? toDateInput(session.deadline) : "");
   const [selectedProblemIds, setSelectedProblemIds] = useState<number[]>(session?.problems.map((problem) => problem.id) ?? []);
   const [saving, setSaving] = useState(false);
 
@@ -41,7 +41,13 @@ export function SessionEditorDialog({ course, session, open, onOpenChange, onSav
       toast.error("Vui lòng nhập đủ tên buổi học và thời gian.");
       return;
     }
-    const data: LessonMutationRequest = { lesson_name: title.trim(), start_date: startDate, end_date: endDate, problem_ids: selectedProblemIds };
+    // F5: Gửi datetime có offset +07:00 theo quy ước mới.
+    const data: LessonMutationRequest = {
+      lesson_name: title.trim(),
+      start_date: startDate,
+      end_date: endDate,
+      problem_ids: selectedProblemIds,
+    };
     setSaving(true);
     try {
       if (session) await updateLesson(course.code, session.id, data);

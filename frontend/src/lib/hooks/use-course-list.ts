@@ -2,7 +2,6 @@
 
 import { useState } from "react";
 
-import { DEFAULT_TERM } from "@/lib/constants/academic";
 import { useCourseTerms, useCourses } from "@/lib/hooks/use-courses";
 import { useDebouncedValue } from "@/lib/hooks/use-debounced-value";
 import type { CourseView } from "@/lib/types/course";
@@ -10,8 +9,8 @@ import type { CourseView } from "@/lib/types/course";
 export interface CourseFilterState {
   search: string;
   setSearch: (value: string) => void;
-  semester: number;
-  setSemester: (value: number) => void;
+  semester?: number;
+  setSemester: (value?: number) => void;
   semesters: number[];
   year: string;
   setYear: (value: string) => void;
@@ -23,7 +22,7 @@ export interface CourseFilterState {
 /** State bộ lọc + query danh sách lớp — dùng chung cho trang lớp của giảng viên và sinh viên. */
 export function useCourseList() {
   const [search, setSearch] = useState("");
-  const [semester, setSemester] = useState(DEFAULT_TERM.semester);
+  const [semester, setSemester] = useState<number | undefined>(undefined);
   const [year, setYear] = useState("");
   const [view, setView] = useState<CourseView>("grid");
 
@@ -31,10 +30,8 @@ export function useCourseList() {
   const terms = useCourseTerms();
   const availableYears = terms.data?.academic_years ?? [];
   const availableSemesters = terms.data?.semesters ?? [];
-  const selectedYear = availableYears.includes(year) ? year : (availableYears[0] ?? "");
-  const selectedSemester = availableSemesters.includes(semester)
-    ? semester
-    : (availableSemesters[0] ?? DEFAULT_TERM.semester);
+  const selectedYear = year === "" || availableYears.includes(year) ? year : "";
+  const selectedSemester = semester === undefined || availableSemesters.includes(semester) ? semester : undefined;
   const query = useCourses({
     search: debouncedSearch.trim() || undefined,
     semester: selectedSemester || undefined,

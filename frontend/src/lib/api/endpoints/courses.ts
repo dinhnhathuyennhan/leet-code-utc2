@@ -1,5 +1,6 @@
 import axiosInstance from "@/lib/axios";
 import { wrapAxiosError } from "@/lib/api/client";
+import { vnWeekRange } from "@/lib/helpers/datetime";
 import type { 
   ClassApiRecord, 
   CourseApiRecord, 
@@ -16,6 +17,42 @@ import type {
   SessionDetailData, 
   StudentSearchResult 
 } from "@/lib/types/course";
+
+export interface CourseCreateRequest {
+  course_id: string;
+  course_name: string;
+  avt_link: string;
+  term: string;
+  start_date: string;
+  end_date: string;
+}
+
+export interface CourseUpdateRequest {
+  course_name?: string;
+  term?: string;
+  avt_link?: string;
+  start_date?: string;
+  end_date?: string;
+}
+
+export async function createCourse(data: CourseCreateRequest): Promise<CourseApiRecord> {
+  try {
+    const response = await axiosInstance.post<CourseApiRecord>("/courses", data);
+    return response.data;
+  } catch (error) {
+    throw wrapAxiosError(error);
+  }
+}
+
+export async function updateCourse(courseId: string, data: CourseUpdateRequest): Promise<CourseApiRecord> {
+  try {
+    const response = await axiosInstance.patch<CourseApiRecord>(`/courses/${courseId}`, data);
+    return response.data;
+  } catch (error) {
+    throw wrapAxiosError(error);
+  }
+}
+
 
 function languageFromCover(cover: string | null): CourseLanguage {
   const value = (cover ?? "").toLowerCase();
@@ -36,15 +73,8 @@ function statusFromDates(start: string, end: string): CourseDetail["status"] {
 function isDueThisWeek(deadline: string, now = new Date()): boolean {
   const date = new Date(deadline);
   if (Number.isNaN(date.getTime())) return false;
-
-  const startOfWeek = new Date(now);
-  const day = startOfWeek.getDay();
-  const daysSinceMonday = (day + 6) % 7;
-  startOfWeek.setDate(startOfWeek.getDate() - daysSinceMonday);
-  startOfWeek.setHours(0, 0, 0, 0);
-
-  const endOfWeek = new Date(startOfWeek);
-  endOfWeek.setDate(endOfWeek.getDate() + 7);
+  // F2: Tính khoảng tuần theo lịch VN để tránh lệch khi browser ở múi giờ khác.
+  const [startOfWeek, endOfWeek] = vnWeekRange(now);
   return date >= startOfWeek && date < endOfWeek;
 }
 
@@ -63,6 +93,7 @@ function toSummary(record: CourseApiRecord) {
     academic_year: academicYear,
     group: 1,
     sessions: record.sessions ?? [],
+    start_date: record.start_date,
   };
 }
 
@@ -102,17 +133,12 @@ export async function getCourses(params: CourseListParams = {}): Promise<CourseL
         total + (course.sessions ?? []).filter((session) => isDueThisWeek(session.deadline)).length,
       0,
     );
-    const totalProblems = items.reduce(
-      (total, course) =>
-        total + (course.sessions ?? []).reduce((sessionTotal, session) => sessionTotal + session.problems.length, 0),
-      0,
-    );
     return {
       items,
       stats: {
         course_count: items.length,
-        completed_problems: 0,
-        total_problems: totalProblems,
+        active_course_count: items.filter((course) => course.status === "ongoing").length,
+        upcoming_courses: items.filter((course) => course.status === "upcoming").length,
         due_this_week: dueThisWeek,
       },
     };
@@ -301,4 +327,14 @@ export async function updateLesson(courseId: string, lessonId: number, data: Les
 
 export function isCourseSessionDataAvailable(sessions: CourseSession[]): boolean {
   return sessions.length > 0;
+}
+
+/** Tạo bài tập mới thủ công trong một buổi học */
+export async function createProblem(courseId: string, lessonId: string | number, data: ProblemUpdateRequest): Promise<ProblemDetailData> {
+  try {
+    const response = await axiosInstance.post<ProblemDetailData>(`/courses/${courseId}/lessons/${lessonId}/problems`, data);
+    return response.data;
+  } catch (error) {
+    throw wrapAxiosError(error);
+  }
 }

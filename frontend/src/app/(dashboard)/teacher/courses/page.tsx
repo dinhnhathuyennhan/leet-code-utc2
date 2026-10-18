@@ -2,9 +2,12 @@
 
 import { CourseListView } from "@/components/shared/course-list-view";
 import { useCourseList } from "@/lib/hooks/use-course-list";
+import { useQueryClient } from "@tanstack/react-query";
+import { CourseCreateDialog } from "@/components/teacher/course-create-dialog";
 
 export default function TeacherCoursesPage() {
   const { filters, query } = useCourseList();
+  const queryClient = useQueryClient();
 
   return (
     <CourseListView
@@ -17,6 +20,7 @@ export default function TeacherCoursesPage() {
       error={query.error}
       onRetry={() => void query.refetch()}
       hrefFor={(course) => `/teacher/courses/${course.code || course.id}`}
+      actions={<CourseCreateDialog onCreated={() => void queryClient.invalidateQueries({ queryKey: ["courses"] })} />}
     />
   );
 }

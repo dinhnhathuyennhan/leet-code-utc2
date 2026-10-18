@@ -27,6 +27,7 @@ export default function SubmissionDetailPage() {
   const [data, setData] = useState<SubmissionDetail | null>(null);
   const [error, setError] = useState<unknown>(null);
   const [feedback, setFeedback] = useState("");
+  const [manualScore, setManualScore] = useState("");
   const [saved, setSaved] = useState(false);
 
   useEffect(() => {
@@ -34,6 +35,9 @@ export default function SubmissionDetailPage() {
       .then((submission) => {
         setData(submission);
         setFeedback(submission.feedback ?? "");
+        setManualScore(submission.manual_score == null
+          ? (submission.total_testcases ? ((submission.passed_count / submission.total_testcases) * 10).toFixed(1) : "0.0")
+          : String(submission.manual_score));
       })
       .catch(setError);
   }, [id]);
@@ -41,9 +45,6 @@ export default function SubmissionDetailPage() {
   if (error) return <ErrorState error={error} />;
   if (!data) return <div className="rounded-xl border bg-card p-6 text-sm text-muted-foreground">Đang tải bài nộp...</div>;
 
-  const score = data.total_testcases
-    ? ((data.passed_count / data.total_testcases) * 10).toFixed(1)
-    : "0.0";
   const statusLabel = data.status === "compile_error" ? "Lỗi biên dịch" : data.status === "accepted" ? "Đã chấp nhận" : "Sai kết quả";
 
   return (
@@ -108,7 +109,7 @@ export default function SubmissionDetailPage() {
                 <Code2 className="size-4 text-sky-400" />
                 <span className="font-mono text-xs text-slate-300">Bài nộp ({data.language})</span>
               </div>
-              <span className="text-xs text-slate-400">{new Date(data.submitted_datetime).toLocaleString("vi-VN")}</span>
+              <span className="text-xs text-slate-400">{new Date(data.submitted_datetime).toLocaleString("vi-VN", { timeZone: "Asia/Ho_Chi_Minh" })}</span>
             </div>
             <pre className="overflow-x-auto p-4 font-mono text-xs leading-relaxed text-slate-200">
               <code>{data.submitted_code}</code>
@@ -150,8 +151,8 @@ export default function SubmissionDetailPage() {
                 step="0.5"
                 max="10"
                 min="0"
-                value={score}
-                readOnly
+                value={manualScore}
+                onChange={(event) => setManualScore(event.target.value)}
                 className="mt-1 h-11 text-lg font-bold"
               />
             </div>
@@ -181,7 +182,12 @@ export default function SubmissionDetailPage() {
 
             <Button
               onClick={() => {
-                void updateSubmission(id, { feedback }).then((submission) => {
+                const parsedScore = Number(manualScore);
+                if (!Number.isFinite(parsedScore) || parsedScore < 0 || parsedScore > 10) {
+                  setError(new Error("Điểm phải nằm trong khoảng 0 đến 10."));
+                  return;
+                }
+                void updateSubmission(id, { feedback, manual_score: parsedScore, status: "accepted" }).then((submission) => {
                   setData(submission);
                   setSaved(true);
                 }).catch(setError);

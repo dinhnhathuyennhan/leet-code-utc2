@@ -10,12 +10,12 @@ import { CourseDetailSkeleton } from "@/components/teacher/course-detail-skeleto
 import { CourseDetailTabs, type CourseTab } from "@/components/teacher/course-detail-tabs";
 import { SessionList } from "@/components/teacher/session-list";
 import { ApiError } from "@/lib/api/error";
-import { formatUpdatedAt } from "@/lib/helpers/format";
 import { useCourse, useCourseEnrollments } from "@/lib/hooks/use-courses";
 import { CourseHeaderCard } from "@/components/teacher/course-header-card";
 import { CourseStudentsTable } from "@/components/teacher/course-students-table";
 import { CourseGradesTable } from "@/components/teacher/course-grades-table";
 import { SessionEditorDialog } from "@/components/teacher/session-editor-dialog";
+import { CourseEditDialog } from "@/components/teacher/course-edit-dialog";
 
 export default function TeacherCourseDetailPage() {
   const { id } = useParams<{ id: string }>();
@@ -23,6 +23,7 @@ export default function TeacherCourseDetailPage() {
   const enrollments = useCourseEnrollments(course?.code);
   const [tab, setTab] = useState<CourseTab>("sessions");
   const [editorOpen, setEditorOpen] = useState(false);
+  const [courseEditorOpen, setCourseEditorOpen] = useState(false);
 
   useBreadcrumbLabel(course?.code); // breadcrumb: Lớp học phần / JAVA01
 
@@ -37,18 +38,18 @@ export default function TeacherCourseDetailPage() {
 
   return (
     <div className="space-y-6">
-      <CourseHeaderCard course={course} onCreateSession={() => setEditorOpen(true)} />
+      <CourseHeaderCard course={course} onCreateSession={() => setEditorOpen(true)} onEditCourse={() => setCourseEditorOpen(true)} />
       <CourseDetailTabs
         value={tab}
         onValueChange={setTab}
-        updatedAtLabel={formatUpdatedAt(course.updated_at)}
         sessions={
-          <SessionList sessions={course.sessions} studentCount={course.student_count} courseId={course.code || id} onViewResults={() => setTab("grades")} />
+          <SessionList sessions={course.sessions} studentCount={course.student_count} courseId={course.code || id} />
         }
         students={enrollments.isPending ? <CourseDetailSkeleton /> : enrollments.error ? <ErrorState error={enrollments.error} onRetry={() => void enrollments.refetch()} /> : <CourseStudentsTable students={enrollments.data ?? []} courseId={course.code} onChanged={() => void enrollments.refetch()} />}
-        grades={<CourseGradesTable sessions={course.sessions.map((session) => ({ id: session.id, order: session.order, title: session.title, status: session.status, problems: session.problems.map((problem) => ({ id: problem.id, code: problem.report ?? problem.title, title: problem.title })) }))} rows={course.grades ?? (enrollments.data ?? []).map((student) => ({ student_id: student.student_id, full_name: student.full_name, class_id: student.class_id ?? null, problem_scores: [], overall_score: null, session_scores: {} }))} />}
+        grades={<CourseGradesTable onUpdated={() => void refetch()} sessions={course.sessions.map((session) => ({ id: session.id, order: session.order, title: session.title, status: session.status, problems: session.problems.map((problem) => ({ id: problem.id, code: problem.report ?? problem.title, title: problem.title })) }))} rows={course.grades ?? (enrollments.data ?? []).map((student) => ({ student_id: student.student_id, full_name: student.full_name, class_id: student.class_id ?? null, problem_scores: [], overall_score: null, session_scores: {} }))} />}
       />
       <SessionEditorDialog key={`${editorOpen}-new`} course={course} session={null} open={editorOpen} onOpenChange={setEditorOpen} onSaved={() => void refetch()} />
+      <CourseEditDialog course={course} open={courseEditorOpen} onOpenChange={setCourseEditorOpen} onSaved={() => void refetch()} />
     </div>
   );
 }

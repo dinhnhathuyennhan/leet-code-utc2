@@ -12,9 +12,8 @@ import { cn } from "@/lib/utils";
 
 const CHIPS: { value: PendingFilter; label: string }[] = [
   { value: "all", label: "Tất cả" },
-  { value: "late_appeal", label: "Nộp muộn / Phúc khảo" },
-  { value: "similarity", label: "Độ tương đồng cao" },
-  { value: "error", label: "Lỗi runtime/CE" },
+  { value: "graded", label: "Đã chấm" },
+  { value: "error", label: "Lỗi chưa chấm" },
 ];
 
 interface PendingSubmissionsPanelProps {

@@ -12,9 +12,9 @@ const JUDGE_STYLES: Record<JudgeKind, string> = {
 };
 
 const ACTIONS: Record<JudgeKind, { label: string; className: string }> = {
-  wrong_answer: { label: "Chấm ngay", className: "bg-indigo-950 text-white hover:bg-indigo-900" },
-  similarity: { label: "So sánh", className: "bg-indigo-950 text-white hover:bg-indigo-900" },
-  compile_error: { label: "Xem code", className: "bg-sky-100 text-sky-700 hover:bg-sky-200 dark:bg-sky-500/20 dark:text-sky-300" },
+  wrong_answer: { label: "Chấm ngay", className: "bg-[#2f226b] text-white hover:bg-[#251b56]" },
+  similarity: { label: "So sánh", className: "bg-[#2f226b] text-white hover:bg-[#251b56]" },
+  compile_error: { label: "Xem code", className: "bg-sky-100 text-sky-700 hover:bg-sky-200 dark:bg-sky-500/20 dark:text-sky-300 font-semibold" },
 };
 
 export function PendingSubmissionsTable({ rows }: { rows: PendingSubmission[] }) {
@@ -22,7 +22,7 @@ export function PendingSubmissionsTable({ rows }: { rows: PendingSubmission[] })
     <div className="overflow-x-auto rounded-lg border">
       <Table className="min-w-[44rem]">
         <TableHeader>
-          <TableRow className="bg-indigo-700 hover:bg-indigo-700">
+          <TableRow className="bg-[#2f226b] hover:bg-[#2f226b]">
             {["Sinh viên", "Lớp / Buổi", "Trạng thái judger", "Vấn đề cần xử lý", "Thao tác"].map((title, i) => (
               <TableHead key={title} className={cn("h-12 font-semibold text-white", i === 4 && "text-center")}>
                 {title}

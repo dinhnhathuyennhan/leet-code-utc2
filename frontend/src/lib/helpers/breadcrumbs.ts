@@ -8,27 +8,51 @@ const SEGMENT_LABELS: Record<string, string> = {
   submissions: "Bài nộp",
   accounts: "Quản lý tài khoản",
   history: "Lịch sử nộp bài",
+  "problem-bank": "Ngân hàng đề",
 };
 
 /**
  * Dựng breadcrumb từ pathname.
  * Segment động (vd: id lớp) lấy nhãn từ `dynamicLabel` — page đặt qua useBreadcrumbLabel().
  */
-export function buildBreadcrumbs(pathname: string, dynamicLabel?: string | null): Crumb[] {
+export function buildBreadcrumbs(pathname: string, dynamicLabels?: { course: string | null; session: string | null; page?: string | null }): Crumb[] {
   const segments = pathname.split("/").filter(Boolean);
   if (segments.length === 0) return [{ label: "Lớp học phần" }]; // trang chủ sinh viên
   if (pathname === "/teacher") return [{ label: "Tổng quan" }];
 
+  if (segments[0] === "teacher" && segments[1] === "courses" && segments[2]) {
+    const coursePath = `/teacher/courses/${segments[2]}`;
+    const crumbs: Crumb[] = [
+      { label: "Lớp học phần", href: "/teacher/courses" },
+      { label: dynamicLabels?.course ?? segments[2], href: segments[4] ? coursePath : undefined },
+    ];
+    if (segments[3] === "sessions" && segments[4]) {
+      // SỬA: Khi có trang con như "Soạn bài tập", buổi học phải là link trung gian,
+      // chỉ breadcrumb cuối cùng mới được đánh dấu trang hiện tại.
+      crumbs.push({ label: dynamicLabels?.session ?? "Buổi học", href: dynamicLabels?.page || segments[6] ? `${coursePath}/sessions/${segments[4]}` : undefined });
+      if (segments[5] === "problems" && segments[6]) crumbs.push({ label: dynamicLabels?.page ?? "Chi tiết bài tập" });
+      else if (dynamicLabels?.page) crumbs.push({ label: dynamicLabels.page });
+    }
+    return crumbs;
+  }
+
   const crumbs: Crumb[] = [];
   let href = "";
+  const visibleSegments = segments.filter((segment) => segment !== "teacher" && segment !== "student");
+  let visibleIndex = 0;
   segments.forEach((segment, index) => {
     href += `/${segment}`;
     if (segment === "teacher" || segment === "student") return;
     const isLast = index === segments.length - 1;
+    const isUnknown = !(segment in SEGMENT_LABELS);
     crumbs.push({
-      label: SEGMENT_LABELS[segment] ?? dynamicLabel ?? "…",
+      // A dynamic label belongs only to the final dynamic route segment.
+      // Applying it to every unknown segment caused `Buổi 2` to appear three times
+      // on /teacher/courses/:courseId/sessions/:sessionId.
+      label: SEGMENT_LABELS[segment] ?? (isUnknown && visibleIndex === visibleSegments.length - 1 ? dynamicLabels?.session ?? dynamicLabels?.course : undefined) ?? "…",
       href: isLast ? undefined : href,
     });
+    visibleIndex += 1;
   });
   return crumbs;
 }

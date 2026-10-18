@@ -1,0 +1,58 @@
+@startuml use-case
+' Sơ đồ use case tổng quát: mỗi use case là một nhóm chức năng,
+' chi tiết từng nhóm xem ở các file use-case-*.puml cùng thư mục
+left to right direction
+skinparam shadowing false
+skinparam monochrome true
+skinparam packageStyle rectangle
+skinparam defaultFontName Arial
+skinparam usecase {
+  BackgroundColor white
+  BorderColor black
+}
+
+title Sơ đồ use case tổng quát - Hệ thống Chấm Code
+
+actor "Người dùng" as User
+actor "Sinh viên" as Student
+actor "Giáo viên" as Teacher
+actor "Admin" as Admin
+actor "Judge0" as Judge0 <<system>>
+
+Student -up-|> User
+Teacher -up-|> User
+Admin -up-|> Teacher
+
+rectangle "Hệ thống Chấm Code" {
+  usecase "Xác thực tài khoản" as UC_Auth
+  usecase "Xem lớp học phần" as UC_ViewCourse
+  usecase "Xem đề bài" as UC_ViewProblem
+
+  usecase "Làm bài và nộp bài" as UC_Submit
+
+  usecase "Quản lý tài khoản Sinh viên" as UC_Student
+  usecase "Quản lý lớp hành chính" as UC_Class
+  usecase "Quản lý lớp học phần" as UC_Course
+  usecase "Quản lý buổi học và bài tập" as UC_Lesson
+  usecase "Chấm bài" as UC_Grade
+
+  usecase "Quản lý tài khoản Giáo viên" as UC_Teacher
+}
+
+User --> UC_Auth
+User --> UC_ViewCourse
+User --> UC_ViewProblem
+
+Student --> UC_Submit
+
+Teacher --> UC_Student
+Teacher --> UC_Class
+Teacher --> UC_Course
+Teacher --> UC_Lesson
+Teacher --> UC_Grade
+
+Admin --> UC_Teacher
+
+UC_Submit --> Judge0
+
+@enduml

@@ -1,6 +1,12 @@
 "use client";
 
-import { Fragment, useEffect, useRef, useState } from "react";
+import {
+  Fragment,
+  useEffect,
+  useRef,
+  useState,
+  useSyncExternalStore,
+} from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useAuth } from "@/context/auth-context";
 import { getHomePath } from "@/lib/auth/redirect";
@@ -16,12 +22,16 @@ const ROLE_CONFIG = {
   STUDENT: { path: "/student", roleId: 3 },
 } as const;
 
+const subscribeToHydration = () => () => {};
+const getClientHydrationSnapshot = () => true;
+const getServerHydrationSnapshot = () => false;
+
 function hasRouteAccess(pathname: string, roleId: number): boolean {
   if (pathname === "/" || PUBLIC_ROUTES.includes(pathname)) {
     return true;
   }
   const matchedRole = Object.values(ROLE_CONFIG).find((config) =>
-    pathname.startsWith(config.path)
+    pathname.startsWith(config.path),
   );
 
   if (matchedRole) {
@@ -31,7 +41,11 @@ function hasRouteAccess(pathname: string, roleId: number): boolean {
   return true;
 }
 
-function getSafeFallbackPath(pathname: string | null, roleId: number, userHome: string): string {
+function getSafeFallbackPath(
+  pathname: string | null,
+  roleId: number,
+  userHome: string,
+): string {
   if (
     pathname &&
     pathname !== LOGIN_ROUTE &&
@@ -49,24 +63,28 @@ function getRedirectTarget(
   auth: Extract<ReturnType<typeof useAuth>, { status: "authenticated" }>,
   lastAllowedPath: string | null,
 ): string | null {
-
   if (pathname === "/forgot-password") return getHomePath(auth.user);
   if (auth.user.must_change_password && pathname !== CHANGE_PASSWORD_ROUTE) {
     return CHANGE_PASSWORD_ROUTE;
   }
   if (!auth.user.must_change_password && pathname === CHANGE_PASSWORD_ROUTE) {
-    return getSafeFallbackPath(lastAllowedPath, auth.user.role_id, getHomePath(auth.user));
+    return getSafeFallbackPath(
+      lastAllowedPath,
+      auth.user.role_id,
+      getHomePath(auth.user),
+    );
   }
 
   return null;
 }
 
-export function RouteGuard({
-  children,
-}: {
-  children: React.ReactNode;
-}) {
+export function RouteGuard({ children }: { children: React.ReactNode }) {
   const auth = useAuth();
+  const isHydrated = useSyncExternalStore(
+    subscribeToHydration,
+    getClientHydrationSnapshot,
+    getServerHydrationSnapshot,
+  );
   const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
@@ -74,7 +92,7 @@ export function RouteGuard({
   const [lastAllowedPath, setLastAllowedPath] = useState<string | null>(null);
 
   useEffect(() => {
-    if (auth.status === "loading") return;
+    if (!isHydrated || auth.status === "loading") return;
 
     const isPublicRoute = PUBLIC_ROUTES.includes(pathname);
 
@@ -85,7 +103,11 @@ export function RouteGuard({
         return;
       }
 
-      const redirectTarget = getRedirectTarget(pathname, auth, lastAllowedPathRef.current);
+      const redirectTarget = getRedirectTarget(
+        pathname,
+        auth,
+        lastAllowedPathRef.current,
+      );
       if (redirectTarget) {
         router.replace(redirectTarget);
       } else {
@@ -93,10 +115,11 @@ export function RouteGuard({
           // 1. Lấy chuỗi query (VD: "?page=2&sort=desc")
           const search = searchParams.toString();
           const queryString = search ? `?${search}` : "";
-          
+
           // 2. Lấy hash hiện tại (An toàn cho SSR trong Next.js)
-          const hash = typeof window !== "undefined" ? window.location.hash : "";
-          
+          const hash =
+            typeof window !== "undefined" ? window.location.hash : "";
+
           // 3. Ghép lại thành URL hoàn chỉnh
           const fullPath = `${pathname}${queryString}${hash}`;
 
@@ -108,15 +131,23 @@ export function RouteGuard({
         }
       }
     }
-  },[auth, pathname, searchParams, router]);
-  if (auth.status === "loading") {
+  }, [auth, isHydrated, pathname, searchParams, router]);
+  if (!isHydrated || auth.status === "loading") {
     return (
-      <div className="h-[100dvh] w-full bg-slate-900" aria-busy="true" />
+      <div
+        className="flex h-[100dvh] w-full items-center justify-center bg-slate-900"
+        aria-busy="true"
+      >
+        <Loader2 className="animate-spin text-white size-8" />
+      </div>
     );
   }
 
   // --- LUỒNG 2: Xử lý hiển thị màn hình 403 (Sai quyền) ---
-  if (auth.status === "authenticated" && !hasRouteAccess(pathname, auth.user.role_id)) {
+  if (
+    auth.status === "authenticated" &&
+    !hasRouteAccess(pathname, auth.user.role_id)
+  ) {
     return (
       <div className="flex h-[100dvh] w-full flex-col items-center justify-center bg-slate-900 text-slate-200">
         <h1 className="text-4xl font-bold mb-4">403</h1>
@@ -142,7 +173,10 @@ export function RouteGuard({
   if (isUnauthenticatedPrivateRoute || isAuthenticatedRedirecting) {
     // Trả về Loading (màn hình nền tối) thay vì null để sửa lỗi chớp trắng UI
     return (
-      <div className="h-[100dvh] w-full bg-slate-900 flex items-center justify-center" aria-busy="true">
+      <div
+        className="h-[100dvh] w-full bg-slate-900 flex items-center justify-center"
+        aria-busy="true"
+      >
         <Loader2 className="animate-spin text-white size-8" />
       </div>
     );

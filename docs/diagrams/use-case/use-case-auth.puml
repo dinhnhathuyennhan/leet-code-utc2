@@ -1,0 +1,43 @@
+@startuml use-case-auth
+left to right direction
+skinparam shadowing false
+skinparam monochrome true
+skinparam packageStyle rectangle
+skinparam defaultFontName Arial
+skinparam usecase {
+  BackgroundColor white
+  BorderColor black
+}
+
+title Use case chi tiết - Xác thực
+
+actor "Người dùng\n(Admin / Giáo viên / Sinh viên)" as User
+
+rectangle "Xác thực" {
+  usecase "Đăng nhập" as Login
+  usecase "Đăng xuất" as Logout
+  usecase "Đổi mật khẩu" as ChangePw
+  usecase "Làm mới phiên đăng nhập" as Refresh
+  usecase "Xem thông tin cá nhân" as Me
+  usecase "Kiểm tra access token" as CheckToken
+}
+
+User --> Login
+User --> Logout
+User --> ChangePw
+User --> Me
+User --> Refresh
+
+ChangePw .> Login : <<extend>>\n[must_change_password = true]
+ChangePw ..> CheckToken : <<include>>
+Me ..> CheckToken : <<include>>
+
+note bottom of Login
+  Sai email hoặc mật khẩu đều trả chung
+  "Email hoặc mật khẩu không đúng"
+end note
+note bottom of Refresh
+  Client tự gọi khi access token hết hạn,
+  dùng refresh token trong cookie HttpOnly
+end note
+@enduml

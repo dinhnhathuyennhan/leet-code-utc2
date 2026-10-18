@@ -1,10 +1,19 @@
 # Thiết kế API — Quản lý lớp học (Course)
 
-## Quy ước thời gian (`start_date`, `end_date`)
+## Quy ước thời gian
 
-- Client gửi **giờ Việt Nam, không kèm offset** (vd: `"2026-09-07T00:00:00"`). Server lưu và trả về nguyên giá trị đó (`"2026-09-07T00:00:00"`).
-- Nếu client gửi kèm offset (vd: `"2026-09-07T00:00:00+07:00"` hoặc hậu tố `Z`), server quy đổi về UTC và trả về **không kèm offset** (`"2026-09-06T17:00:00"`) → hiển thị sẽ lệch. Vì vậy không gửi kèm offset.
-- Lý do: cột DB đang là `timestamp without time zone`. Sẽ chuyển sang `timestamptz` trước khi làm các tính năng có so sánh với giờ server (hạn nộp bài của Lesson/Submission).
+Áp dụng cho mọi field kiểu `datetime` trong API: `start_date`/`end_date` của course, `start_datetime`/`end_datetime` của problem, `opens_at`/`deadline` của buổi học, `submitted_datetime` của bài nộp.
+
+- **Gửi lên: bắt buộc kèm offset.**
+  - Ví dụ hợp lệ: `"2026-09-07T00:00:00+07:00"` (giờ VN) hoặc `"2026-09-06T17:00:00Z"` (UTC). Hai giá trị này là cùng một thời điểm.
+  - Thiếu offset (vd: `"2026-09-07T00:00:00"`) → `422`, `error_code: "INVALID_FORMAT"`, message `"<field> phải kèm múi giờ, vd: 2026-09-07T00:00:00+07:00"`.
+- **Trả về: luôn kèm offset giờ VN `+07:00`**, bất kể client đã gửi lên offset nào. Ví dụ gửi `"2027-01-15T00:00:00Z"` thì nhận lại `"2027-01-15T07:00:00+07:00"`.
+- **So sánh theo thời điểm thật**, không theo chuỗi. Ví dụ `start_date` phải trước `end_date` được xét sau khi quy về cùng một thời điểm.
+- **DB** lưu các cột này dạng `timestamptz` (UTC).
+- **Field kiểu `date`** (`start_date`/`end_date` của buổi học, `date_of_birth`) là **ngày theo lịch VN**, không có giờ và không có offset (vd: `"2026-09-07"`).
+  - Buổi học mở lúc 00:00:00 giờ VN của `start_date` và đóng lúc 23:59:59.999999 giờ VN của `end_date`. Đây chính là `opens_at`/`deadline` trong response.
+  - Bài tập gắn vào buổi học lấy cùng khung thời gian đó.
+- **Phía FE**: khi hiển thị, dùng `timeZone: "Asia/Ho_Chi_Minh"`, để không phụ thuộc múi giờ của trình duyệt.
 
 ## POST /courses — Tạo lớp học
 
@@ -15,7 +24,7 @@
 | course_id | string | có | mã lớp học, duy nhất, tối đa 50 ký tự |
 | course_name | string | có | tối đa 255 ký tự |
 | term | string | có | học kỳ, tối đa 255 ký tự |
-| start_date | datetime | có | phải trước `end_date`, xem [Quy ước thời gian](#quy-ước-thời-gian-start_date-end_date) |
+| start_date | datetime | có | phải trước `end_date`, xem [Quy ước thời gian](#quy-ước-thời-gian) |
 | end_date | datetime | có | |
 | avt_link | string | không | tối đa 2048 ký tự |
 
@@ -89,7 +98,7 @@
 |---|---|---|---|
 | course_name | string | không | tối đa 255 ký tự |
 | term | string | không | tối đa 255 ký tự |
-| start_date | datetime | không | xem [Quy ước thời gian](#quy-ước-thời-gian-start_date-end_date) |
+| start_date | datetime | không | xem [Quy ước thời gian](#quy-ước-thời-gian) |
 | end_date | datetime | không | |
 | avt_link | string | không | tối đa 2048 ký tự. Không gỡ được ảnh: gửi `null` sẽ bị bỏ qua |
 

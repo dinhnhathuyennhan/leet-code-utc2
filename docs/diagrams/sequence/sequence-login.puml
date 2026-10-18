@@ -1,0 +1,57 @@
+@startuml sequence-login
+' Đăng nhập + làm mới phiên, theo backend/app/api/auth.py và modules/auth/service.py
+skinparam shadowing false
+skinparam monochrome true
+skinparam defaultFontName Arial
+skinparam sequenceMessageAlign center
+autonumber
+
+title Sơ đồ tuần tự - Đăng nhập và làm mới phiên
+
+actor "Người dùng" as U
+participant "Frontend\n(Next.js)" as FE
+participant "Auth Router\n(FastAPI)" as R
+participant "AuthService" as S
+database "PostgreSQL" as DB
+participant "Global\nException Handler" as EH
+
+== Đăng nhập ==
+U -> FE : Nhập email, mật khẩu, nhấn "Đăng nhập"
+FE -> R : POST /auth/login {email, password}
+R -> S : login(email, password)
+S -> DB : SELECT user WHERE email = ?
+DB --> S : user | null
+S -> S : verify_password(password, hash)\n(email không tồn tại thì verify với hash giả\nđể không lộ email qua thời gian phản hồi)
+
+alt Sai email hoặc mật khẩu
+  S -->> EH : raise InvalidCredentialsError
+  EH --> FE : 401 "Email hoặc mật khẩu không đúng"
+  FE --> U : Hiển thị thông báo lỗi
+else Đúng thông tin
+  S -> S : Tạo access token (sub, role, tv)\nvà refresh token (sub, tv)
+  S --> R : LoginResponse + refresh token
+  R --> FE : 200 {access_token, user}\nSet-Cookie: refresh_token (HttpOnly)
+  alt must_change_password = true
+    FE --> U : Chuyển tới trang "Đổi mật khẩu"
+  else
+    FE --> U : Chuyển tới trang chủ theo vai trò
+  end
+end
+
+== Làm mới phiên (access token hết hạn) ==
+FE -> R : POST /auth/refresh-access-token\n(cookie refresh_token)
+R -> S : refresh_access_token(refresh_token)
+S -> S : decode_token(refresh_token)
+S -> DB : SELECT user WHERE user_id = sub
+DB --> S : user
+alt Token hết hạn / không hợp lệ / token_version lệch
+  S -->> EH : raise SessionExpiredError | SessionRevokedError
+  EH --> FE : 401
+  FE --> U : Chuyển về trang đăng nhập
+else Hợp lệ
+  S --> R : access token mới
+  R --> FE : 200 {access_token}
+  FE -> FE : Gửi lại request ban đầu
+end
+
+@enduml

@@ -37,13 +37,20 @@ jobs:
     defaults:
       run:
         working-directory: frontend
+    env:
+      # API_URL cho test (MSW mock server, không gọi backend thật)
+      NEXT_PUBLIC_API_URL: http://localhost:8000
     steps:
       - uses: actions/checkout@v5
       - uses: actions/setup-node@v5
         with:
           node-version: "20"
-      - run: npm ci
+      - run: npm install --legacy-peer-deps
       - name: Lint
         run: npm run lint
+      - name: Type check
+        run: npx tsc --noEmit
+      - name: Unit tests (Vitest)
+        run: npm test
       - name: Build thử
         run: npm run build

@@ -1,0 +1,62 @@
+@startuml sequence-submit-code
+' Nộp bài và chấm tự động qua Judge0.
+' Lưu ý: luồng này vẽ theo thiết kế Phase 3 trong docs/roadmap.md,
+' chưa có trong code (chưa có judge_client.py và POST /problems/{id}/submissions).
+skinparam shadowing false
+skinparam monochrome true
+skinparam defaultFontName Arial
+skinparam sequenceMessageAlign center
+autonumber
+
+title Sơ đồ tuần tự - Nộp bài và chấm tự động
+
+actor "Sinh viên" as U
+participant "Frontend\n(Next.js)" as FE
+participant "Submission Router\n(FastAPI)" as R
+participant "SubmissionService" as S
+participant "JudgeClient" as J
+database "PostgreSQL" as DB
+participant "Judge0" as J0
+participant "Global\nException Handler" as EH
+
+U -> FE : Viết code, chọn ngôn ngữ, nhấn "Nộp bài"
+FE -> R : POST /problems/{problem_id}/submissions\n{language, source_code}
+R -> S : create_submission(student, problem_id, ...)
+S -> DB : Kiểm tra Sinh viên đã ghi danh course\nvà bài tập còn trong thời hạn
+DB --> S : kết quả
+break Chưa ghi danh / hết hạn
+  S -->> EH : raise ForbiddenError
+  EH --> FE : 403
+  FE --> U : Hiển thị thông báo lỗi
+end
+S -> DB : INSERT submission (status = pending)
+DB --> S : submission_id
+S -> S : Đưa việc chấm vào BackgroundTasks
+S --> R : submission_id
+R --> FE : 202 {submission_id, status: pending}
+
+group Chấm bất đồng bộ (background)
+  S -> DB : Lấy toàn bộ testcase của bài
+  DB --> S : testcases
+  S -> J : judge(code, language, testcases)
+  J -> J0 : POST /submissions/batch\n(base64_encoded = true)
+  J0 --> J : tokens
+  loop Tới khi chấm xong
+    J -> J0 : GET /submissions/batch?tokens=...
+    J0 --> J : status, stdout, compile_output
+  end
+  J --> S : kết quả từng testcase
+  S -> S : Tổng hợp status, passed_count
+  S -> DB : UPDATE submission (status, passed_count,\ncompile_output)
+end
+
+loop FE poll tới khi status khác pending
+  FE -> R : GET /submissions/{submission_id}
+  R -> S : get_submission(...)
+  S -> DB : SELECT submission
+  DB --> S : submission
+  R --> FE : 200 {status, passed_count, ...}
+end
+FE --> U : Hiển thị kết quả chấm
+
+@enduml

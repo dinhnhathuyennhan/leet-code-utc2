@@ -11,12 +11,11 @@ export default function TeacherCoursesPage() {
       role="teacher"
       filters={filters}
       courses={query.data?.items}
-      stats={query.data?.stats}
       isLoading={query.isPending}
       isFetching={query.isFetching}
       error={query.error}
       onRetry={() => void query.refetch()}
-      hrefFor={(course) => `/teacher/courses/${course.id}`}
+      hrefFor={(course) => `/teacher/courses/${course.code || course.id}`}
     />
   );
 }

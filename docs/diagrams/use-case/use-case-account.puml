@@ -1,0 +1,50 @@
+@startuml use-case-account
+left to right direction
+skinparam shadowing false
+skinparam monochrome true
+skinparam packageStyle rectangle
+skinparam defaultFontName Arial
+skinparam usecase {
+  BackgroundColor white
+  BorderColor black
+}
+
+title Use case chi tiết - Quản lý tài khoản
+
+actor "Giáo viên" as Teacher
+actor "Admin" as Admin
+Admin -up-|> Teacher
+
+rectangle "Quản lý tài khoản" {
+  usecase "Cấp tài khoản Giáo viên" as CreateTeacher
+  usecase "Cấp tài khoản Sinh viên" as CreateStudent
+  usecase "Import Sinh viên từ file Excel" as Import
+  usecase "Tự tạo lớp hành chính\nchưa có" as AutoClass
+  usecase "Đặt lại mật khẩu" as Reset
+  usecase "Xem danh sách tài khoản" as ListUsers
+  usecase "Lọc theo vai trò / lớp hành chính" as Filter
+  usecase "Sinh mật khẩu tạm\n(SV = MSSV, GV = ngày sinh)" as TempPw
+}
+
+Admin --> CreateTeacher
+Teacher --> CreateStudent
+Teacher --> Import
+Teacher --> Reset
+Teacher --> ListUsers
+
+CreateTeacher ..> TempPw : <<include>>
+CreateStudent ..> TempPw : <<include>>
+Import ..> TempPw : <<include>>
+Reset ..> TempPw : <<include>>
+Import ..> AutoClass : <<include>>
+Filter .> ListUsers : <<extend>>
+
+note bottom of Reset
+  Giáo viên chỉ reset được Sinh viên
+  đang học lớp học phần do mình tạo
+end note
+note bottom of ListUsers
+  Giáo viên chỉ thấy Sinh viên
+  trong lớp học phần của mình
+end note
+@enduml

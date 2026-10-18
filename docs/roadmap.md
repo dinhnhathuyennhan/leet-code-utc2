@@ -10,12 +10,12 @@
 
 **Backend: đã có**
 
-- Auth: `POST /auth/login`, `/auth/change-password`, `/auth/logout`, `/auth/refresh-access-token` (`backend/app/routers/auth.py`)
+- Auth: `POST /auth/login`, `/auth/change-password`, `/auth/logout`, `/auth/refresh-access-token` (`backend/app/api/auth.py`)
 - Tài khoản: `POST /teachers`, `/students`, `/students/import` (Excel), `/users/{id}/reset-password`
-- Course: POST/GET list/GET detail/PATCH, enrollments POST/GET/DELETE (`backend/app/routers/course.py`)
+- Course: POST/GET list/GET detail/PATCH, enrollments POST/GET/DELETE (`backend/app/api/courses.py`)
 - Global Exception Handler, CI (ruff + pytest + eslint + build), docker-compose (Postgres + migrate + pgAdmin)
 
-**Backend: chưa có (mới có model trong `backend/models.py`)**
+**Backend: chưa có (mới có model trong `backend/app/models/entities.py`)**
 
 - `Class` (lớp hành chính): chưa có endpoint nào
 - `Lesson`, `Problem`, `Testcase`, `Submission`: **lõi của sản phẩm chấm code, chưa có dòng logic nào**
@@ -36,7 +36,7 @@
 - `feature/get-course` và `feature/login-ui` chưa merge vào `develop`. `login-ui` còn lẫn file rác (`frontend/tsc-errors.txt`, `frontend/tsc.txt`)
 - `main` đang chậm hơn `develop` 73 commit
 
-**Nợ kỹ thuật đã biết**: ngày của course đang là giờ VN naive, **phải chốt timezone trước khi làm deadline cho Lesson/Problem**.
+~~**Nợ kỹ thuật đã biết**: ngày của course đang là giờ VN naive, **phải chốt timezone trước khi làm deadline cho Lesson/Problem**.~~ ✅ Đã xử lý: DB lưu `timestamptz`, xem [Quy ước thời gian](api-design-course.md#quy-ước-thời-gian).
 
 > **Nhận định:** FE đang đi sau BE khá xa (BE có ~15 endpoint, FE mới gọi được auth), còn BE thì chưa đụng tới phần lõi (bài tập và chấm code). Hướng đi: **(1) cho FE theo kịp phần đã có**, song song với **(2) BE mở module Lesson/Problem**, rồi dồn lực vào **(3) Submission**.
 
@@ -82,9 +82,9 @@ Sau khi BE xong một phase và trước khi FE bắt đầu phase tiếp theo, 
 | Review rồi merge `feature/get-course`                                                                                      | BE      | 0.5 ngày  |
 | Xoá `tsc-errors.txt`/`tsc.txt` và merge `feature/login-ui`                                                                 | FE      | 0.5 ngày  |
 | Gộp HTTP client (giữ 1 trong `lib/axios.ts` / `lib/api/client.ts`) và token store (giữ 1)                                  | FE      | 1 ngày    |
-| Viết `backend/tests/test_auth_service.py` (login sai/đúng, refresh hết hạn/bị revoke, token_version, logout)               | BE      | 1–2 ngày  |
+| Viết `backend/tests/unit/modules/auth/test_auth_service.py` (login sai/đúng, refresh hết hạn/bị revoke, token_version, logout)               | BE      | 1–2 ngày  |
 | Sửa Excel import thiếu `class_id`                                                                                          | BE      | 0.5 ngày  |
-| **Chốt quy ước timezone** (khuyến nghị: lưu UTC `timestamptz`, FE hiển thị giờ VN) và cập nhật `docs/api-design-course.md` | BE      | 1 ngày    |
+| ~~Chốt quy ước timezone~~ ✅ đã xong, xem [Quy ước thời gian](api-design-course.md#quy-ước-thời-gian)                       | BE      | —         |
 | ~~Dựng Judge0~~ ✅ đã xong, xem [judge0-setup.md](judge0-setup.md)                                                         | Hạ tầng | —         |
 | Các thành viên cần dùng Judge0 kết nối qua Tailscale (Phần B của hướng dẫn)                                                | Hạ tầng | 0.5 ngày  |
 | Merge `develop` vào `main`                                                                                                 | Lead    | 0.5 ngày  |
@@ -100,7 +100,7 @@ Sau khi BE xong một phase và trước khi FE bắt đầu phase tiếp theo, 
 | Việc                                                                                          | Ước lượng |
 | --------------------------------------------------------------------------------------------- | --------- |
 | `GET /users` (Admin, có lọc theo role/class, phân trang, scope theo vai trò), `GET /users/me` | 1–2 ngày  |
-| CRUD `Class` (Admin), dùng cho import Excel và lọc sinh viên                                  | 1 ngày    |
+| ~~CRUD `Class` (Admin), dùng cho import Excel và lọc sinh viên~~ ✅ xem [api-design-class.md](api-design-class.md); import đã tự tạo lớp | 1 ngày    |
 | Sau đó chuyển sang viết docs cho Lesson/Problem/Testcase (Phase 2)                            | —         |
 
 **FE: 05/10 → 14/10 (10 ngày, 3 người làm song song)**
@@ -153,7 +153,7 @@ Judge0 đã chạy sẵn, nên phase này chỉ còn phần tích hợp.
 
 | Việc                                                                                                                                                                                                                                            | Ước lượng |
 | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------- |
-| `app/services/judge_client.py`: bọc API Judge0 (httpx), map ngôn ngữ (Python 71, C++ 54, Java 62, C 50), chuẩn hoá status. **Luôn dùng `base64_encoded=true`** (xem judge0-setup.md). Thêm `JUDGE0_URL`, `JUDGE0_AUTH_TOKEN` vào `.env.example` | 2–3 ngày  |
+| `app/modules/submissions/judge_client.py`: bọc API Judge0 (httpx), map ngôn ngữ (Python 71, C++ 54, Java 62, C 50), chuẩn hoá status. **Luôn dùng `base64_encoded=true`** (xem judge0-setup.md). Thêm `JUDGE0_URL`, `JUDGE0_AUTH_TOKEN` vào `.env.example` | 2–3 ngày  |
 | `POST /problems/{id}/run`: chạy trên sample testcase, **không lưu**, dùng khi SV bấm "Run"                                                                                                                                                      | 1–2 ngày  |
 | `POST /problems/{id}/submissions`: chạy toàn bộ testcase, lưu `Submission` (status `pending` rồi cập nhật kết quả); chấm bất đồng bộ bằng Judge0 batch + `BackgroundTasks`                                                                      | 3–4 ngày  |
 | `GET /submissions/{id}` (FE poll), `GET /problems/{id}/submissions` (lịch sử của SV)                                                                                                                                                            | 1 ngày    |
@@ -199,7 +199,7 @@ Judge0 đã chạy sẵn, nên phase này chỉ còn phần tích hợp.
 
 1. Review và merge `feature/get-course`
 2. Dọn file rác, merge `feature/login-ui`
-3. Chốt timezone, viết `test_auth_service.py`
+3. ~~Chốt timezone~~ ✅, viết `test_auth_service.py`
 4. Họp 30 phút: phân người cho từng phase theo bảng trên, **chốt ai là Người 1/2/3 bên FE**
 
 ## Cách kiểm tra

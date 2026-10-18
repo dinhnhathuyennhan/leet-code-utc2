@@ -56,3 +56,36 @@
 | **Post-condition** | Bản ghi `Enrollment` bị xoá; `total_number_student` của lớp học giảm đi 1 |
 | **Basic flow** | 1. Giáo viên/Admin chọn 1 Sinh viên trong danh sách lớp, nhấn nút "Xoá khỏi lớp"<br>2. Hệ thống hiển thị hộp thoại xác nhận<br>3. Giáo viên/Admin xác nhận<br>4. Hệ thống kiểm tra quyền thực hiện trên lớp học<br>&nbsp;&nbsp;&nbsp;4a. Nếu người thực hiện là Giáo viên và không phải người tạo lớp học này, hệ thống hiển thị thông báo lỗi "Bạn không có quyền thực hiện hành động này", use-case kết thúc<br>&nbsp;&nbsp;&nbsp;4b. Nếu hợp lệ, use-case tiếp tục ở bước 5<br>5. Hệ thống kiểm tra bản ghi `Enrollment` giữa Sinh viên và lớp học có tồn tại không<br>&nbsp;&nbsp;&nbsp;5a. Nếu không tồn tại, hệ thống hiển thị thông báo lỗi "Sinh viên không thuộc lớp học này", use-case kết thúc<br>&nbsp;&nbsp;&nbsp;5b. Nếu tồn tại, use-case tiếp tục ở bước 6<br>6. Hệ thống xoá bản ghi `Enrollment`, giảm `total_number_student` của lớp học đi 1<br>7. Hệ thống hiển thị thông báo xoá thành công |
 | **Exception flow** | **E1. Mất kết nối/lỗi hệ thống**: ở bất kỳ bước nào từ 3-7, nếu request thất bại → hệ thống hiển thị thông báo lỗi kết nối, không thay đổi dữ liệu, use-case tiếp tục ở bước 2 |
+
+### Use-case: Xem chi tiết lớp học
+
+| | |
+|---|---|
+| **Description** | Người dùng xem thông tin một lớp học kèm danh sách buổi học, bài tập và bảng điểm; dữ liệu được giới hạn theo vai trò |
+| **Trigger** | Người dùng chọn 1 lớp học trong danh sách lớp học |
+| **Pre-condition** | Người dùng đã đăng nhập thành công vào hệ thống<br>Lớp học (`course_id`) tồn tại |
+| **Post-condition** | Không thay đổi dữ liệu. Sinh viên chỉ thấy dòng điểm của chính mình |
+| **Basic flow** | 1. Người dùng chọn 1 lớp học<br>2. Hệ thống kiểm tra lớp học tồn tại<br>&nbsp;&nbsp;&nbsp;2a. Nếu không tồn tại, hệ thống hiển thị thông báo lỗi "Không tìm thấy lớp học", use-case kết thúc<br>3. Hệ thống kiểm tra quyền xem: Admin xem mọi lớp; Giáo viên chỉ xem lớp mình tạo; Sinh viên chỉ xem lớp mình đã được thêm vào<br>&nbsp;&nbsp;&nbsp;3a. Nếu không có quyền, hệ thống hiển thị thông báo lỗi "Bạn không có quyền xem lớp học này", use-case kết thúc<br>4. Hệ thống trả thông tin lớp (mã, tên, học kỳ, thời gian, sĩ số), danh sách buổi học kèm trạng thái và bài tập, bảng điểm (Sinh viên chỉ nhận dòng của mình)<br>5. Hệ thống hiển thị trang chi tiết lớp học |
+| **Exception flow** | **E1. Mất kết nối/lỗi hệ thống**: ở bước 2-4, nếu truy vấn thất bại → hệ thống hiển thị thông báo lỗi kết nối, use-case tiếp tục ở bước 1 |
+
+### Use-case: Cập nhật lớp học
+
+| | |
+|---|---|
+| **Description** | Giáo viên chủ lớp hoặc Admin sửa thông tin của một lớp học đã tạo |
+| **Trigger** | Giáo viên/Admin chọn 1 lớp học, nhấn nút "Chỉnh sửa" |
+| **Pre-condition** | Đã đăng nhập thành công vào hệ thống<br>Lớp học (`course_id`) tồn tại<br>Nếu người thực hiện là Giáo viên, Giáo viên đó phải là người tạo lớp (`created_by`) |
+| **Post-condition** | Các trường được gửi lên (tên lớp, học kỳ, ngày bắt đầu, ngày kết thúc, ảnh đại diện) được cập nhật; `course_id`, `created_by`, `total_number_student` không thay đổi. Trường gửi giá trị rỗng (null) được bỏ qua |
+| **Basic flow** | 1. Hệ thống hiển thị form chỉnh sửa với thông tin hiện tại của lớp<br>2. Giáo viên/Admin sửa các trường cần thay đổi và nhấn "Lưu"<br>3. Hệ thống kiểm tra quyền: Admin sửa mọi lớp, Giáo viên chỉ sửa lớp mình tạo<br>&nbsp;&nbsp;&nbsp;3a. Nếu không có quyền, hệ thống hiển thị thông báo lỗi "Bạn không có quyền thực hiện hành động này", use-case kết thúc<br>4. Hệ thống kiểm tra định dạng (tên lớp, học kỳ không rỗng; ngày có múi giờ)<br>&nbsp;&nbsp;&nbsp;4a. Nếu không hợp lệ, hệ thống hiển thị thông báo lỗi, use-case tiếp tục ở bước 2<br>5. Hệ thống đối chiếu ngày mới với ngày đang lưu, kiểm tra `start_date` trước `end_date`<br>&nbsp;&nbsp;&nbsp;5a. Nếu sai, hệ thống hiển thị thông báo lỗi "start_date phải trước end_date", use-case tiếp tục ở bước 2<br>6. Hệ thống lưu thay đổi và hiển thị thông tin lớp sau khi cập nhật |
+| **Exception flow** | **E1. Mất kết nối/lỗi hệ thống**: ở bước 3-6, nếu request thất bại → hệ thống hiển thị thông báo lỗi kết nối, giữ nguyên dữ liệu đã nhập, use-case tiếp tục ở bước 2 |
+
+### Use-case: Thêm lớp hành chính vào lớp học
+
+| | |
+|---|---|
+| **Description** | Giáo viên chủ lớp hoặc Admin thêm toàn bộ Sinh viên của một lớp hành chính vào lớp học trong một lần, thay vì thêm từng người |
+| **Trigger** | Giáo viên/Admin chọn 1 lớp học, nhấn "Thêm sinh viên" và chọn "Thêm cả lớp hành chính" |
+| **Pre-condition** | Đã đăng nhập thành công vào hệ thống<br>Lớp học (`course_id`) và lớp hành chính (`class_id`) tồn tại<br>Nếu người thực hiện là Giáo viên, Giáo viên đó phải là người tạo lớp học |
+| **Post-condition** | Mọi Sinh viên của lớp hành chính chưa có trong lớp học được thêm `Enrollment` mới; Sinh viên đã có trong lớp được bỏ qua; `total_number_student` tăng đúng bằng số Sinh viên được thêm |
+| **Basic flow** | 1. Giáo viên/Admin chọn chức năng "Thêm cả lớp hành chính"<br>2. Hệ thống hiển thị danh sách lớp hành chính để chọn<br>3. Giáo viên/Admin chọn 1 lớp hành chính và xác nhận<br>4. Hệ thống kiểm tra quyền quản lý lớp học<br>&nbsp;&nbsp;&nbsp;4a. Nếu không có quyền, hệ thống hiển thị thông báo lỗi "Bạn không có quyền thêm sinh viên vào lớp này", use-case kết thúc<br>5. Hệ thống kiểm tra lớp hành chính tồn tại<br>&nbsp;&nbsp;&nbsp;5a. Nếu không tồn tại, hệ thống hiển thị thông báo lỗi "Không tìm thấy lớp hành chính", use-case tiếp tục ở bước 2<br>6. Hệ thống lấy các Sinh viên thuộc lớp hành chính, tách ra những người đã có trong lớp học<br>7. Hệ thống thêm các Sinh viên còn lại vào lớp học và cập nhật sĩ số<br>8. Hệ thống hiển thị số Sinh viên đã thêm và số Sinh viên bỏ qua |
+| **Exception flow** | **E1. Mất kết nối/lỗi hệ thống**: ở bước 4-7, nếu request thất bại → không Sinh viên nào được thêm (lưu trong một giao dịch), hệ thống hiển thị thông báo lỗi kết nối, use-case tiếp tục ở bước 3<br>**E2. Lớp hành chính không có Sinh viên**: ở bước 6, nếu lớp không có Sinh viên nào → hệ thống báo đã thêm 0 Sinh viên, use-case kết thúc |

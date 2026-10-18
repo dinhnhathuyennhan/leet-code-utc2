@@ -37,7 +37,7 @@ type AuthContextValue = AuthState & {
   logout: () => Promise<void>;
 };
 
-const AuthContext = createContext<AuthContextValue | null>(null);
+export const AuthContext = createContext<AuthContextValue | null>(null);
 
 const PROFILE_CACHE_KEY = "chamcode.profile";
 

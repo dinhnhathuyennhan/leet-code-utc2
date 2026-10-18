@@ -1,0 +1,54 @@
+@startuml use-case-course
+left to right direction
+skinparam shadowing false
+skinparam monochrome true
+skinparam packageStyle rectangle
+skinparam defaultFontName Arial
+skinparam usecase {
+  BackgroundColor white
+  BorderColor black
+}
+
+title Use case chi tiết - Quản lý lớp học phần
+
+actor "Sinh viên" as Student
+actor "Giáo viên" as Teacher
+actor "Admin" as Admin
+Admin -up-|> Teacher
+
+rectangle "Quản lý lớp học phần" {
+  usecase "Tạo lớp học phần" as Create
+  usecase "Cập nhật lớp học phần" as Update
+  usecase "Xem danh sách lớp học phần" as List
+  usecase "Lọc theo học kỳ" as FilterTerm
+  usecase "Xem chi tiết lớp học phần" as Detail
+  usecase "Thêm Sinh viên vào lớp" as Enroll
+  usecase "Thêm cả lớp hành chính" as EnrollClass
+  usecase "Xoá Sinh viên khỏi lớp" as Unenroll
+  usecase "Xem danh sách Sinh viên\ntrong lớp" as ListStudents
+  usecase "Kiểm tra quyền\nchủ lớp" as CheckOwner
+}
+
+Student --> List
+Student --> Detail
+Student --> ListStudents
+Teacher --> Create
+Teacher --> Update
+Teacher --> List
+Teacher --> Detail
+Teacher --> Enroll
+Teacher --> Unenroll
+Teacher --> ListStudents
+
+FilterTerm .> List : <<extend>>
+Detail .> List : <<extend>>
+EnrollClass .> Enroll : <<extend>>
+Update ..> CheckOwner : <<include>>
+Enroll ..> CheckOwner : <<include>>
+Unenroll ..> CheckOwner : <<include>>
+
+note bottom of List
+  Admin: mọi lớp; Giáo viên: lớp mình tạo;
+  Sinh viên: lớp mình đã ghi danh
+end note
+@enduml

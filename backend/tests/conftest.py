@@ -103,6 +103,12 @@ def engine():
     return engine
 
 
+@pytest.fixture(autouse=True)
+def disable_application_seed_during_tests(monkeypatch):
+    """Keep TestClient startup from writing to the configured application DB."""
+    monkeypatch.setattr("app.main.seed_data", lambda: None)
+
+
 @pytest.fixture()
 def session(engine):
     with Session(engine) as s:

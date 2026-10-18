@@ -3,7 +3,7 @@ from datetime import datetime
 
 from pydantic import BaseModel, Field, field_validator, model_validator
 
-from app.core.datetime_utils import require_offset
+from app.core.datetime_utils import require_vietnam_local_datetime
 from app.core.exceptions import EmptyFieldError, InvalidFormatError
 from app.schemas.grade import CourseGradeRowResponse
 
@@ -23,11 +23,11 @@ def _required_str(value: str | None, field_name: str) -> str:
 def _required_datetime(value: datetime | None, field_name: str) -> datetime:
     if value is None:
         raise EmptyFieldError(f"{field_name} không được để trống")
-    return require_offset(value, field_name)
+    return require_vietnam_local_datetime(value, field_name)
 
 
 def _optional_datetime(value: datetime | None, field_name: str) -> datetime | None:
-    return None if value is None else require_offset(value, field_name)
+    return None if value is None else require_vietnam_local_datetime(value, field_name)
 
 
 class CourseProblemResponse(BaseModel):

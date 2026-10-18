@@ -19,6 +19,7 @@ import {
   changePasswordSchema,
   type ChangePasswordFormValues,
 } from "@/lib/validations/validate-field-form";
+import { toast } from "sonner";
 
 interface ChangePasswordFormProps {
   onSuccess?: () => void;
@@ -115,19 +116,25 @@ export function ChangePasswordForm({ onSuccess }: ChangePasswordFormProps) {
         confirm_password: values.confirmPassword,
       });
 
+      toast.success("Đổi mật khẩu thành công!");
       onSuccess?.();
     } catch (error) {
       if (error instanceof ApiError) {
         if (error.status === 401) {
-          form.setError("currentPassword", {
-            message: "Mật khẩu hiện tại không chính xác",
-          });
+          const msg = "Mật khẩu hiện tại không chính xác";
+          form.setError("currentPassword", { message: msg });
+          toast.error(msg);
           return;
         }
-        setApiError(error.detail || "Đã có lỗi xảy ra, vui lòng thử lại.");
+        const fallback = "Đã có lỗi xảy ra, vui lòng thử lại.";
+        const message = error.detail || fallback;
+        setApiError(message);
+        toast.error(message);
         return;
       }
-      setApiError("Mất kết nối từ server, vui lòng thử lại.");
+      const message = "Mất kết nối từ server, vui lòng thử lại.";
+      setApiError(message);
+      toast.error(message);
     }
   }
 

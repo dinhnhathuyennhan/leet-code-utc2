@@ -2,7 +2,7 @@ import { ApiError } from "@/lib/api/error";
 import { getCourses } from "@/lib/api/endpoints/courses";
 import axiosInstance from "@/lib/axios";
 import { wrapAxiosError } from "@/lib/api/client";
-import type { PendingFilter, PendingSubmissionParams, PendingSubmissionsResponse, PlagiarismAlert, SubmissionDetail, TeacherOverview } from "@/lib/types/dashboard";
+import type { PendingFilter, PendingSubmissionParams, PendingSubmissionsResponse, PlagiarismAlert, StudentOverview, SubmissionDetail, TeacherOverview } from "@/lib/types/dashboard";
 
 export async function getTeacherOverview(): Promise<TeacherOverview> {
   const courses = await getCourses();
@@ -45,6 +45,17 @@ export async function updateSubmission(id: string | number, data: { feedback?: s
 
 export async function getPlagiarismAlerts(): Promise<PlagiarismAlert[]> {
   throw new ApiError({ status: 501, detail: "API cảnh báo đạo văn chưa được backend cung cấp." });
+}
+
+export async function getStudentOverview(studentId: string): Promise<StudentOverview> {
+  try {
+    const response = await axiosInstance.get<StudentOverview>(
+      `/students/${encodeURIComponent(studentId)}/dashboard`,
+    );
+    return response.data;
+  } catch (error) {
+    throw wrapAxiosError(error);
+  }
 }
 
 export const EMPTY_PENDING_COUNTS: Record<PendingFilter, number> = { all: 0, late_appeal: 0, similarity: 0, error: 0 };

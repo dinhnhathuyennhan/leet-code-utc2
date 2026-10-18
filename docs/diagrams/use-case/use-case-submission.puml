@@ -1,0 +1,48 @@
+@startuml use-case-submission
+left to right direction
+skinparam shadowing false
+skinparam monochrome true
+skinparam packageStyle rectangle
+skinparam defaultFontName Arial
+skinparam usecase {
+  BackgroundColor white
+  BorderColor black
+}
+
+title Use case chi tiết - Nộp bài và Chấm bài
+
+actor "Sinh viên" as Student
+actor "Giáo viên" as Teacher
+actor "Admin" as Admin
+actor "Judge0" as Judge0 <<system>>
+Admin -up-|> Teacher
+
+rectangle "Nộp bài & Chấm bài" {
+  usecase "Chạy thử code\n(sample testcase)" as Run
+  usecase "Nộp bài" as Submit
+  usecase "Chấm tự động" as AutoJudge
+  usecase "Xem kết quả / lịch sử nộp" as History
+  usecase "Xem bài nộp cần xử lý" as Pending
+  usecase "Tìm kiếm, lọc bài nộp" as Search
+  usecase "Xem chi tiết bài nộp" as Detail
+  usecase "Cập nhật kết quả chấm\n(trạng thái, nhận xét)" as Grade
+}
+
+Student --> Run
+Student --> Submit
+Student --> History
+Teacher --> Pending
+Teacher --> Detail
+
+Submit ..> AutoJudge : <<include>>
+Run --> Judge0
+AutoJudge --> Judge0
+Search .> Pending : <<extend>>
+Detail .> Pending : <<extend>>
+Grade .> Detail : <<extend>>
+
+note bottom of Submit
+  Chạy thử, Nộp bài, Chấm tự động, Xem kết quả:
+  thiết kế Phase 3, chưa triển khai
+end note
+@enduml

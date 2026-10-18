@@ -1,3 +1,4 @@
+import os
 import sys
 import zipfile
 from io import BytesIO
@@ -10,7 +11,19 @@ from sqlmodel.pool import StaticPool
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-import models  # noqa: F401
+import app.models  # noqa: F401  # phải sau sys.path.insert để tìm được module 'models' ở backend/
+
+# Load .env ở root project TRƯỚC khi import app modules
+# (cần cho JWT_SECRET_KEY — create_access_token require string, không được None).
+_root_env = Path(__file__).resolve().parents[2] / ".env"
+if _root_env.exists():
+    from dotenv import load_dotenv
+
+    load_dotenv(_root_env, override=False)
+
+# Fallback nếu vẫn None (an toàn cho test).
+if not os.getenv("JWT_SECRET_KEY"):
+    os.environ["JWT_SECRET_KEY"] = "test-secret-key-for-pytest"
 
 # Phần đầu sheet giống file "DS lớp học phần" thật của phòng đào tạo (hàng 1-10)
 CLASS_LIST_PREAMBLE = [

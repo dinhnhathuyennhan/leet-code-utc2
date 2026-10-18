@@ -29,8 +29,11 @@ export const TEACHER_NAV: NavItem[] = [
 ];
 
 export const STUDENT_NAV: NavItem[] = [
-  { label: "Lớp học phần", href: "/", icon: GraduationCap, exact: true, alsoMatch: ["/courses"] },
-  { label: "Lịch sử nộp bài", href: "/history", icon: History },
+  // SV: "Tổng quan" = trang chủ /student/dashboard
+  //     "Lớp học phần" = danh sách + chi tiết lớp
+  { label: "Tổng quan", href: "/student/dashboard", icon: LayoutDashboard, exact: true },
+  { label: "Lớp học phần", href: "/student/classes", icon: GraduationCap },
+  { label: "Lịch sử nộp bài", href: "/student/history", icon: History },
 ];
 
 export const ADMIN_NAV: NavItem[] = [

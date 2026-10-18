@@ -11,7 +11,6 @@ export default function TeacherCoursesPage() {
       role="teacher"
       filters={filters}
       courses={query.data?.items}
-      stats={query.data?.stats}
       isLoading={query.isPending}
       isFetching={query.isFetching}
       error={query.error}

@@ -1,0 +1,38 @@
+@startuml use-case-class
+left to right direction
+skinparam shadowing false
+skinparam monochrome true
+skinparam packageStyle rectangle
+skinparam defaultFontName Arial
+skinparam usecase {
+  BackgroundColor white
+  BorderColor black
+}
+
+title Use case chi tiết - Quản lý lớp hành chính
+
+actor "Giáo viên" as Teacher
+actor "Admin" as Admin
+Admin -up-|> Teacher
+
+rectangle "Quản lý lớp hành chính" {
+  usecase "Tạo lớp hành chính" as Create
+  usecase "Xem danh sách lớp hành chính" as List
+  usecase "Xem chi tiết lớp hành chính" as Detail
+  usecase "Xoá lớp hành chính" as Delete
+  usecase "Kiểm tra lớp không còn Sinh viên" as CheckEmpty
+}
+
+Teacher --> Create
+Teacher --> List
+Teacher --> Detail
+Admin --> Delete
+
+Detail .> List : <<extend>>
+Delete ..> CheckEmpty : <<include>>
+
+note bottom of Create
+  Nhập hệ, khoá, ngành;
+  server tự ghép class_id (vd: CQ.67.CNTT)
+end note
+@enduml

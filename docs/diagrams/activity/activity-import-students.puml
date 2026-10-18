@@ -1,0 +1,50 @@
+@startuml activity-import-students
+' Import Sinh viên từ file danh sách lớp học phần (use case trong docs/use-cases-auth.md)
+skinparam shadowing false
+skinparam monochrome true
+skinparam defaultFontName Arial
+
+title Sơ đồ hoạt động - Import Sinh viên từ file Excel
+
+|Admin / Giáo viên|
+start
+:Chọn "Nhập danh sách từ Excel";
+repeat
+  :Chọn file .xls/.xlsx và nhấn "Tải lên";
+  |Hệ thống|
+  :Kiểm tra định dạng, dung lượng (≤ 5 MB)
+  và hàng tiêu đề theo mẫu;
+  backward :Hiển thị lỗi file;
+repeat while (File hợp lệ?) is (không) not (có)
+
+:Đọc các dòng Sinh viên của từng sheet;
+:Kiểm tra từng dòng (MSSV, họ tên, mã lớp);
+:Gộp các dòng trùng MSSV;
+if (Số Sinh viên > 500?) then (có)
+  :Báo lỗi vượt giới hạn;
+  stop
+endif
+:Đối chiếu database:
+Sinh viên đã có tài khoản thì bỏ qua;
+:Tạo các lớp hành chính chưa có;
+:Sinh mật khẩu tạm = MSSV và băm
+(song song cho cả danh sách);
+
+while (Còn Sinh viên cần tạo?) is (còn)
+  :Tạo tài khoản (role = Sinh viên,
+  must_change_password = true) và commit;
+  if (Lưu thành công?) then (có)
+    :Thêm vào danh sách "đã tạo";
+  else (không)
+    :Rollback dòng hiện tại;
+    :Thêm vào danh sách "lỗi";
+  endif
+endwhile (hết)
+
+:Trả kết quả: đã tạo (kèm mật khẩu tạm),
+bỏ qua, lỗi (sheet, dòng, lý do);
+|Admin / Giáo viên|
+:Xem kết quả import;
+stop
+
+@enduml

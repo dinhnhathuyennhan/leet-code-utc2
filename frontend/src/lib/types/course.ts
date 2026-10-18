@@ -160,6 +160,7 @@ export interface CourseStudent {
   full_name: string;
   email: string;
   submitted_lessons: number;
+  accepted_problems: number;
   total_lessons: number;
   progress_percent: number;
   submission_history: StudentSubmission[];

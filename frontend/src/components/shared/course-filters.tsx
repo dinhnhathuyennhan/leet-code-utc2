@@ -28,24 +28,24 @@ export function CourseFilters({ filters }: { filters: CourseFilterState }) {
       </div>
 
       <div className="flex flex-wrap items-center gap-3">
-        <Select value={semester === undefined ? "__all_semester__" : String(semester)} onValueChange={(value) => setSemester(value === "__all_semester__" ? undefined : Number(value))}>
+        <Select value={semester === undefined ? "Tất cả học kì" : String(semester)} onValueChange={(value) => setSemester(value === "Tất cả học kì" ? undefined : Number(value))}>
           <SelectTrigger aria-label="Học kỳ" className="h-9 w-24 border-0 bg-card shadow-none">
             <SelectValue />
           </SelectTrigger>
           <SelectContent>
-            <SelectItem value="__all_semester__">Tất cả học kỳ</SelectItem>
+            <SelectItem value="Tất cả học kì">Tất cả học kỳ</SelectItem>
             {filters.semesters.map((s) => (
               <SelectItem key={s} value={String(s)}>Học kỳ {s}</SelectItem>
             ))}
           </SelectContent>
         </Select>
 
-        <Select value={year || "__all_year__"} onValueChange={(value) => value && setYear(value === "__all_year__" ? "" : value)}>
+        <Select value={year || "Tất cả "} onValueChange={(value) => value && setYear(value === "Tất cả " ? "" : value)}>
           <SelectTrigger aria-label="Năm học" className="h-9 w-40 border-0 bg-card shadow-none">
             <SelectValue />
           </SelectTrigger>
           <SelectContent>
-            <SelectItem value="__all_year__">Tất cả năm học</SelectItem>
+            <SelectItem value="Tất cả ">Tất cả năm học</SelectItem>
             {filters.years.map((y) => (
               <SelectItem key={y} value={y}>Năm học {y.replace("-", " - ")}</SelectItem>
             ))}

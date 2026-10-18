@@ -56,8 +56,16 @@ export function CourseListView({ role, filters, courses, stats, isLoading, isFet
 
   return (
     <div className="space-y-6">
-      {actions && <div className="flex justify-end">{actions}</div>}
-      {isLoading || !stats ? <CourseStatsBarSkeleton /> : <CourseStatsBar items={buildStats(role, stats)} />}
+      <div className="flex items-center justify-between">
+        {isLoading || !stats ? (
+          <CourseStatsBarSkeleton />
+        ) : (
+          <CourseStatsBar items={buildStats(role, stats)} />
+        )}
+
+        {actions && <div className="flex justify-end">{actions}</div>}
+      </div>
+
       <CourseFilters filters={filters} />
       {renderBody()}
     </div>

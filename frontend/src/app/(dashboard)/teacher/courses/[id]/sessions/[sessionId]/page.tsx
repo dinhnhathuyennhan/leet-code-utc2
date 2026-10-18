@@ -24,6 +24,7 @@ import { Button } from "@/components/ui/button";
 import { getSessionDetail } from "@/lib/api/endpoints/courses";
 import type { SessionDetailData } from "@/lib/types/course";
 import { SessionEditPage } from "@/components/teacher/session-edit-page";
+import { formatDate } from "@/lib/helpers/format";
 
 export default function TeacherSessionDetailPage() {
   const { id: courseId, sessionId } = useParams<{ id: string; sessionId: string }>();
@@ -71,7 +72,7 @@ export default function TeacherSessionDetailPage() {
           <div className="flex flex-wrap items-center gap-6 text-[15px] text-muted-foreground">
             <span className="flex items-center gap-2">
               <Calendar className="size-4 text-slate-500" />
-              Mở - đóng: <strong>{data.start_date} → {data.end_date}</strong>
+              Mở - đóng: <strong>{formatDate(data.start_date)} → {formatDate(data.end_date)}</strong>
             </span>
             <span className="flex items-center gap-2">
               <Users className="size-4 text-slate-500" />

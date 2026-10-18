@@ -104,13 +104,15 @@ function toStudent(record: {
   full_name: string; 
   email: string; 
   class_id?: string | null; 
-  submitted_lessons?: number; 
+  submitted_lessons?: number;
+  accepted_problems?: number;
   total_lessons?: number; 
   progress_percent?: number 
 }): CourseStudent {
   return { 
     ...record, 
-    submitted_lessons: record.submitted_lessons ?? 0, 
+    submitted_lessons: record.submitted_lessons ?? record.accepted_problems ?? 0,
+    accepted_problems: record.accepted_problems ?? record.submitted_lessons ?? 0,
     total_lessons: record.total_lessons ?? 0, 
     progress_percent: record.progress_percent ?? 0, 
     submission_history: [] 
@@ -182,7 +184,8 @@ export async function getCourseEnrollments(courseId: string): Promise<CourseStud
       full_name: string; 
       email: string; 
       class_id?: string | null; 
-      submitted_lessons?: number; 
+      submitted_lessons?: number;
+      accepted_problems?: number;
       total_lessons?: number; 
       progress_percent?: number 
     }>>(`/courses/${courseId}/enrollments`);

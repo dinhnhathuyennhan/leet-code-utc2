@@ -167,7 +167,8 @@ export default function TeacherSessionDetailPage() {
             Xem danh sách {data.alert.missing_students} SV
             </Link>
           </Button>
-          <Button className="h-10 bg-[#facc15] font-semibold text-amber-950 shadow-xs hover:bg-[#eab308]">
+          {/* TODO: Backend chưa cung cấp API gửi nhắc nhở. */}
+          <Button disabled title="Tính năng chưa được backend hỗ trợ" className="h-10 bg-[#facc15] font-semibold text-amber-950 shadow-xs hover:bg-[#eab308]">
             <Send className="size-4" /> Gửi nhắc nhở
           </Button>
         </div>

@@ -91,12 +91,7 @@ export function SessionEditorDialog({ course, session, open, onOpenChange, onSav
             </label>
           </div>
 
-          <div className="grid gap-3 sm:grid-cols-2">
-            <ToggleRow label="Cho phép xem test case sau khi nộp" defaultOn />
-            <ToggleRow label="Giới hạn số lần nộp bài" defaultOn={false} />
-            <ToggleRow label="Không chấp nhận bài sau 23:59:00" defaultOn />
-            <ToggleRow label="Cho phép sinh viên tự nhập input kiểm tra" defaultOn />
-          </div>
+          {/* TODO: Backend chưa có cột lưu các cấu hình này; ẩn để không tạo cảm giác đã được áp dụng. */}
 
           <section className="space-y-3">
             <div className="flex items-center justify-between"><div><h3 className="font-bold">Danh sách bài tập dự kiến <span className="rounded bg-violet-100 px-2 py-0.5 text-xs text-violet-800">{selectedProblemIds.length} bài</span></h3><p className="text-xs text-muted-foreground">Chọn bài tập từ ngân hàng hiện có.</p></div><Button variant="outline" size="sm"><Plus className="size-4" /> Thêm từ ngân hàng bài tập</Button></div>
@@ -113,9 +108,4 @@ export function SessionEditorDialog({ course, session, open, onOpenChange, onSav
       </DialogContent>
     </Dialog>
   );
-}
-
-function ToggleRow({ label, defaultOn }: { label: string; defaultOn: boolean }) {
-  const [on, setOn] = useState(defaultOn);
-  return <button type="button" onClick={() => setOn((current) => !current)} className="flex items-center justify-between rounded-lg bg-indigo-50/70 px-3 py-2 text-left text-xs font-medium"><span>{label}</span><span className={`relative h-5 w-9 rounded-full transition ${on ? "bg-indigo-700" : "bg-slate-300"}`}><span className={`absolute top-0.5 size-4 rounded-full bg-white transition ${on ? "left-4" : "left-0.5"}`} /></span></button>;
 }

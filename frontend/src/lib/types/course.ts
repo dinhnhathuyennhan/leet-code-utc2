@@ -14,6 +14,7 @@ export interface CourseApiRecord {
   term: string;
   start_date: string;
   end_date: string;
+  updated_at?: string | null;
   total_number_student: number;
   sessions?: CourseSession[];
   grades?: GradeRow[];
@@ -119,7 +120,7 @@ export interface CourseDetail extends CourseSummary {
   start_date: string;
   end_date: string;
   student_count: number;
-  updated_at: string;
+  updated_at: string | null;
   sessions: CourseSession[];
   grades?: GradeRow[];
 }

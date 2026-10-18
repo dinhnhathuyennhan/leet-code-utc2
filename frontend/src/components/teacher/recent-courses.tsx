@@ -14,7 +14,7 @@ interface RecentCoursesProps {
 
 export function RecentCourses({ courses, hrefFor }: RecentCoursesProps) {
   return (
-    <ul className="-mx-1 flex snap-x gap-4 overflow-x-auto px-1 pb-3">
+    <ul className="min-w-0 -mx-1 flex snap-x gap-4 overflow-x-auto px-1 pb-3">
       {courses.map((course) => {
         const status = COURSE_STATUS[course.status];
         return (

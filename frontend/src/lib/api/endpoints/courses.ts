@@ -165,7 +165,7 @@ export async function getCourseById(courseId: number | string): Promise<CourseDe
       room: "", 
       end_date: response.data.end_date, 
       student_count: response.data.total_number_student, 
-      updated_at: "", 
+      updated_at: response.data.updated_at ?? null,
       sessions: response.data.sessions ?? [], 
       grades: response.data.grades ?? [] 
     };
@@ -282,7 +282,9 @@ export async function uploadProblemTestcases(courseId: string, lessonId: string 
   try {
     const formData = new FormData();
     formData.append("file", file);
-    const response = await axiosInstance.post<ProblemDetailData>(`/courses/${courseId}/lessons/${lessonId}/problems/${problemId}/testcases/upload`, formData);
+    const response = await axiosInstance.post<ProblemDetailData>(`/courses/${courseId}/lessons/${lessonId}/problems/${problemId}/testcases/upload`, formData, {
+      headers: { "Content-Type": "multipart/form-data" },
+    });
     return response.data;
   } catch (error) {
     throw wrapAxiosError(error);
@@ -298,7 +300,7 @@ export async function createLesson(courseId: string, data: LessonMutationRequest
       room: "", 
       end_date: response.data.end_date, 
       student_count: response.data.total_number_student, 
-      updated_at: "", 
+      updated_at: response.data.updated_at ?? null,
       sessions: response.data.sessions ?? [], 
       grades: response.data.grades ?? [] 
     };
@@ -316,7 +318,7 @@ export async function updateLesson(courseId: string, lessonId: number, data: Les
       room: "", 
       end_date: response.data.end_date, 
       student_count: response.data.total_number_student, 
-      updated_at: "", 
+      updated_at: response.data.updated_at ?? null,
       sessions: response.data.sessions ?? [], 
       grades: response.data.grades ?? [] 
     };

@@ -45,6 +45,25 @@ export default function SubmissionDetailPage() {
   if (error) return <ErrorState error={error} />;
   if (!data) return <div className="rounded-xl border bg-card p-6 text-sm text-muted-foreground">Đang tải bài nộp...</div>;
 
+  async function saveSubmission(accept: boolean) {
+    const parsedScore = Number(manualScore);
+    if (!Number.isFinite(parsedScore) || parsedScore < 0 || parsedScore > 10) {
+      setError(new Error("Điểm phải nằm trong khoảng 0 đến 10."));
+      return;
+    }
+    try {
+      const submission = await updateSubmission(id, {
+        feedback,
+        manual_score: parsedScore,
+        ...(accept ? { status: "accepted" } : {}),
+      });
+      setData(submission);
+      setSaved(true);
+    } catch (requestError) {
+      setError(requestError);
+    }
+  }
+
   const statusLabel = data.status === "compile_error" ? "Lỗi biên dịch" : data.status === "accepted" ? "Đã chấp nhận" : "Sai kết quả";
 
   return (
@@ -69,7 +88,7 @@ export default function SubmissionDetailPage() {
 
         <div className="flex items-center gap-3">
           <Button
-            onClick={() => setSaved(true)}
+            onClick={() => void saveSubmission(false)}
             className="h-10 bg-[#2f226b] gap-2 font-semibold text-white shadow-sm hover:bg-[#251b56]"
           >
             <Save className="size-4" /> {saved ? "Đã lưu kết quả" : "Lưu điểm & Gửi phản hồi"}
@@ -181,20 +200,10 @@ export default function SubmissionDetailPage() {
             </div>
 
             <Button
-              onClick={() => {
-                const parsedScore = Number(manualScore);
-                if (!Number.isFinite(parsedScore) || parsedScore < 0 || parsedScore > 10) {
-                  setError(new Error("Điểm phải nằm trong khoảng 0 đến 10."));
-                  return;
-                }
-                void updateSubmission(id, { feedback, manual_score: parsedScore, status: "accepted" }).then((submission) => {
-                  setData(submission);
-                  setSaved(true);
-                }).catch(setError);
-              }}
+              onClick={() => void saveSubmission(true)}
               className="w-full h-11 bg-[#2f226b] font-semibold text-white shadow-sm hover:bg-[#251b56]"
             >
-              <Save className="size-4 mr-2" /> {saved ? "Đã cập nhật điểm" : "Xác nhận điểm & Chấp nhận"}
+              <Save className="size-4 mr-2" /> {saved ? "Đã lưu nhận xét" : "Lưu nhận xét"}
             </Button>
           </div>
         </div>

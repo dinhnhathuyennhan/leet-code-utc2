@@ -3,18 +3,33 @@ import { getCourses } from "@/lib/api/endpoints/courses";
 import axiosInstance from "@/lib/axios";
 import { wrapAxiosError } from "@/lib/api/client";
 import type { PendingFilter, PendingSubmissionParams, PendingSubmissionsResponse, PlagiarismAlert, SubmissionDetail, TeacherOverview } from "@/lib/types/dashboard";
+import type { UserResponse } from "@/lib/api/types";
 
 export async function getTeacherOverview(): Promise<TeacherOverview> {
-  const courses = await getCourses();
+  const [courses, pending, user] = await Promise.all([
+    getCourses(),
+    getPendingSubmissions({ filter: "all", limit: 1 }),
+    getCurrentUser(),
+  ]);
   return {
-    teacher_name: courses.items[0]?.teacher_name ?? "",
+    teacher_name: user.full_name,
     term_label: courses.items[0] ? `Học kỳ ${courses.items[0].semester} (${courses.items[0].academic_year})` : "",
-    stats: { active_courses: courses.items.filter((course) => course.status === "ongoing").length, pending_grading: 0, plagiarism_cases: 0 },
+    stats: { active_courses: courses.items.filter((course) => course.status === "ongoing").length, pending_grading: pending.total, plagiarism_cases: pending.counts.similarity },
     recent_courses: courses.items
       .filter((course) => course.status === "ongoing")
       .sort((a, b) => new Date(b.start_date ?? 0).getTime() - new Date(a.start_date ?? 0).getTime())
-      .slice(0, 4),
+      .slice(0, 4)
+      .map((course) => ({ ...course, teacher_name: user.full_name })),
   };
+}
+
+export async function getCurrentUser(): Promise<UserResponse> {
+  try {
+    const response = await axiosInstance.get<UserResponse>("/users/me");
+    return response.data;
+  } catch (error) {
+    throw wrapAxiosError(error);
+  }
 }
 
 export async function getPendingSubmissions(params: PendingSubmissionParams): Promise<PendingSubmissionsResponse> {

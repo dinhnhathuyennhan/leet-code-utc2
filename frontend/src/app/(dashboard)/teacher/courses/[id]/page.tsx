@@ -19,7 +19,7 @@ import { CourseEditDialog } from "@/components/teacher/course-edit-dialog";
 
 export default function TeacherCourseDetailPage() {
   const { id } = useParams<{ id: string }>();
-  const { data: course, isPending, error, refetch } = useCourse(id);
+  const { data: course, dataUpdatedAt, isPending, error, refetch } = useCourse(id);
   const enrollments = useCourseEnrollments(course?.code);
   const [tab, setTab] = useState<CourseTab>("sessions");
   const [editorOpen, setEditorOpen] = useState(false);
@@ -38,7 +38,7 @@ export default function TeacherCourseDetailPage() {
 
   return (
     <div className="space-y-6">
-      <CourseHeaderCard course={course} onCreateSession={() => setEditorOpen(true)} onEditCourse={() => setCourseEditorOpen(true)} />
+      <CourseHeaderCard course={{ ...course, updated_at: course.updated_at || (dataUpdatedAt ? new Date(dataUpdatedAt).toISOString() : null) }} onCreateSession={() => setEditorOpen(true)} onEditCourse={() => setCourseEditorOpen(true)} />
       <CourseDetailTabs
         value={tab}
         onValueChange={setTab}

@@ -9,7 +9,7 @@ from sqlmodel import SQLModel
 from alembic import context
 
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-from models import *  # noqa: F403 - cần import hết model để SQLModel.metadata thấy tất cả bảng
+import app.models  # noqa: F401 - cần import hết model để SQLModel.metadata thấy tất cả bảng
 
 load_dotenv()
 

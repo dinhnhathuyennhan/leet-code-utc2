@@ -179,7 +179,7 @@ Hàng 13  : 2   | 675107A002   | Trần Thị         | Bình | CQ.67.CNTT |
   - **Teacher/Admin**: `date_of_birth` hiện có, định dạng `ddmmyyyy`.
   - Vai trò khác: bị chặn (403), không thay đổi gì. Danh sách vai trò được phép là whitelist.
 - Đặt `must_change_password = true`, tăng `token_version` (vô hiệu hoá toàn bộ token cũ của tài khoản mục tiêu).
-- **Yêu cầu quyền**: Admin (mọi tài khoản) hoặc Teacher — nhưng Teacher chỉ được reset cho Student đang học **ít nhất một khoá học do chính Teacher đó tạo** (`Course.created_by = current_user.user_id`), không phải cứ `role_id = 3` là được; Student không được reset cho bất kỳ ai. Endpoint không dùng `require_role` ở router — toàn bộ logic phân quyền nằm trong service (`backend/app/services/user_service.py::reset_password`).
+- **Yêu cầu quyền**: Admin (mọi tài khoản) hoặc Teacher — nhưng Teacher chỉ được reset cho Student đang học **ít nhất một khoá học do chính Teacher đó tạo** (`Course.created_by = current_user.user_id`), không phải cứ `role_id = 3` là được; Student không được reset cho bất kỳ ai. Endpoint không dùng `require_role` ở router — toàn bộ logic phân quyền nằm trong service (`backend/app/modules/users/service.py::reset_password`).
 
 ## POST /auth/login — Đăng nhập
 
@@ -275,5 +275,5 @@ Cookie `refresh_token` giữ nguyên (không rotate).
 **Quy tắc nghiệp vụ**
 
 - Không rotate refresh token — chỉ cấp access token mới.
-- Server không kiểm tra claim `type` của token trong cookie `refresh_token` trước khi cấp access token mới — chỉ kiểm tra `token_version` khớp với database (`backend/app/services/auth_service.py::refresh_access_token`, `backend/app/core/token.py::decode_token`).
+- Server không kiểm tra claim `type` của token trong cookie `refresh_token` trước khi cấp access token mới — chỉ kiểm tra `token_version` khớp với database (`backend/app/modules/auth/service.py::refresh_access_token`, `backend/app/core/security/tokens.py::decode_token`).
 - **Yêu cầu quyền**: cookie `refresh_token` hợp lệ (không cần access token).

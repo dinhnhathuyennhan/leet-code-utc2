@@ -1,0 +1,66 @@
+@startuml sequence-import-students
+' Import Sinh viên từ file danh sách lớp học phần, theo backend/app/api/students.py
+' và modules/students/service.py
+skinparam shadowing false
+skinparam monochrome true
+skinparam defaultFontName Arial
+skinparam sequenceMessageAlign center
+autonumber
+
+title Sơ đồ tuần tự - Import Sinh viên từ file Excel
+
+actor "Admin /\nGiáo viên" as U
+participant "Frontend\n(Next.js)" as FE
+participant "Student Router\n(FastAPI)" as R
+participant "StudentService" as S
+participant "Excel Reader\n(shared/excel.py)" as X
+database "PostgreSQL" as DB
+participant "Global\nException Handler" as EH
+
+U -> FE : Chọn file .xls/.xlsx, nhấn "Tải lên"
+FE -> R : POST /students/import (multipart file)
+R -> R : require_role(Admin, Giáo viên)\nĐọc tối đa 5 MB + 1 byte
+R -> S : import_students(contents, filename)
+S -> X : read_workbook(contents, filename)
+break File sai định dạng / quá 5 MB / không đúng mẫu
+  X -->> EH : raise InvalidExcelFormatError | ExcelFileTooLargeError
+  EH --> FE : 400
+  FE --> U : Hiển thị lỗi file
+end
+X --> S : workbook (các sheet)
+
+S -> S : Tìm hàng tiêu đề, đọc từng dòng,\nkiểm tra MSSV, họ tên, mã lớp
+S -> S : Gộp các dòng trùng MSSV
+break Quá 500 Sinh viên
+  S -->> EH : raise ExcelFileTooLargeError
+  EH --> FE : 400
+end
+
+S -> DB : Tìm user đã tồn tại theo MSSV / email
+DB --> S : danh sách đã có
+S -> S : Tách: cần tạo / bỏ qua / lỗi
+S -> DB : INSERT các lớp hành chính chưa có\n(tách CQ.67.CNTT thành hệ, khoá, ngành)
+S -> S : Băm mật khẩu tạm (= MSSV) song song
+
+loop Mỗi Sinh viên cần tạo
+  S -> DB : INSERT user (role_id = 3,\nmust_change_password = true) + COMMIT
+  alt Lưu thành công
+    DB --> S : OK
+    S -> S : Thêm vào danh sách "đã tạo"
+  else Trùng khoá / lỗi CSDL
+    DB --> S : lỗi
+    S -> DB : ROLLBACK (chỉ dòng hiện tại)
+    S -> S : Thêm vào danh sách "lỗi"
+  end
+end
+
+S --> R : {created, skipped, errors}
+R --> FE : 201 kết quả import
+FE --> U : Hiển thị tài khoản đã tạo (kèm mật khẩu tạm),\ndanh sách bỏ qua và các dòng lỗi
+
+note over S, DB
+  Commit từng Sinh viên: nếu bị gián đoạn giữa chừng,
+  các tài khoản đã tạo trước đó vẫn được giữ lại
+end note
+
+@enduml

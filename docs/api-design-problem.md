@@ -64,7 +64,7 @@
   - `LessonNotFoundError` (404 `LESSON_NOT_FOUND`)
   - `CourseNotFoundError` (404 `COURSE_NOT_FOUND`)
   - `ForbiddenError` (403 `FORBIDDEN`, message cụ thể theo ngữ cảnh)
-- Lỗi riêng của domain `problem` (đặt trong `backend/app/services/problem_service.py`):
+- Lỗi riêng của domain `problem` (đặt trong `backend/app/modules/problems/service.py`):
   - `ProblemNotFoundError` (404 `PROBLEM_NOT_FOUND`, message `"Không tìm thấy bài tập"`)
   - `ProblemNotOpenError` (403 `PROBLEM_NOT_OPEN`, message `"Bài tập hiện chưa mở hoặc đã đóng"`) — dùng cho Student truy cập ngoài khoảng `[start_datetime, end_datetime]`
   - `ProblemOutOfLessonRangeError` (422 `PROBLEM_OUT_OF_LESSON_RANGE`, message `"Thời gian bài tập phải nằm trong khoảng của bài học"`)
@@ -268,7 +268,7 @@ Field không gửi → giữ nguyên. Field gửi = `null` → **xoá** (chỉ �
 
 ## Phase 3 — Submission & chấm bài
 
-Phase 3 thêm 2 endpoint public cho Student (Run/Submit) và 1 endpoint xem lịch sử. Judge0 được bọc trong `app/services/judge_client.py`, **luôn dùng `base64_encoded=true`** (xem [judge0-setup.md](judge0-setup.md) § Lưu ý bảo mật). `language_id` mapping (Python 71, C++ 54, Java 62, C 50) nằm trong `judge_client.py`, **không để lộ ra API**.
+Phase 3 thêm 2 endpoint public cho Student (Run/Submit) và 1 endpoint xem lịch sử. Judge0 được bọc trong `app/modules/submissions/judge_client.py`, **luôn dùng `base64_encoded=true`** (xem [judge0-setup.md](judge0-setup.md) § Lưu ý bảo mật). `language_id` mapping (Python 71, C++ 54, Java 62, C 50) nằm trong `judge_client.py`, **không để lộ ra API**.
 
 ### Ngôn ngữ hỗ trợ (chốt theo Judge0 CE 1.13.1, xem [judge0-setup.md § Bước 5](judge0-setup.md))
 

@@ -1,0 +1,52 @@
+@startuml use-case-lesson-problem
+left to right direction
+skinparam shadowing false
+skinparam monochrome true
+skinparam packageStyle rectangle
+skinparam defaultFontName Arial
+skinparam usecase {
+  BackgroundColor white
+  BorderColor black
+}
+
+title Use case chi tiết - Buổi học và Bài tập
+
+actor "Sinh viên" as Student
+actor "Giáo viên" as Teacher
+actor "Admin" as Admin
+Admin -up-|> Teacher
+
+rectangle "Buổi học & Bài tập" {
+  usecase "Tạo buổi học" as CreateLesson
+  usecase "Xem chi tiết buổi học" as LessonDetail
+  usecase "Cập nhật buổi học" as UpdateLesson
+  usecase "Xoá buổi học" as DeleteLesson
+  usecase "Gắn / sao chép bài tập\nvào buổi học" as AttachProblem
+  usecase "Xem đề bài" as ViewProblem
+  usecase "Cập nhật bài tập" as UpdateProblem
+  usecase "Xoá bài tập" as DeleteProblem
+  usecase "Tải lên testcase\n(JSON / ZIP)" as UploadTc
+}
+
+Teacher --> CreateLesson
+Teacher --> LessonDetail
+Teacher --> UpdateLesson
+Teacher --> DeleteLesson
+Teacher --> UpdateProblem
+Teacher --> DeleteProblem
+Teacher --> UploadTc
+Teacher --> ViewProblem
+Student --> ViewProblem
+
+AttachProblem .> CreateLesson : <<extend>>
+AttachProblem .> UpdateLesson : <<extend>>
+
+note bottom of ViewProblem
+  Sinh viên chỉ thấy bài đã mở
+  và chỉ thấy testcase mẫu (is_sample)
+end note
+note bottom of DeleteProblem
+  Không xoá / đổi testcase
+  khi bài đã có bài nộp
+end note
+@enduml

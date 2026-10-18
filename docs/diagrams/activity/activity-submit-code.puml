@@ -1,0 +1,54 @@
+@startuml activity-submit-code
+' Nộp bài và chấm tự động. Vẽ theo thiết kế Phase 3 trong docs/roadmap.md,
+' luồng này chưa có trong code.
+skinparam shadowing false
+skinparam monochrome true
+skinparam defaultFontName Arial
+
+title Sơ đồ hoạt động - Nộp bài và chấm tự động
+
+|Sinh viên|
+start
+:Mở bài tập trong buổi học;
+:Đọc đề và sample testcase;
+:Viết code, chọn ngôn ngữ;
+if (Muốn chạy thử?) then (có)
+  |Hệ thống|
+  :Chạy code trên sample testcase
+  qua Judge0 (không lưu);
+  |Sinh viên|
+  :Xem kết quả chạy thử;
+endif
+:Nhấn "Nộp bài";
+|Hệ thống|
+if (Đã ghi danh lớp học phần\nvà bài tập còn trong thời hạn?) then (không)
+  :Báo lỗi không được nộp;
+  stop
+endif
+:Lưu bài nộp (status = pending);
+fork
+  :Trả về submission_id;
+  |Sinh viên|
+  :Chờ kết quả;
+fork again
+  |Hệ thống|
+  :Gửi code + toàn bộ testcase
+  sang Judge0;
+  |Judge0|
+  :Biên dịch và chạy từng testcase;
+  :Trả kết quả từng testcase;
+  |Hệ thống|
+  if (Biên dịch thành công?) then (không)
+    :status = compile_error;
+  elseif (Qua hết testcase?) then (có)
+    :status = accepted;
+  else (không)
+    :status = wrong_answer;
+  endif
+  :Cập nhật passed_count, status;
+end fork
+|Sinh viên|
+:Xem kết quả chấm;
+stop
+
+@enduml

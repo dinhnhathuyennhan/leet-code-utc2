@@ -46,6 +46,17 @@
 | **Basic flow** | 1. Hệ thống hiển thị danh sách tài khoản<br>2. Admin/Giáo viên tìm và chọn tài khoản cần đặt lại mật khẩu<br>3. Hệ thống hiển thị thông tin tài khoản kèm nút "Đặt lại mật khẩu"<br>4. Admin/Giáo viên nhấn nút "Đặt lại mật khẩu"<br>5. Hệ thống hiển thị hộp thoại xác nhận hành động<br>6. Admin/Giáo viên xác nhận<br>7. Hệ thống kiểm tra quyền thực hiện trên tài khoản mục tiêu<br>&nbsp;&nbsp;&nbsp;7a. Nếu người thực hiện là Giáo viên và tài khoản mục tiêu không phải Sinh viên, hệ thống hiển thị thông báo lỗi "Bạn không có quyền đặt lại mật khẩu cho tài khoản này", use-case kết thúc<br>&nbsp;&nbsp;&nbsp;7b. Nếu người thực hiện là Giáo viên và Sinh viên mục tiêu không đang học bất kỳ khoá học nào do chính Giáo viên đó tạo, hệ thống hiển thị thông báo lỗi "Bạn không có quyền đặt lại mật khẩu cho tài khoản này", use-case kết thúc<br>&nbsp;&nbsp;&nbsp;7c. Nếu hợp lệ, use-case tiếp tục ở bước 8<br>8. Hệ thống sinh mật khẩu tạm theo vai trò của tài khoản mục tiêu: Sinh viên dùng mã sinh viên (`user_id`); Giáo viên/Admin dùng ngày sinh (`date_of_birth`) hiện có, định dạng `ddmmyyyy`<br>&nbsp;&nbsp;&nbsp;8a. Nếu tài khoản mục tiêu là Giáo viên/Admin nhưng chưa có ngày sinh, hệ thống hiển thị thông báo lỗi "Tài khoản chưa có ngày sinh để tạo mật khẩu tạm thời", use-case kết thúc<br>&nbsp;&nbsp;&nbsp;8b. Nếu tài khoản mục tiêu có vai trò khác Admin/Giáo viên/Sinh viên, hệ thống hiển thị thông báo lỗi "Bạn không có quyền đặt lại mật khẩu cho tài khoản này", use-case kết thúc<br>9. Hệ thống băm mật khẩu tạm, cập nhật `hashed_password`, đặt `must_change_password = true`, tăng `token_version` của tài khoản mục tiêu<br>10. Hệ thống hiển thị thông báo thành công kèm mật khẩu tạm mới để Admin/Giáo viên gửi lại cho chủ tài khoản |
 | **Exception flow** | **E1. Mất kết nối/lỗi hệ thống**: ở bất kỳ bước nào từ 4-9, nếu request thất bại → hệ thống hiển thị thông báo lỗi kết nối, không thay đổi mật khẩu, use-case tiếp tục ở bước 3 |
 
+### Use-case: Xem danh sách tài khoản
+
+| | |
+|---|---|
+| **Description** | Admin hoặc Giáo viên xem danh sách tài khoản trong hệ thống, có lọc và phân trang; kết quả được giới hạn theo vai trò người xem để không lộ dữ liệu người khác |
+| **Trigger** | Admin/Giáo viên vào trang "Quản lý tài khoản" |
+| **Pre-condition** | Admin/Giáo viên đã đăng nhập thành công vào hệ thống<br>Thiết bị phải kết nối Internet |
+| **Post-condition** | Không thay đổi dữ liệu. Admin thấy mọi tài khoản; Giáo viên chỉ thấy Sinh viên đang học các lớp học do chính mình tạo; không bao giờ trả `hashed_password` |
+| **Basic flow** | 1. Admin/Giáo viên vào trang "Quản lý tài khoản"<br>2. Admin/Giáo viên có thể chọn bộ lọc vai trò (`role_id`), lớp hành chính (`class_id`) và trang (`page`, `page_size` tối đa 100)<br>3. Hệ thống kiểm tra vai trò người xem<br>&nbsp;&nbsp;&nbsp;3a. Nếu là Admin, hệ thống lấy mọi tài khoản thoả bộ lọc<br>&nbsp;&nbsp;&nbsp;3b. Nếu là Giáo viên, hệ thống chỉ lấy Sinh viên đang học lớp do Giáo viên đó tạo (bỏ qua bộ lọc vai trò)<br>&nbsp;&nbsp;&nbsp;3c. Nếu là vai trò khác, hệ thống hiển thị thông báo lỗi "Bạn không có quyền xem danh sách người dùng", use-case kết thúc<br>4. Hệ thống kiểm tra bộ lọc `role_id` hợp lệ (1, 2 hoặc 3)<br>&nbsp;&nbsp;&nbsp;4a. Nếu không hợp lệ, hệ thống hiển thị thông báo lỗi "role_id không hợp lệ", use-case tiếp tục ở bước 2<br>5. Hệ thống trả danh sách tài khoản (mã, họ tên, email, vai trò, ngày sinh, lớp hành chính với Sinh viên) sắp xếp theo `user_id`, kèm tổng số bản ghi<br>6. Hệ thống hiển thị danh sách và phân trang |
+| **Exception flow** | **E1. Mất kết nối/lỗi hệ thống**: ở bước 3-5, nếu truy vấn thất bại → hệ thống hiển thị thông báo lỗi kết nối, use-case tiếp tục ở bước 1 |
+
 ## Module: Auth (Xác thực)
 
 ### Use-case: Đăng nhập
@@ -91,3 +102,14 @@
 | **Post-condition** | Access token mới được cấp và trả về client; cookie refresh token giữ nguyên (không bị thay đổi/rotate); phiên làm việc của người dùng được tiếp tục mà không bị gián đoạn |
 | **Basic flow** | 1. Client gửi yêu cầu làm mới phiên kèm cookie refresh token<br>2. Hệ thống xác thực chữ ký và hạn sử dụng của refresh token<br>&nbsp;&nbsp;&nbsp;2a. Nếu cookie refresh token không có, sai chữ ký hoặc đã hết hạn, hệ thống trả lỗi 401 và chuyển người dùng về trang đăng nhập, use-case kết thúc<br>&nbsp;&nbsp;&nbsp;2b. Nếu hợp lệ, use-case tiếp tục ở bước 3<br>3. Hệ thống kiểm tra `token_version` trong refresh token có khớp với `token_version` hiện tại của tài khoản trong database không<br>&nbsp;&nbsp;&nbsp;3a. Nếu không khớp (đã bị thu hồi do đổi mật khẩu ở nơi khác), hệ thống trả lỗi 401, xoá cookie hiện tại và chuyển người dùng về trang đăng nhập, use-case kết thúc<br>&nbsp;&nbsp;&nbsp;3b. Nếu khớp, use-case tiếp tục ở bước 4<br>4. Hệ thống sinh access token mới (giữ nguyên `token_version`) và trả về client<br>5. Client lưu access token mới và tiếp tục gọi lại API trước đó (nếu có) |
 | **Exception flow** | **E1. Mất kết nối/lỗi hệ thống**: request ở bước 1 thất bại → client giữ nguyên access token cũ, thử lại sau; nếu access token cũ đã hết hạn, người dùng tạm thời không thao tác được cho tới khi làm mới phiên thành công |
+
+### Use-case: Xem thông tin cá nhân
+
+| | |
+|---|---|
+| **Description** | Người dùng đã đăng nhập xem thông tin tài khoản của chính mình |
+| **Trigger** | Người dùng mở trang "Thông tin cá nhân" (hoặc frontend tự gọi sau khi đăng nhập để lấy thông tin hiển thị) |
+| **Pre-condition** | Người dùng đã đăng nhập thành công, có access token hợp lệ |
+| **Post-condition** | Không thay đổi dữ liệu; thông tin trả về không chứa `hashed_password` |
+| **Basic flow** | 1. Người dùng mở trang "Thông tin cá nhân"<br>2. Hệ thống kiểm tra access token (chữ ký, hạn dùng, `token_version` khớp với tài khoản)<br>&nbsp;&nbsp;&nbsp;2a. Nếu token không hợp lệ hoặc đã bị vô hiệu hoá, hệ thống trả lỗi 401, frontend thử làm mới phiên (use-case "Làm mới phiên đăng nhập")<br>&nbsp;&nbsp;&nbsp;2b. Nếu hợp lệ, use-case tiếp tục ở bước 3<br>3. Hệ thống trả mã người dùng, họ tên, email, vai trò, ngày sinh, lớp hành chính (với Sinh viên)<br>4. Hệ thống hiển thị thông tin |
+| **Exception flow** | **E1. Mất kết nối/lỗi hệ thống**: ở bước 2-3, nếu request thất bại → hệ thống hiển thị thông báo lỗi kết nối, use-case tiếp tục ở bước 1 |

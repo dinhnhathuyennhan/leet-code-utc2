@@ -1,11 +1,19 @@
 from fastapi import APIRouter, Depends
+from fastapi.responses import JSONResponse
 from sqlmodel import Session
 from starlette import status
 
 from app.db import get_session
-from app.dependencies import Role, require_role
+from app.dependencies import Role, get_current_user, require_role
 from app.schemas.course import CourseResponse
-from app.schemas.lesson import LessonCreateRequest, LessonDetailResponse, LessonUpdateRequest
+from app.schemas.lesson import (
+    LessonCreateRequest,
+    LessonDetailResponse,
+    LessonDuplicateRequest,
+    LessonProblemAttachRequest,
+    LessonReorderRequest,
+    LessonUpdateRequest,
+)
 from app.services import lesson_service
 from models import User
 
@@ -22,13 +30,57 @@ def create_lesson_route(
     return lesson_service.create_lesson(session, course_id, data, current_user)
 
 
-@router.get("/courses/{course_id}/lessons/{lesson_id}", response_model=LessonDetailResponse)
+@router.patch("/courses/{course_id}/lessons/reorder", response_model=CourseResponse)
+def reorder_lessons_route(
+    course_id: str,
+    data: LessonReorderRequest,
+    session: Session = Depends(get_session),
+    current_user: User = Depends(require_role(Role.ADMIN, Role.TEACHER)),
+) -> CourseResponse:
+    return lesson_service.reorder_lessons(session, course_id, data, current_user)
+
+
+@router.post(
+    "/courses/{course_id}/lessons/{lesson_id}/duplicate",
+    response_model=CourseResponse,
+    status_code=status.HTTP_201_CREATED,
+)
+def duplicate_lesson_route(
+    course_id: str,
+    lesson_id: int,
+    data: LessonDuplicateRequest,
+    session: Session = Depends(get_session),
+    current_user: User = Depends(require_role(Role.ADMIN, Role.TEACHER)),
+) -> CourseResponse:
+    return lesson_service.duplicate_lesson(
+        session, course_id, lesson_id, data, current_user
+    )
+
+
+@router.get(
+    "/courses/{course_id}/lessons/{lesson_id}",
+    response_model=LessonDetailResponse,
+)
 def get_lesson_detail_route(
     course_id: str, lesson_id: int,
     session: Session = Depends(get_session),
-    current_user: User = Depends(require_role(Role.ADMIN, Role.TEACHER)),
-) -> LessonDetailResponse:
-    return lesson_service.get_lesson_detail(session, course_id, lesson_id, current_user)
+    current_user: User = Depends(get_current_user),
+) -> LessonDetailResponse | JSONResponse:
+    detail = lesson_service.get_lesson_detail(session, course_id, lesson_id, current_user)
+    if current_user.role_id == Role.STUDENT:
+        return JSONResponse(
+            content=detail.model_dump(
+                mode="json",
+                exclude={
+                    "submitted_students": True,
+                    "total_students": True,
+                    "stats": True,
+                    "alert": True,
+                    "exercises": {"__all__": {"submitted_count": True}},
+                },
+            )
+        )
+    return detail
 
 
 @router.patch("/courses/{course_id}/lessons/{lesson_id}", response_model=CourseResponse)
@@ -38,6 +90,22 @@ def update_lesson_route(
     current_user: User = Depends(require_role(Role.ADMIN, Role.TEACHER)),
 ) -> CourseResponse:
     return lesson_service.update_lesson(session, course_id, lesson_id, data, current_user)
+
+
+@router.post(
+    "/courses/{course_id}/lessons/{lesson_id}/problems",
+    response_model=CourseResponse,
+)
+def add_problems_to_lesson_route(
+    course_id: str,
+    lesson_id: int,
+    data: LessonProblemAttachRequest,
+    session: Session = Depends(get_session),
+    current_user: User = Depends(require_role(Role.ADMIN, Role.TEACHER)),
+) -> CourseResponse:
+    return lesson_service.add_problems_to_lesson(
+        session, course_id, lesson_id, data.problem_ids, current_user
+    )
 
 
 @router.delete("/courses/{course_id}/lessons/{lesson_id}", status_code=status.HTTP_204_NO_CONTENT)

@@ -50,6 +50,33 @@ class LessonUpdateRequest(BaseModel):
         return self
 
 
+class LessonProblemAttachRequest(BaseModel):
+    problem_ids: list[int]
+
+    @field_validator("problem_ids")
+    @classmethod
+    def validate_problem_ids(cls, value: list[int]) -> list[int]:
+        if not value:
+            raise InvalidFormatError("problem_ids không được để trống")
+        return value
+
+
+class LessonReorderRequest(BaseModel):
+    order: list[int]
+
+
+class LessonDuplicateRequest(BaseModel):
+    new_start_date: date
+    new_end_date: date
+    target_course_id: str | None = Field(default=None, min_length=1, max_length=50)
+
+    @model_validator(mode="after")
+    def validate_lesson_dates(self) -> "LessonDuplicateRequest":
+        if self.new_start_date > self.new_end_date:
+            raise InvalidFormatError("start_date phải trước hoặc bằng end_date")
+        return self
+
+
 class LessonStatsResponse(BaseModel):
     submission_rate: float
     completed_students: int
@@ -70,6 +97,7 @@ class LessonExerciseResponse(BaseModel):
     id: int
     order: int
     title: str
+    function_name: str | None
     report: str | None
     level: str
     description: str
@@ -79,7 +107,8 @@ class LessonExerciseResponse(BaseModel):
     time_limit_seconds: int
     total_number_testcase: int
     starter_code: str
-    submitted_count: int
+    starter_codes: dict[str, str] = Field(default_factory=dict)
+    submitted_count: int | None = None
     testcases: list[ProblemTestcaseResponse]
 
 
@@ -92,8 +121,8 @@ class LessonDetailResponse(BaseModel):
     start_date: date
     end_date: date
     deadline_notice: str
-    submitted_students: int
-    total_students: int
-    stats: LessonStatsResponse
-    alert: LessonAlertResponse
+    submitted_students: int | None = None
+    total_students: int | None = None
+    stats: LessonStatsResponse | None = None
+    alert: LessonAlertResponse | None = None
     exercises: list[LessonExerciseResponse]

@@ -10,7 +10,7 @@ from fastapi.middleware.cors import CORSMiddleware  # noqa: E402
 
 from app.handlers.exception_handlers import register_exception_handlers  # noqa: E402
 
-from app.routers import auth, course, student, user, classroom, enrollment, lesson, problem, submission  # noqa: E402
+from app.routers import auth, course, student, user, classroom, enrollment, lesson, problem, submission, testcase  # noqa: E402
 from app.seed_data import seed_data  # noqa: E402
 
 
@@ -53,6 +53,7 @@ app.include_router(lesson.router)
 app.include_router(problem.router)
 app.include_router(submission.router)
 app.include_router(classroom.router)
+app.include_router(testcase.router)
 
 register_exception_handlers(app)
 

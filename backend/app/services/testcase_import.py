@@ -3,6 +3,13 @@ import json
 import zipfile
 
 from app.core.exceptions import InvalidFormatError
+from app.services.testcase_format import (
+    JSON_ARGUMENTS,
+    JSON_VALUE,
+    LEGACY_INPUT,
+    LEGACY_OUTPUT,
+    encode_json,
+)
 
 MAX_UPLOAD_BYTES = 5 * 1024 * 1024
 MAX_UNZIPPED_BYTES = 20 * 1024 * 1024
@@ -37,11 +44,29 @@ def parse_testcases(filename: str, raw: bytes) -> list[dict]:
     for index, item in enumerate(items, start=1):
         if not isinstance(item, dict) or "input" not in item or "expected_output" not in item:
             raise InvalidFormatError(f"Testcase #{index} thiếu input hoặc expected_output")
+        is_sample = item.get("is_sample", False)
+        if not isinstance(is_sample, bool):
+            raise InvalidFormatError(f"Testcase #{index}: is_sample phải là true hoặc false")
+        input_type = item.get("input_type", JSON_ARGUMENTS)
+        expected_output_type = item.get("expected_output_type", JSON_VALUE)
+        if (input_type, expected_output_type) == (LEGACY_INPUT, LEGACY_OUTPUT):
+            if not isinstance(item["input"], str) or not isinstance(item["expected_output"], str):
+                raise InvalidFormatError(f"Testcase #{index}: stdin/stdout phải có input và output dạng chuỗi")
+        elif (input_type, expected_output_type) == (JSON_ARGUMENTS, JSON_VALUE):
+            if not isinstance(item["input"], list):
+                raise InvalidFormatError(f"Testcase #{index}: input phải là mảng các tham số function")
+            try:
+                encode_json(item["input"])
+                encode_json(item["expected_output"])
+            except InvalidFormatError as error:
+                raise InvalidFormatError(f"Testcase #{index}: giá trị JSON không hợp lệ") from error
+        else:
+            raise InvalidFormatError(f"Testcase #{index}: cặp input_type/expected_output_type không được hỗ trợ")
         normalized.append({
-            "input": str(item["input"]),
-            "expected_output": str(item["expected_output"]),
-            "is_sample": bool(item.get("is_sample", False)),
-            "input_type": str(item.get("input_type", "stdin")),
-            "expected_output_type": str(item.get("expected_output_type", "stdout")),
+            "input": item["input"],
+            "expected_output": item["expected_output"],
+            "is_sample": is_sample,
+            "input_type": input_type,
+            "expected_output_type": expected_output_type,
         })
     return normalized

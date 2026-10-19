@@ -91,7 +91,6 @@ def list_pending_submissions(
     if problem_id is not None:
         rows = [row for row in rows if row[1].problem_id == problem_id]
 
-    counts = {"all": len(rows), "graded": sum(row[0].status.lower() == "accepted" for row in rows), "ungraded": sum(row[0].status.lower() != "accepted" for row in rows), "late_appeal": 0, "similarity": 0, "error": 0}
     if search:
         query = search.strip().lower()
         rows = [
@@ -104,7 +103,16 @@ def list_pending_submissions(
             or query in row[1].title.lower()
         ]
 
-if filter_name == "graded":
+    counts = {
+        "all": len(rows),
+        "graded": sum(row[0].status.lower() == "accepted" for row in rows),
+        "ungraded": sum(row[0].status.lower() != "accepted" for row in rows),
+        "late_appeal": 0,
+        "similarity": 0,
+        "error": sum(row[0].status.lower() == "compile_error" for row in rows),
+    }
+
+    if filter_name == "graded":
         filtered = [row for row in rows if row[0].status.lower() == "accepted"]
     elif filter_name == "error":
         filtered = [row for row in rows if row[0].status.lower() == "compile_error"]

@@ -210,8 +210,8 @@ SEED_PROBLEMS = [
         "level": "easy",
         "hint": "Duyệt qua từng phần tử, kiểm tra điều kiện dương và chẵn",
         "complexity": "O(N)",
-        "start_datetime": datetime(2024, 9, 12, 7, 0, 0),
-        "end_datetime": datetime(2024, 9, 18, 23, 59, 59),
+        "start_datetime": vn_datetime(2024, 9, 12, 7, 0, 0),
+        "end_datetime": vn_datetime(2024, 9, 18, 23, 59, 59),
         "total_number_testcase": 12,
         "report": "ARR_01",
     },
@@ -225,8 +225,8 @@ SEED_PROBLEMS = [
         "level": "medium",
         "hint": "Dùng HashMap để đếm tần suất",
         "complexity": "O(N)",
-        "start_datetime": datetime(2024, 9, 12, 7, 0, 0),
-        "end_datetime": datetime(2024, 9, 18, 23, 59, 59),
+        "start_datetime": vn_datetime(2024, 9, 12, 7, 0, 0),
+        "end_datetime": vn_datetime(2024, 9, 18, 23, 59, 59),
         "total_number_testcase": 12,
         "report": "ARR_02",
     },
@@ -240,8 +240,8 @@ SEED_PROBLEMS = [
         "level": "medium",
         "hint": "Chia đôi mảng, đệ quy sắp xếp từng nửa, sau đó merge lại",
         "complexity": "O(N log N)",
-        "start_datetime": datetime(2024, 9, 12, 7, 0, 0),
-        "end_datetime": datetime(2024, 9, 18, 23, 59, 59),
+        "start_datetime": vn_datetime(2024, 9, 12, 7, 0, 0),
+        "end_datetime": vn_datetime(2024, 9, 18, 23, 59, 59),
         "total_number_testcase": 12,
         "report": "ARR_03",
     },
@@ -255,8 +255,8 @@ SEED_PROBLEMS = [
         "level": "easy",
         "hint": "Dùng StringBuilder hoặc duyệt từ cuối về đầu",
         "complexity": "O(N)",
-        "start_datetime": datetime(2024, 9, 19, 7, 0, 0),
-        "end_datetime": datetime(2024, 9, 25, 23, 59, 59),
+        "start_datetime": vn_datetime(2024, 9, 19, 7, 0, 0),
+        "end_datetime": vn_datetime(2024, 9, 25, 23, 59, 59),
         "total_number_testcase": 10,
         "report": "STR_01",
     },
@@ -272,7 +272,7 @@ SEED_SUBMISSIONS = [
         "submitted_code": "// Accepted solution\nimport java.util.*;\npublic class Main { public static void main(String[] args) { Scanner sc = new Scanner(System.in); int n = sc.nextInt(); int[] a = new int[n]; for(int i=0;i<n;i++) a[i]=sc.nextInt(); long sum=0; for(int x:a) if(x>0&&x%2==0) sum+=x; System.out.println(sum); } }",
         "status": "accepted",
         "passed_count": 12,
-        "submitted_datetime": datetime(2024, 9, 15, 10, 20, 0),
+        "submitted_datetime": vn_datetime(2024, 9, 15, 10, 20, 0),
     },
     {
         "problem_ref": 0,
@@ -281,7 +281,7 @@ SEED_SUBMISSIONS = [
         "submitted_code": "// Wrong answer\nimport java.util.*;\npublic class Main { public static void main(String[] args) { Scanner sc = new Scanner(System.in); int n = sc.nextInt(); long sum=0; for(int i=0;i<n;i++){int x=sc.nextInt(); if(x%2==0) sum+=x;} System.out.println(sum); } }",
         "status": "wrong_answer",
         "passed_count": 8,
-        "submitted_datetime": datetime(2024, 9, 13, 14, 45, 0),
+        "submitted_datetime": vn_datetime(2024, 9, 13, 14, 45, 0),
     },
     {
         "problem_ref": 0,
@@ -291,7 +291,7 @@ SEED_SUBMISSIONS = [
         "status": "compile_error",
         "compile_output": "Main.java:2: error: cannot find symbol\n  System.out.println(missing_var);",
         "passed_count": 0,
-        "submitted_datetime": datetime(2024, 9, 14, 9, 0, 0),
+        "submitted_datetime": vn_datetime(2024, 9, 14, 9, 0, 0),
     },
     {
         "problem_ref": 0,
@@ -301,7 +301,7 @@ SEED_SUBMISSIONS = [
         "status": "compile_error",
         "compile_output": "Main.java:2: error: illegal start of expression",
         "passed_count": 0,
-        "submitted_datetime": datetime(2024, 9, 14, 16, 30, 0),
+        "submitted_datetime": vn_datetime(2024, 9, 14, 16, 30, 0),
     },
     {
         "problem_ref": 0,
@@ -310,7 +310,7 @@ SEED_SUBMISSIONS = [
         "submitted_code": "// Similarity case\nimport java.util.*;\npublic class Main { public static void main(String[] args) { Scanner sc = new Scanner(System.in); int n = sc.nextInt(); int[] a = new int[n]; for(int i=0;i<n;i++) a[i]=sc.nextInt(); long sum=0; for(int x:a) if(x>0&&x%2==0) sum+=x; System.out.println(sum); } }",
         "status": "accepted",
         "passed_count": 12,
-        "submitted_datetime": datetime(2024, 9, 15, 10, 25, 0),
+        "submitted_datetime": vn_datetime(2024, 9, 15, 10, 25, 0),
     },
     {
         "problem_ref": 0,
@@ -319,7 +319,7 @@ SEED_SUBMISSIONS = [
         "submitted_code": "// Same as above - plagiarism\nimport java.util.*;\npublic class Main { public static void main(String[] args) { Scanner sc = new Scanner(System.in); int n = sc.nextInt(); int[] a = new int[n]; for(int i=0;i<n;i++) a[i]=sc.nextInt(); long s=0; for(int x:a) if(x>0&&x%2==0) s+=x; System.out.println(s); } }",
         "status": "accepted",
         "passed_count": 12,
-        "submitted_datetime": datetime(2024, 9, 15, 10, 28, 0),
+        "submitted_datetime": vn_datetime(2024, 9, 15, 10, 28, 0),
     },
     {
         "problem_ref": 0,
@@ -328,7 +328,7 @@ SEED_SUBMISSIONS = [
         "submitted_code": "// Wrong answer - late submission",
         "status": "wrong_answer",
         "passed_count": 5,
-        "submitted_datetime": datetime(2024, 9, 19, 8, 0, 0),  # late
+        "submitted_datetime": vn_datetime(2024, 9, 19, 8, 0, 0),  # late
     },
     # More submissions for other students
     {
@@ -338,7 +338,7 @@ SEED_SUBMISSIONS = [
         "submitted_code": "// Accepted",
         "status": "accepted",
         "passed_count": 12,
-        "submitted_datetime": datetime(2024, 9, 15, 11, 0, 0),
+        "submitted_datetime": vn_datetime(2024, 9, 15, 11, 0, 0),
     },
     {
         "problem_ref": 0,
@@ -347,7 +347,7 @@ SEED_SUBMISSIONS = [
         "submitted_code": "// Wrong answer",
         "status": "wrong_answer",
         "passed_count": 7,
-        "submitted_datetime": datetime(2024, 9, 16, 9, 30, 0),
+        "submitted_datetime": vn_datetime(2024, 9, 16, 9, 30, 0),
     },
     {
         "problem_ref": 0,
@@ -356,7 +356,7 @@ SEED_SUBMISSIONS = [
         "submitted_code": "// Late submission",
         "status": "accepted",
         "passed_count": 12,
-        "submitted_datetime": datetime(2024, 9, 19, 7, 30, 0),  # late
+        "submitted_datetime": vn_datetime(2024, 9, 19, 7, 30, 0),  # late
     },
     # Submissions for problem ARR_02
     {
@@ -366,7 +366,7 @@ SEED_SUBMISSIONS = [
         "submitted_code": "// Accepted solution for freq count",
         "status": "accepted",
         "passed_count": 12,
-        "submitted_datetime": datetime(2024, 9, 15, 14, 0, 0),
+        "submitted_datetime": vn_datetime(2024, 9, 15, 14, 0, 0),
     },
     {
         "problem_ref": 1,
@@ -375,7 +375,7 @@ SEED_SUBMISSIONS = [
         "submitted_code": "// Accepted",
         "status": "accepted",
         "passed_count": 12,
-        "submitted_datetime": datetime(2024, 9, 15, 14, 30, 0),
+        "submitted_datetime": vn_datetime(2024, 9, 15, 14, 30, 0),
     },
     {
         "problem_ref": 1,
@@ -384,7 +384,7 @@ SEED_SUBMISSIONS = [
         "submitted_code": "// Wrong answer",
         "status": "wrong_answer",
         "passed_count": 6,
-        "submitted_datetime": datetime(2024, 9, 16, 10, 0, 0),
+        "submitted_datetime": vn_datetime(2024, 9, 16, 10, 0, 0),
     },
     # Submissions for ARR_03 (MergeSort) - some missing = deadline warning
     {
@@ -394,7 +394,7 @@ SEED_SUBMISSIONS = [
         "submitted_code": "// MergeSort accepted",
         "status": "accepted",
         "passed_count": 12,
-        "submitted_datetime": datetime(2024, 9, 17, 15, 0, 0),
+        "submitted_datetime": vn_datetime(2024, 9, 17, 15, 0, 0),
     },
     {
         "problem_ref": 2,
@@ -403,7 +403,7 @@ SEED_SUBMISSIONS = [
         "submitted_code": "// MergeSort wrong",
         "status": "wrong_answer",
         "passed_count": 4,
-        "submitted_datetime": datetime(2024, 9, 17, 16, 0, 0),
+        "submitted_datetime": vn_datetime(2024, 9, 17, 16, 0, 0),
     },
 ]
 

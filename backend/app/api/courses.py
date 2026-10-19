@@ -7,24 +7,18 @@ from starlette import status
 from app.core.database import get_session
 from app.core.dependencies import Role, get_current_user, require_role
 from app.modules.courses.schemas import (
-    AddStudentToCourseRequest,
-    AddStudentToCourseResponse,
     CourseResponse,
     CourseTermsResponse,
     CreateCourseRequest,
-    GetStudentListResponse,
     StudentDashboardResponse,
     StudentEnrollmentResponse,
     UpdateCourseRequest,
 )
 from app.modules.courses.service import (
-    add_student_to_course as _add_student_to_course,
     create_course as _create_course,
-    delete_student_from_course as _delete_student_from_course,
     get_course as _get_course,
     get_course_terms as _get_course_terms,
     get_courses as _get_courses,
-    get_course_enrollments,
     get_student_courses as _get_student_courses,
     get_student_dashboard as _get_student_dashboard,
     get_student_enrollments as _get_student_enrollments,
@@ -119,55 +113,6 @@ def update_course_route(
         session=session,
         current_user=current_user,
     )
-
-
-@router.post(
-    "/courses/{course_id}/enrollments",
-    response_model=AddStudentToCourseResponse,
-    status_code=status.HTTP_201_CREATED,
-)
-def add_student_to_course(
-    data: AddStudentToCourseRequest,
-    course_id: str,
-    session: Session = Depends(get_session),
-    current_user: User = Depends(require_role(Role.ADMIN, Role.TEACHER)),
-) -> AddStudentToCourseResponse:
-    return _add_student_to_course(
-        student_id=data.student_id,
-        course_id=course_id,
-        session=session,
-        current_user=current_user,
-    )
-
-
-@router.delete(
-    "/courses/{course_id}/enrollments/{student_id}",
-    status_code=status.HTTP_204_NO_CONTENT,
-)
-def delete_student_from_course(
-    student_id: str,
-    course_id: str,
-    session: Session = Depends(get_session),
-    current_user: User = Depends(require_role(Role.ADMIN, Role.TEACHER)),
-):
-    _delete_student_from_course(
-        student_id=student_id,
-        course_id=course_id,
-        session=session,
-        current_user=current_user,
-    )
-
-
-@router.get(
-    "/courses/{course_id}/enrollments",
-    response_model=list[GetStudentListResponse],
-)
-def get_course_enrollments_route(
-    course_id: str,
-    session: Session = Depends(get_session),
-    current_user: User = Depends(get_current_user),
-):
-    return get_course_enrollments(session, course_id, current_user)
 
 
 # ─── Lỗi 7: Lấy danh sách lớp của 1 sinh viên ──────────────────────────────

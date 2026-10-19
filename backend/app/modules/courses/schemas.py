@@ -86,24 +86,6 @@ class StudentEnrollmentResponse(BaseModel):
     total_number_student: int
 
 
-class AddStudentToCourseResponse(BaseModel):
-    enrollment_id: int
-    course_id: str
-    student_id: str
-
-
-class AddStudentToCourseRequest(BaseModel):
-    student_id: str
-
-
-class GetStudentListResponse(BaseModel):
-    enrollment_id: int
-    student_id: str
-    full_name: str
-    email: str
-
-
-
 class StudentDashboardResponse(BaseModel):
     """Response cho `GET /students/{student_id}/dashboard`.
 

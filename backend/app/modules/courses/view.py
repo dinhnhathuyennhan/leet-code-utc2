@@ -1,15 +1,15 @@
 from sqlmodel import Session, select
 
-from app.core.utils.datetime_utils import now_utc, vn_day_end, vn_day_start
-from app.modules.courses.schemas import CourseResponse
+from app.core.utils.datetime_utils import now_utc, vn_day_end, vn_day_start, as_utc
+from app.modules.courses.schemas import CourseResponse, CourseLessonResponse, CourseGradeRowResponse
 from app.modules.courses import grade_service
 from app.models import Course, Enrollment, Lesson, Problem, User
 
 
 def lesson_status(lesson: Lesson) -> str:
     now = now_utc()
-    start = vn_day_start(lesson.start_date)
-    end = vn_day_end(lesson.end_date)
+    start = as_utc(vn_day_start(lesson.start_date))
+    end = as_utc(vn_day_end(lesson.end_date))
     if now < start:
         return "upcoming"
     if now > end:
@@ -43,12 +43,19 @@ def build_course_response(
     for problem in problems:
         problems_by_lesson[problem.lesson_id].append(problem)
 
+    if is_student_view:
+        now = now_utc()
+        problems_by_lesson = {
+            lesson_id: [problem for problem in lesson_problems if as_utc(problem.start_datetime) <= now]
+            for lesson_id, lesson_problems in problems_by_lesson.items()
+        }
+
     participants = grade_service.participants_by_lesson(session, lesson_ids)
 
     lesson_responses = []
     for lesson in lessons:
         status = lesson_status(lesson)
-        hide_problems = is_student_view and status == "upcoming"
+        visible_problems = problems_by_lesson[lesson.lesson_id]
         lesson_responses.append({
             "id": lesson.lesson_id,
             "order": lesson.lesson_number,
@@ -56,15 +63,14 @@ def build_course_response(
             "status": status,
             "opens_at": vn_day_start(lesson.start_date),
             "deadline": vn_day_end(lesson.end_date),
-            "problems": [] if hide_problems else [
+            "problems": [
                 {"id": p.problem_id, "title": p.title, "report": p.report, "level": p.level,
                  "start_datetime": p.start_datetime, "end_datetime": p.end_datetime,
                  "total_number_testcase": p.total_number_testcase}
-                for p in problems_by_lesson[lesson.lesson_id]
+                for p in visible_problems
             ],
             "participant_count": None if is_student_view else participants.get(lesson.lesson_id, 0),
         })
-
     enrollment_stmt = (
         select(Enrollment, User).join(User, Enrollment.student_id == User.user_id)
         .where(Enrollment.course_id == course.course_id)
@@ -73,9 +79,25 @@ def build_course_response(
         enrollment_stmt = enrollment_stmt.where(Enrollment.student_id == only_student_id)
     enrollments = session.exec(enrollment_stmt).all()
 
+    grade_problem_ids = [
+        problem.problem_id
+        for lesson_problems in problems_by_lesson.values()
+        for problem in lesson_problems
+    ]
+
     best = grade_service.best_grade_scores(
-        session, [p.problem_id for p in problems], [student.user_id for _, student in enrollments]
+        session,
+        grade_problem_ids,
+        [student.user_id for _, student in enrollments],
     )
-    response.sessions = lesson_responses
-    response.grades = grade_service.build_grade_rows(lessons, problems_by_lesson, enrollments, best)
+
+    response.sessions = [
+        CourseLessonResponse.model_validate(item) for item in lesson_responses
+    ]
+    response.grades = [
+        CourseGradeRowResponse.model_validate(item)
+        for item in grade_service.build_grade_rows(
+            lessons, problems_by_lesson, enrollments, best
+        )
+    ]
     return response

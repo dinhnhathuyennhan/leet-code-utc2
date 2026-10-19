@@ -38,7 +38,3 @@ class GetStudentListResponse(BaseModel):
     student_id: str
     full_name: str
     email: AppEmailStr
-    class_id: str | None = None
-    accepted_problems: int = 0
-    total_lessons: int = 0
-    progress_percent: float = 0

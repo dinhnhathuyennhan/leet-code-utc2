@@ -15,7 +15,7 @@ Edge case tests — kiểm thử các tình huống đặc biệt có thể gây
 
 import os
 import sys
-from datetime import UTC, datetime
+from datetime import datetime
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[3]))
@@ -36,6 +36,7 @@ from app.core.security.passwords import hash_password  # noqa: E402
 from app.core.security.tokens import create_access_token  # noqa: E402
 from app.core.database import get_session  # noqa: E402
 from app.core.dependencies import Role  # noqa: E402
+from app.core.utils.datetime_utils import VN_TZ  # noqa: E402
 from app.main import app  # noqa: E402
 from app.models import Class, Course, User  # noqa: E402
 
@@ -86,24 +87,24 @@ def setup_edge_db() -> Session:
                 course_name="100% Java",
                 term="HK1 2026-2027",
                 created_by="TEACH",
-                start_date=datetime(2026, 9, 7, tzinfo=UTC),
-                end_date=datetime(2026, 12, 27, tzinfo=UTC),
+                start_date=datetime(2026, 9, 7, tzinfo=VN_TZ),
+                end_date=datetime(2026, 12, 27, tzinfo=VN_TZ),
             ),
             Course(
                 course_id="CS_50%",
                 course_name="50% Off Python",
                 term="HK1 2026-2027",
                 created_by="TEACH",
-                start_date=datetime(2026, 9, 7, tzinfo=UTC),
-                end_date=datetime(2026, 12, 27, tzinfo=UTC),
+                start_date=datetime(2026, 9, 7, tzinfo=VN_TZ),
+                end_date=datetime(2026, 12, 27, tzinfo=VN_TZ),
             ),
             Course(
                 course_id="CS_un_der",
                 course_name="underscore_test",
                 term="HK1 2026-2027",
                 created_by="TEACH",
-                start_date=datetime(2026, 9, 7, tzinfo=UTC),
-                end_date=datetime(2026, 12, 27, tzinfo=UTC),
+                start_date=datetime(2026, 9, 7, tzinfo=VN_TZ),
+                end_date=datetime(2026, 12, 27, tzinfo=VN_TZ),
             ),
         ]
     )
@@ -226,8 +227,8 @@ def main():
                 "course_id": "HACK",
                 "course_name": "Hacked",
                 "term": "HK1",
-                "start_date": "2026-09-01T00:00:00",
-                "end_date": "2026-12-01T00:00:00",
+                "start_date": "2026-09-01T00:00:00+07:00",
+                "end_date": "2026-12-01T00:00:00+07:00",
             },
             headers=h_stud,
         )
@@ -249,8 +250,8 @@ def main():
         r = client.patch(
             "/courses/CS_100%",
             json={
-                "start_date": "2026-12-27T00:00:00",
-                "end_date": "2026-09-07T00:00:00",
+                "start_date": "2026-12-27T00:00:00+07:00",
+                "end_date": "2026-09-07T00:00:00+07:00",
             },
             headers=h_admin,
         )

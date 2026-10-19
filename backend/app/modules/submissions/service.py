@@ -2,6 +2,7 @@ from sqlmodel import Session, select
 
 from app.core.exceptions import InvalidFormatError, NotFoundError
 from app.core.dependencies import Role
+from app.modules.testcases.testcase_format import testcase_to_api_values
 from app.modules.submissions.schemas import (
     PendingSubmissionListResponse,
     PendingSubmissionResponse,
@@ -103,7 +104,7 @@ def list_pending_submissions(
             or query in row[1].title.lower()
         ]
 
-    if filter_name == "graded":
+if filter_name == "graded":
         filtered = [row for row in rows if row[0].status.lower() == "accepted"]
     elif filter_name == "error":
         filtered = [row for row in rows if row[0].status.lower() == "compile_error"]
@@ -167,8 +168,7 @@ def get_submission_detail(
         testcases=[
             SubmissionTestcaseResponse(
                 id=testcase.testcase_id,
-                input=testcase.input,
-                expected_output=testcase.expected_output,
+                **testcase_to_api_values(testcase),
                 is_sample=testcase.is_sample,
             )
             for testcase in testcases

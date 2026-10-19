@@ -1,16 +1,45 @@
-from fastapi import APIRouter, Depends, File, UploadFile
+from fastapi import APIRouter, Depends, File, Query, UploadFile
 from sqlmodel import Session
 from starlette import status
 
 from app.core.database import get_session
 from app.core.dependencies import Role, get_current_user, require_role
-from app.modules.problems.schemas import ProblemDetailResponse, ProblemUpdateRequest
+from app.core.exceptions import InvalidFormatError
+from app.modules.problems.schemas import ProblemDetailResponse, ProblemUpdateRequest, ProblemCreateRequest, \
+    ProblemListResponse
 from app.modules.problems import service as problem_service
-from app.modules.problems.testcase_import import MAX_UPLOAD_BYTES, parse_testcases
+from app.modules.testcases.testcase_import import MAX_UPLOAD_BYTES, parse_testcases
 from app.models import User
 
 router = APIRouter(tags=["problem"])
 BASE = "/courses/{course_id}/lessons/{lesson_id}/problems/{problem_id}"
+
+
+@router.post("/problems", response_model=ProblemDetailResponse, status_code=status.HTTP_201_CREATED)
+def create_bank_problem_route(
+    data: ProblemCreateRequest,
+    session: Session = Depends(get_session),
+    current_user: User = Depends(require_role(Role.ADMIN, Role.TEACHER)),
+) -> ProblemDetailResponse:
+    return problem_service.create_bank_problem(session, data)
+
+
+@router.get("/problems", response_model=ProblemListResponse)
+def list_problems_route(
+    q: str | None = None,
+    level: str | None = None,
+    course_id: str | None = None,
+    page: int = Query(default=1, ge=1),
+    page_size: int = Query(default=20, ge=1, le=100),
+    session: Session = Depends(get_session),
+    current_user: User = Depends(require_role(Role.ADMIN, Role.TEACHER)),
+) -> ProblemListResponse:
+    if level is not None and level not in ("easy", "medium", "hard"):
+        raise InvalidFormatError("level chỉ được nhận một trong các giá trị: easy, medium, hard")
+    return problem_service.list_problems(
+        session, current_user, q=q, level=level, course_id=course_id,
+        page=page, page_size=page_size,
+    )
 
 
 @router.get(BASE, response_model=ProblemDetailResponse)

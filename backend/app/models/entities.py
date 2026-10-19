@@ -1,5 +1,6 @@
 from datetime import date, datetime
 
+from sqlalchemy import JSON, UniqueConstraint
 from sqlmodel import Field, Relationship, SQLModel
 
 from app.core.utils.datetime_utils import UTCDateTime
@@ -57,6 +58,13 @@ class Course(SQLModel, table=True):
 
 # ==================== ENROLLMENT ====================
 class Enrollment(SQLModel, table=True):
+    # unique(course_id, student_id) => không thể thêm cùng một sinh viên vào cùng một khóa học
+    # lớp ràng buộc cuối cùng tại db
+    __table_args__ = (
+        UniqueConstraint(
+            "course_id", "student_id", name="uq_enrollment_course_student"
+        ),
+    )
     enrollment_id: int | None = Field(default=None, primary_key=True)
     course_id: str = Field(foreign_key="course.course_id", max_length=50)
     student_id: str = Field(foreign_key="user.user_id", max_length=50)
@@ -83,11 +91,16 @@ class Lesson(SQLModel, table=True):
 # ==================== PROBLEM ====================
 class Problem(SQLModel, table=True):
     problem_id: int | None = Field(default=None, primary_key=True)
-    lesson_id: int = Field(foreign_key="lesson.lesson_id")
-    title: str
+    # NULL = bài nằm trong ngân hàng đề, chưa gắn buổi học nào
+    lesson_id: int | None = Field(default=None, foreign_key="lesson.lesson_id")
+    title: str = Field(max_length=255)
+    # Method runner sẽ gọi; NULL chỉ dành cho Problem cũ chưa chuyển từ stdin/stdout.
+    function_name: str | None = Field(default=None, max_length=100)
     description: str
     time_limit_seconds: int
-    start_format_code: str  # code mẫu ban đầu cho sinh viên
+    start_format_code: str  # template Python cũ, giữ để tương thích API/dữ liệu legacy
+    # Mẫu code theo ngôn ngữ, ví dụ {"python": "...", "java": "..."}.
+    starter_codes: dict[str, str] = Field(default_factory=dict, sa_type=JSON)
     constraints: str
     level: str
     hint: str | None = None
@@ -95,7 +108,7 @@ class Problem(SQLModel, table=True):
     start_datetime: datetime = Field(sa_type=UTCDateTime)
     end_datetime: datetime = Field(sa_type=UTCDateTime)
     total_number_testcase: int = Field(default=0)
-    report: str | None = None
+    report: str | None = Field(default=None, max_length=255)
 
     lesson: Lesson | None = Relationship(back_populates="problems")
     testcases: list["Testcase"] = Relationship(back_populates="problem")

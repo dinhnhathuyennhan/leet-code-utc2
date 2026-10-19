@@ -1,4 +1,5 @@
 from datetime import datetime
+from typing import Any
 
 from pydantic import BaseModel, Field
 
@@ -26,8 +27,8 @@ class PendingSubmissionListResponse(BaseModel):
 
 class SubmissionTestcaseResponse(BaseModel):
     id: int
-    input: str
-    expected_output: str
+    input: Any
+    expected_output: Any
     is_sample: bool
 
 

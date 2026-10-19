@@ -1,93 +1,60 @@
 # Đặc tả Use-case
 
-## Module: Buổi học (Lesson)
+## Module: Quản lý buổi học (Lesson)
 
 ### Use-case: Tạo buổi học
 
 | | |
 |---|---|
-| **Description** | Giáo viên chủ lớp hoặc Admin thêm một buổi học mới vào lớp học, có thể gắn sẵn các bài tập có sẵn vào buổi |
-| **Trigger** | Giáo viên/Admin chọn 1 lớp học, nhấn nút "Thêm buổi học" |
-| **Pre-condition** | Đã đăng nhập thành công vào hệ thống<br>Lớp học (`course_id`) tồn tại<br>Nếu người thực hiện là Giáo viên, Giáo viên đó phải là người tạo lớp học (`created_by`) |
-| **Post-condition** | Buổi học mới được tạo với `lesson_number` = số thứ tự lớn nhất hiện có của lớp + 1; các bài tập được chọn được gắn vào buổi (bài thuộc buổi khác được sao chép thành bài mới, kèm testcase, thời gian mở/đóng theo ngày của buổi); `total_number_assignment` bằng số bài trong buổi |
-| **Basic flow** | 1. Hệ thống hiển thị form tạo buổi học<br>2. Giáo viên/Admin nhập tên buổi, ngày bắt đầu, ngày kết thúc và (tuỳ chọn) chọn các bài tập muốn gắn vào buổi<br>3. Hệ thống kiểm tra định dạng (tên buổi không rỗng, tối đa 255 ký tự; ngày bắt đầu trước hoặc bằng ngày kết thúc)<br>&nbsp;&nbsp;&nbsp;3a. Nếu không hợp lệ, hệ thống hiển thị thông báo lỗi, use-case tiếp tục ở bước 2<br>4. Hệ thống kiểm tra lớp học tồn tại và quyền quản lý: Admin mọi lớp, Giáo viên chỉ lớp mình tạo<br>&nbsp;&nbsp;&nbsp;4a. Nếu lớp không tồn tại, hệ thống hiển thị thông báo lỗi "Không tìm thấy lớp học", use-case kết thúc<br>&nbsp;&nbsp;&nbsp;4b. Nếu không có quyền, hệ thống hiển thị thông báo lỗi "Bạn không có quyền tạo buổi học", use-case kết thúc<br>5. Hệ thống kiểm tra các bài tập được chọn: phải tồn tại; với Giáo viên, bài phải thuộc lớp do chính mình tạo<br>&nbsp;&nbsp;&nbsp;5a. Nếu có bài không tồn tại, hệ thống hiển thị thông báo lỗi "Một hoặc nhiều bài tập không tồn tại", use-case tiếp tục ở bước 2<br>&nbsp;&nbsp;&nbsp;5b. Nếu có bài không được phép dùng, hệ thống hiển thị thông báo lỗi "Bạn không có quyền sao chép bài tập này", use-case tiếp tục ở bước 2<br>6. Hệ thống tạo buổi học, sao chép các bài tập (kèm testcase) vào buổi, cập nhật số bài tập<br>7. Hệ thống hiển thị lớp học với buổi học vừa tạo |
-| **Exception flow** | **E1. Mất kết nối/lỗi hệ thống**: ở bước 4-6, nếu request thất bại → hệ thống hiển thị thông báo lỗi kết nối, giữ nguyên dữ liệu đã nhập, use-case tiếp tục ở bước 2; buổi học và bài sao chép được lưu trong cùng một giao dịch nên không bị tạo dở dang |
+| **Description** | Admin hoặc Giáo viên tạo một buổi học trong Course và có thể đưa Problem vào buổi ngay khi tạo |
+| **Trigger** | Admin/Giáo viên chọn Course và nhấn "Tạo buổi học" |
+| **Pre-condition** | Đã đăng nhập; Course tồn tại; nếu là Giáo viên thì là chủ Course |
+| **Post-condition** | Lesson được tạo với `lesson_number` tiếp theo; mỗi Problem bank được chọn tạo thành bản riêng của Lesson, kèm testcase |
+| **Basic flow** | 1. Người dùng mở Course và chọn tạo Lesson<br>2. Nhập `lesson_name`, `start_date`, `end_date`, có thể gửi `problem_ids`<br>3. Hệ thống kiểm tra tên không rỗng và ngày bắt đầu không sau ngày kết thúc<br>4. Hệ thống kiểm tra quyền quản lý Course<br>5. Hệ thống tạo Lesson, tự gán số thứ tự tiếp theo<br>6. Nếu có Problem, hệ thống kiểm tra quyền sử dụng; bài bank hoặc bài từ Lesson khác được sao chép cùng testcase thành Problem mới, đặt lịch theo ngày Lesson đích và không sao chép Submission<br>7. Hệ thống trả Course mới và thông báo tạo thành công |
+| **Exception flow** | **E1. Dữ liệu không hợp lệ**: tại bước 3, trả lỗi 422 và không tạo Lesson<br>**E2. Không có quyền**: tại bước 4 hoặc 6, trả lỗi 403<br>**E3. Problem không tồn tại**: tại bước 6, trả lỗi 404 và thao tác không hoàn tất<br>**E4. Lỗi hệ thống**: thao tác lưu thất bại, client hiển thị lỗi và cho phép thử lại |
 
 ### Use-case: Xem chi tiết buổi học
 
 | | |
 |---|---|
-| **Description** | Giáo viên chủ lớp hoặc Admin xem nội dung một buổi học: danh sách bài tập kèm toàn bộ testcase, số bài nộp và thống kê tiến độ của Sinh viên |
-| **Trigger** | Giáo viên/Admin chọn 1 buổi học trong lớp học |
-| **Pre-condition** | Đã đăng nhập thành công vào hệ thống<br>Lớp học và buổi học tồn tại, buổi học thuộc lớp học đó |
+| **Description** | Người dùng có quyền xem Course đọc thông tin Lesson và các Problem trong buổi |
+| **Trigger** | Người dùng mở một Lesson trong Course |
+| **Pre-condition** | Đã đăng nhập; Course và Lesson tồn tại; người dùng có quyền xem Course |
 | **Post-condition** | Không thay đổi dữ liệu |
-| **Basic flow** | 1. Giáo viên/Admin chọn 1 buổi học<br>2. Hệ thống kiểm tra quyền xem lớp học (Admin mọi lớp, Giáo viên lớp mình tạo)<br>&nbsp;&nbsp;&nbsp;2a. Nếu không có quyền, hệ thống hiển thị thông báo lỗi "Bạn không có quyền xem lớp học này", use-case kết thúc<br>3. Hệ thống kiểm tra buổi học thuộc lớp học<br>&nbsp;&nbsp;&nbsp;3a. Nếu không, hệ thống hiển thị thông báo lỗi "Không tìm thấy buổi học", use-case kết thúc<br>4. Hệ thống tổng hợp: danh sách bài tập (đề, ràng buộc, gợi ý, code mẫu, testcase), số bài nộp mỗi bài, số Sinh viên đã nộp trên sĩ số, tỉ lệ nộp, điểm trung bình, hạn nộp<br>5. Hệ thống hiển thị trang chi tiết buổi học |
-| **Exception flow** | **E1. Mất kết nối/lỗi hệ thống**: ở bước 2-4, nếu request thất bại → hệ thống hiển thị thông báo lỗi kết nối, use-case tiếp tục ở bước 1 |
+| **Basic flow** | 1. Người dùng mở Lesson<br>2. Hệ thống kiểm tra quyền xem Course và Lesson thuộc Course<br>3. Hệ thống lấy các Problem trong Lesson<br>4. Với Student, hệ thống chỉ giữ Problem đã tới `start_datetime`, chỉ trả testcase mẫu và trả các trường thống kê/số lượt nộp là `null`<br>5. Hệ thống trả chi tiết Lesson |
+| **Exception flow** | **E1. Không có quyền hoặc không tìm thấy Course/Lesson**: hệ thống trả lỗi tương ứng; không trả dữ liệu chi tiết<br>**E2. Lỗi truy vấn**: hệ thống trả lỗi chung |
 
-### Use-case: Cập nhật buổi học
-
-| | |
-|---|---|
-| **Description** | Giáo viên chủ lớp hoặc Admin sửa tên, thời gian của buổi học, hoặc gắn thêm bài tập vào buổi |
-| **Trigger** | Giáo viên/Admin chọn 1 buổi học, nhấn nút "Chỉnh sửa" |
-| **Pre-condition** | Đã đăng nhập thành công vào hệ thống<br>Lớp học và buổi học tồn tại<br>Nếu người thực hiện là Giáo viên, Giáo viên đó phải là người tạo lớp học (`created_by`) |
-| **Post-condition** | Các trường được gửi lên được cập nhật; bài tập được chọn được gắn thêm vào buổi (chỉ thêm, không gỡ; muốn gỡ bài dùng use-case "Xoá bài tập"); số bài tập của buổi được tính lại |
-| **Basic flow** | 1. Hệ thống hiển thị form chỉnh sửa với thông tin hiện tại của buổi<br>2. Giáo viên/Admin sửa tên, ngày bắt đầu, ngày kết thúc, hoặc chọn thêm bài tập, rồi nhấn "Lưu"<br>3. Hệ thống kiểm tra lớp học tồn tại và quyền quản lý: Admin mọi lớp, Giáo viên chỉ lớp mình tạo<br>&nbsp;&nbsp;&nbsp;3a. Nếu lớp không tồn tại, hệ thống hiển thị thông báo lỗi "Không tìm thấy lớp học", use-case kết thúc<br>&nbsp;&nbsp;&nbsp;3b. Nếu không có quyền, hệ thống hiển thị thông báo lỗi "Bạn không có quyền sửa buổi học", use-case kết thúc<br>4. Hệ thống kiểm tra buổi học thuộc lớp<br>&nbsp;&nbsp;&nbsp;4a. Nếu không, hệ thống hiển thị thông báo lỗi "Không tìm thấy buổi học", use-case kết thúc<br>5. Hệ thống đối chiếu với dữ liệu đang lưu, kiểm tra ngày bắt đầu trước hoặc bằng ngày kết thúc<br>&nbsp;&nbsp;&nbsp;5a. Nếu sai, hệ thống hiển thị thông báo lỗi "start_date phải trước hoặc bằng end_date", use-case tiếp tục ở bước 2<br>6. Nếu có chọn thêm bài tập, hệ thống kiểm tra và sao chép bài như bước 5-6 của use-case "Tạo buổi học"<br>7. Hệ thống lưu thay đổi và hiển thị lớp học sau khi cập nhật |
-| **Exception flow** | **E1. Mất kết nối/lỗi hệ thống**: ở bước 3-7, nếu request thất bại → hệ thống hiển thị thông báo lỗi kết nối, giữ nguyên dữ liệu đã nhập, use-case tiếp tục ở bước 2 |
-
-### Use-case: Xoá buổi học
+### Use-case: Cập nhật và sắp xếp buổi học
 
 | | |
 |---|---|
-| **Description** | Giáo viên chủ lớp hoặc Admin xoá một buổi học tạo nhầm, chưa có bài tập |
-| **Trigger** | Giáo viên/Admin chọn 1 buổi học, nhấn nút "Xoá buổi học" |
-| **Pre-condition** | Đã đăng nhập thành công vào hệ thống<br>Lớp học và buổi học tồn tại<br>Nếu người thực hiện là Giáo viên, Giáo viên đó phải là người tạo lớp học (`created_by`) |
-| **Post-condition** | Buổi học bị xoá khỏi database |
-| **Basic flow** | 1. Giáo viên/Admin nhấn "Xoá buổi học"<br>2. Hệ thống hiển thị hộp thoại xác nhận<br>&nbsp;&nbsp;&nbsp;2a. Nếu Giáo viên/Admin huỷ, use-case kết thúc<br>3. Hệ thống kiểm tra lớp học tồn tại và quyền quản lý: Admin mọi lớp, Giáo viên chỉ lớp mình tạo<br>&nbsp;&nbsp;&nbsp;3a. Nếu lớp không tồn tại, hệ thống hiển thị thông báo lỗi "Không tìm thấy lớp học", use-case kết thúc<br>&nbsp;&nbsp;&nbsp;3b. Nếu không có quyền, hệ thống hiển thị thông báo lỗi "Bạn không có quyền xoá buổi học", use-case kết thúc<br>4. Hệ thống kiểm tra buổi học còn bài tập không<br>&nbsp;&nbsp;&nbsp;4a. Nếu còn, hệ thống hiển thị thông báo lỗi "Không thể xoá buổi học đã có bài tập", use-case kết thúc<br>5. Hệ thống xoá buổi học và hiển thị thông báo xoá thành công |
-| **Exception flow** | **E1. Mất kết nối/lỗi hệ thống**: ở bước 3-5, nếu request thất bại → hệ thống hiển thị thông báo lỗi kết nối, use-case tiếp tục ở bước 1 |
+| **Description** | Admin hoặc chủ Course cập nhật thông tin Lesson hoặc thay đổi thứ tự các buổi |
+| **Trigger** | Người dùng sửa thông tin Lesson hoặc chọn chức năng sắp xếp |
+| **Pre-condition** | Đã đăng nhập; Lesson/Course tồn tại; người dùng có quyền quản lý Course |
+| **Post-condition** | Thông tin hoặc thứ tự Lesson được cập nhật |
+| **Basic flow** | 1. Người dùng gửi field cần sửa hoặc danh sách `order` gồm các `lesson_id`<br>2. Hệ thống kiểm tra quyền và dữ liệu<br>3. Với reorder, hệ thống xác nhận danh sách chứa chính xác mọi Lesson trong Course, không trùng ID<br>4. Hệ thống cập nhật dữ liệu/thứ tự và trả Course |
+| **Exception flow** | **E1. Ngày không hợp lệ**: `start_date` sau `end_date`, trả lỗi 422<br>**E2. Danh sách reorder không hợp lệ**: trả lỗi 422, không cập nhật thứ tự<br>**E3. Không có quyền**: trả lỗi 403 |
 
-## Module: Bài tập (Problem) và Testcase
-
-### Use-case: Xem đề bài
+### Use-case: Nhân bản buổi học
 
 | | |
 |---|---|
-| **Description** | Người dùng xem nội dung một bài tập: đề, ràng buộc, độ khó, gợi ý, giới hạn thời gian, code mẫu và testcase |
-| **Trigger** | Người dùng chọn 1 bài tập trong buổi học |
-| **Pre-condition** | Đã đăng nhập thành công vào hệ thống<br>Lớp học, buổi học và bài tập tồn tại, đúng quan hệ lớp → buổi → bài |
-| **Post-condition** | Không thay đổi dữ liệu. Sinh viên chỉ thấy testcase mẫu (`is_sample = true`), testcase ẩn không bao giờ được trả về cho Sinh viên |
-| **Basic flow** | 1. Người dùng chọn 1 bài tập<br>2. Hệ thống kiểm tra quyền xem lớp học (Admin mọi lớp, Giáo viên lớp mình tạo, Sinh viên lớp mình đã được thêm vào)<br>&nbsp;&nbsp;&nbsp;2a. Nếu không có quyền, hệ thống hiển thị thông báo lỗi "Bạn không có quyền xem lớp học này", use-case kết thúc<br>3. Hệ thống kiểm tra buổi học thuộc lớp và bài tập thuộc buổi<br>&nbsp;&nbsp;&nbsp;3a. Nếu không, hệ thống hiển thị thông báo lỗi "Không tìm thấy buổi học" hoặc "Không tìm thấy bài tập trong buổi học", use-case kết thúc<br>4. Nếu người xem là Sinh viên, hệ thống kiểm tra bài đã tới thời gian mở (`start_datetime`)<br>&nbsp;&nbsp;&nbsp;4a. Nếu chưa mở, hệ thống xử lý như không tìm thấy bài tập, use-case kết thúc<br>5. Hệ thống lấy testcase của bài; với Sinh viên chỉ giữ testcase mẫu<br>6. Hệ thống hiển thị đề bài và testcase |
-| **Exception flow** | **E1. Mất kết nối/lỗi hệ thống**: ở bước 2-5, nếu request thất bại → hệ thống hiển thị thông báo lỗi kết nối, use-case tiếp tục ở bước 1 |
+| **Description** | Admin hoặc Giáo viên nhân bản Lesson và các Problem/testcase sang một Lesson mới |
+| **Trigger** | Người dùng chọn "Nhân bản buổi học" |
+| **Pre-condition** | Đã đăng nhập; Lesson nguồn tồn tại; có quyền xem Course nguồn và quản lý Course đích |
+| **Post-condition** | Lesson mới được thêm cuối danh sách Course đích với ngày do người dùng chọn; Problem và testcase được sao chép |
+| **Basic flow** | 1. Người dùng gửi `new_start_date`, `new_end_date`, tùy chọn `target_course_id`<br>2. Hệ thống kiểm tra ngày hợp lệ và quyền Course nguồn/đích<br>3. Hệ thống tạo Lesson mới, giữ tên nguồn và gán thứ tự tiếp theo<br>4. Hệ thống sao chép Problem/testcase<br>5. Hệ thống trả Course đích |
+| **Exception flow** | **E1. Ngày không hợp lệ**: trả lỗi 422<br>**E2. Course đích không tồn tại**: trả lỗi 404<br>**E3. Không có quyền quản lý Course đích**: trả lỗi 403 |
 
-### Use-case: Cập nhật bài tập
-
-| | |
-|---|---|
-| **Description** | Giáo viên chủ lớp hoặc Admin sửa nội dung bài tập (đề, ràng buộc, độ khó, gợi ý, giới hạn thời gian, code mẫu, thời gian mở/đóng) và có thể thay toàn bộ testcase |
-| **Trigger** | Giáo viên/Admin chọn 1 bài tập, nhấn nút "Chỉnh sửa" |
-| **Pre-condition** | Đã đăng nhập thành công vào hệ thống<br>Lớp học, buổi học và bài tập tồn tại<br>Nếu người thực hiện là Giáo viên, Giáo viên đó phải là người tạo lớp học (`created_by`) |
-| **Post-condition** | Các trường được gửi lên được cập nhật; nếu có gửi danh sách testcase thì toàn bộ testcase cũ được thay bằng danh sách mới và `total_number_testcase` được tính lại |
-| **Basic flow** | 1. Hệ thống hiển thị form chỉnh sửa với nội dung hiện tại của bài<br>2. Giáo viên/Admin sửa các trường cần thay đổi và nhấn "Lưu"<br>3. Hệ thống kiểm tra định dạng (tiêu đề 1-255 ký tự, giới hạn thời gian ≥ 1 giây, thời gian có múi giờ)<br>&nbsp;&nbsp;&nbsp;3a. Nếu không hợp lệ, hệ thống hiển thị thông báo lỗi, use-case tiếp tục ở bước 2<br>4. Hệ thống kiểm tra lớp học tồn tại và quyền quản lý: Admin mọi lớp, Giáo viên chỉ lớp mình tạo<br>&nbsp;&nbsp;&nbsp;4a. Nếu lớp không tồn tại, hệ thống hiển thị thông báo lỗi "Không tìm thấy lớp học", use-case kết thúc<br>&nbsp;&nbsp;&nbsp;4b. Nếu không có quyền, hệ thống hiển thị thông báo lỗi "Bạn không có quyền sửa bài tập", use-case kết thúc<br>5. Hệ thống đối chiếu với dữ liệu đang lưu, kiểm tra thời gian mở trước hoặc bằng thời gian đóng<br>&nbsp;&nbsp;&nbsp;5a. Nếu sai, hệ thống hiển thị thông báo lỗi "start_datetime phải trước hoặc bằng end_datetime", use-case tiếp tục ở bước 2<br>6. Nếu có thay testcase, hệ thống kiểm tra bài đã có bài nộp chưa<br>&nbsp;&nbsp;&nbsp;6a. Nếu đã có, hệ thống hiển thị thông báo lỗi "Bài đã có bài nộp, không thể thay đổi testcase", use-case tiếp tục ở bước 2<br>7. Hệ thống lưu thay đổi và hiển thị bài tập sau khi cập nhật |
-| **Exception flow** | **E1. Mất kết nối/lỗi hệ thống**: ở bước 4-7, nếu request thất bại → hệ thống hiển thị thông báo lỗi kết nối, giữ nguyên dữ liệu đã nhập, use-case tiếp tục ở bước 2 |
-
-### Use-case: Tải lên testcase
+### Use-case: Xóa buổi học
 
 | | |
 |---|---|
-| **Description** | Giáo viên chủ lớp hoặc Admin tải lên file testcase (JSON, hoặc ZIP chứa JSON) để thay toàn bộ testcase của một bài tập |
-| **Trigger** | Giáo viên/Admin chọn 1 bài tập, nhấn "Tải lên testcase" và chọn file |
-| **Pre-condition** | Đã đăng nhập thành công vào hệ thống<br>Lớp học, buổi học và bài tập tồn tại<br>Nếu người thực hiện là Giáo viên, Giáo viên đó phải là người tạo lớp học (`created_by`)<br>File tối đa 5 MB; với ZIP, tổng dung lượng giải nén tối đa 20 MB |
-| **Post-condition** | Toàn bộ testcase cũ của bài được thay bằng testcase trong file; `total_number_testcase` bằng số testcase mới. Trường không có trong file nhận mặc định: `is_sample = false`, `input_type = stdin`, `expected_output_type = stdout` |
-| **Basic flow** | 1. Giáo viên/Admin chọn file và nhấn "Tải lên"<br>2. Hệ thống kiểm tra dung lượng file<br>&nbsp;&nbsp;&nbsp;2a. Nếu quá 5 MB, hệ thống hiển thị thông báo lỗi "File testcase quá lớn (tối đa 5MB)", use-case tiếp tục ở bước 1<br>3. Hệ thống đọc file: JSON đọc trực tiếp; ZIP thì tìm các file .json bên trong<br>&nbsp;&nbsp;&nbsp;3a. Nếu file không phải JSON hợp lệ hoặc ZIP không chứa JSON, hoặc nội dung giải nén quá 20 MB, hệ thống hiển thị thông báo lỗi tương ứng, use-case tiếp tục ở bước 1<br>4. Hệ thống kiểm tra danh sách testcase không rỗng và mỗi testcase có đủ `input`, `expected_output`<br>&nbsp;&nbsp;&nbsp;4a. Nếu sai, hệ thống hiển thị thông báo lỗi chỉ rõ testcase thứ mấy bị thiếu, use-case tiếp tục ở bước 1<br>5. Hệ thống kiểm tra lớp học tồn tại và quyền quản lý: Admin mọi lớp, Giáo viên chỉ lớp mình tạo<br>&nbsp;&nbsp;&nbsp;5a. Nếu lớp không tồn tại, hệ thống hiển thị thông báo lỗi "Không tìm thấy lớp học", use-case kết thúc<br>&nbsp;&nbsp;&nbsp;5b. Nếu không có quyền, hệ thống hiển thị thông báo lỗi "Bạn không có quyền sửa testcase", use-case kết thúc<br>6. Hệ thống kiểm tra bài đã có bài nộp chưa<br>&nbsp;&nbsp;&nbsp;6a. Nếu đã có, hệ thống hiển thị thông báo lỗi "Bài đã có bài nộp, không thể thay đổi testcase", use-case kết thúc<br>7. Hệ thống xoá testcase cũ, lưu testcase mới và hiển thị bài tập với testcase đã cập nhật |
-| **Exception flow** | **E1. Mất kết nối/lỗi hệ thống**: ở bước 5-7, nếu request thất bại → hệ thống hiển thị thông báo lỗi kết nối, use-case tiếp tục ở bước 1; testcase cũ và mới được thay trong cùng một giao dịch nên bài không bị mất testcase giữa chừng |
+| **Description** | Admin hoặc chủ Course xóa Lesson chưa có Problem |
+| **Trigger** | Người dùng chọn xóa Lesson và xác nhận |
+| **Pre-condition** | Đã đăng nhập; Lesson tồn tại; người dùng có quyền quản lý Course |
+| **Post-condition** | Lesson bị xóa nếu không còn Problem |
+| **Basic flow** | 1. Người dùng yêu cầu xóa Lesson<br>2. Hệ thống kiểm tra quyền và tìm Lesson trong Course<br>3. Hệ thống xác nhận Lesson không có Problem<br>4. Hệ thống xóa Lesson và trả 204 |
+| **Exception flow** | **E1. Lesson còn Problem**: trả lỗi 409, không xóa Lesson<br>**E2. Không có quyền hoặc không tìm thấy Lesson**: trả lỗi tương ứng |
 
-### Use-case: Xoá bài tập
-
-| | |
-|---|---|
-| **Description** | Giáo viên chủ lớp hoặc Admin gỡ một bài tập khỏi buổi học khi bài chưa có Sinh viên nộp |
-| **Trigger** | Giáo viên/Admin chọn 1 bài tập, nhấn nút "Xoá bài tập" |
-| **Pre-condition** | Đã đăng nhập thành công vào hệ thống<br>Lớp học, buổi học và bài tập tồn tại<br>Nếu người thực hiện là Giáo viên, Giáo viên đó phải là người tạo lớp học (`created_by`) |
-| **Post-condition** | Bài tập và toàn bộ testcase của bài bị xoá; `total_number_assignment` của buổi được tính lại |
-| **Basic flow** | 1. Giáo viên/Admin nhấn "Xoá bài tập"<br>2. Hệ thống hiển thị hộp thoại xác nhận<br>&nbsp;&nbsp;&nbsp;2a. Nếu Giáo viên/Admin huỷ, use-case kết thúc<br>3. Hệ thống kiểm tra lớp học tồn tại và quyền quản lý: Admin mọi lớp, Giáo viên chỉ lớp mình tạo<br>&nbsp;&nbsp;&nbsp;3a. Nếu lớp không tồn tại, hệ thống hiển thị thông báo lỗi "Không tìm thấy lớp học", use-case kết thúc<br>&nbsp;&nbsp;&nbsp;3b. Nếu không có quyền, hệ thống hiển thị thông báo lỗi "Bạn không có quyền xoá bài tập", use-case kết thúc<br>4. Hệ thống kiểm tra bài đã có bài nộp chưa<br>&nbsp;&nbsp;&nbsp;4a. Nếu đã có, hệ thống hiển thị thông báo lỗi "Bài đã có bài nộp, không thể xoá", use-case kết thúc<br>5. Hệ thống xoá testcase và bài tập, cập nhật số bài tập của buổi, hiển thị thông báo xoá thành công |
-| **Exception flow** | **E1. Mất kết nối/lỗi hệ thống**: ở bước 3-5, nếu request thất bại → hệ thống hiển thị thông báo lỗi kết nối, use-case tiếp tục ở bước 1 |
+**Phạm vi hiện tại:** Problem trong Lesson là bản riêng được lưu trực tiếp bằng `Problem.lesson_id`. Bản nguồn trong bank vẫn có `lesson_id = null`; chưa có Assignment snapshot hoặc lịch sử xóa Lesson.

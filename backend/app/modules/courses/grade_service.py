@@ -17,6 +17,8 @@ def best_passed_counts(
         .group_by(Submission.student_id, Submission.problem_id)
     )
     if student_ids is not None:
+        if not student_ids:
+            return {}
         stmt = stmt.where(Submission.student_id.in_(student_ids))
     return {(sid, pid): cnt for sid, pid, cnt in session.exec(stmt).all()}
 

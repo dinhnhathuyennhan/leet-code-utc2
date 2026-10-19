@@ -11,6 +11,10 @@ from app.core.exceptions import EmptyFieldError, InvalidFormatError
 class GradeScoreResponse(BaseModel):
     value: float | None
     submitted: bool = False
+    manual_score: float | None = None
+    is_overridden: bool = False
+    feedback: str | None = None
+    submission_id: int | None = None
 
 
 class CourseGradeRowResponse(BaseModel):

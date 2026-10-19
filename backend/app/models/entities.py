@@ -126,6 +126,7 @@ class Submission(SQLModel, table=True):
     status: str  # pending / accepted / wrong_answer / compile_error...
     compile_output: str | None = None
     feedback: str | None = None
+    manual_score: float | None = None
     passed_count: int = Field(default=0)
     submitted_datetime: datetime = Field(sa_type=UTCDateTime)
 

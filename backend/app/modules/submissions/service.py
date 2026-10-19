@@ -45,6 +45,8 @@ def _submission_rows(session: Session, current_user: User) -> list[tuple[Submiss
 
 def _judge_kind(status: str) -> str:
     normalized = status.lower()
+    if normalized == "accepted":
+        return "graded"
     if normalized == "compile_error":
         return "compile_error"
     return "wrong_answer"
@@ -52,6 +54,7 @@ def _judge_kind(status: str) -> str:
 
 def _judge_label(status: str) -> str:
     return {
+        "accepted": "Đã chấm",
         "pending": "Đang chờ chấm",
         "wrong_answer": "Sai kết quả",
         "compile_error": "Lỗi biên dịch",
@@ -72,11 +75,22 @@ def list_pending_submissions(
     filter_name: str = "all",
     search: str | None = None,
     limit: int = 100,
+    course_id: str | None = None,
+    lesson_id: int | None = None,
+    problem_id: int | None = None,
+    include_graded: bool = False,
 ) -> PendingSubmissionListResponse:
     rows = _submission_rows(session, current_user)
-    rows = [row for row in rows if row[0].status.lower() in _VISIBLE_STATUSES]
+    visible_statuses = _VISIBLE_STATUSES | {"accepted"} if include_graded else _VISIBLE_STATUSES
+    rows = [row for row in rows if row[0].status.lower() in visible_statuses]
+    if course_id:
+        rows = [row for row in rows if row[3].course_id == course_id]
+    if lesson_id is not None:
+        rows = [row for row in rows if row[2].lesson_id == lesson_id]
+    if problem_id is not None:
+        rows = [row for row in rows if row[1].problem_id == problem_id]
 
-    counts = {"all": len(rows), "late_appeal": 0, "similarity": 0, "error": 0}
+    counts = {"all": len(rows), "graded": sum(row[0].status.lower() == "accepted" for row in rows), "ungraded": sum(row[0].status.lower() != "accepted" for row in rows), "late_appeal": 0, "similarity": 0, "error": 0}
     if search:
         query = search.strip().lower()
         rows = [
@@ -89,7 +103,9 @@ def list_pending_submissions(
             or query in row[1].title.lower()
         ]
 
-    if filter_name == "error":
+    if filter_name == "graded":
+        filtered = [row for row in rows if row[0].status.lower() == "accepted"]
+    elif filter_name == "error":
         filtered = [row for row in rows if row[0].status.lower() == "compile_error"]
     elif filter_name in {"late_appeal", "similarity"}:
         filtered = []
@@ -99,6 +115,9 @@ def list_pending_submissions(
     items = [
         PendingSubmissionResponse(
             id=submission.submission_id,
+            course_id=course.course_id,
+            lesson_id=lesson.lesson_id,
+            problem_id=problem.problem_id,
             student_name=student.full_name,
             student_code=student.user_id,
             course_code=course.course_id,
@@ -141,6 +160,7 @@ def get_submission_detail(
         status=submission.status,
         compile_output=submission.compile_output,
         feedback=submission.feedback,
+        manual_score=submission.manual_score,
         passed_count=submission.passed_count,
         total_testcases=problem.total_number_testcase,
         submitted_datetime=submission.submitted_datetime,
@@ -173,6 +193,8 @@ def update_submission(
         submission.feedback = data.feedback.strip() or None
     if data.status is not None:
         submission.status = data.status
+    if data.manual_score is not None:
+        submission.manual_score = data.manual_score
     session.add(submission)
     session.commit()
     return get_submission_detail(session, submission_id, current_user)

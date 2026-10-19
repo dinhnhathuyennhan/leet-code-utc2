@@ -73,7 +73,7 @@ def build_course_response(
         enrollment_stmt = enrollment_stmt.where(Enrollment.student_id == only_student_id)
     enrollments = session.exec(enrollment_stmt).all()
 
-    best = grade_service.best_passed_counts(
+    best = grade_service.best_grade_scores(
         session, [p.problem_id for p in problems], [student.user_id for _, student in enrollments]
     )
     response.sessions = lesson_responses

@@ -23,6 +23,7 @@ import { PasswordInput } from "./password-input";
 import { useAuth } from "@/context/auth-context";
 import { ApiError } from "@/lib/api/error";
 import { loginSchema, type LoginFormValues } from "@/lib/validations/validate-field-form";
+import { toast } from "sonner";
 
 import type { UserResponse } from "@/lib/api/types";
 
@@ -31,6 +32,27 @@ interface LoginFormProps {
 }
 
 const FormField = Controller;
+
+// ─── Helpers (module-scope — impure ops allowed) ───────────────────────
+
+const WELCOME_STORAGE_KEY = "utc2:last-welcome-at";
+const WELCOME_DEBOUNCE_MS = 5_000;
+
+/**
+ * Hiển thị toast chào mừng, tối đa 1 lần / 5 giây để tránh hiện lại
+ * khi form remount do chuyển tab.
+ *
+ * Đặt ngoài component để ESLint `react-hooks/purity` không flag
+ * `Date.now()` / `sessionStorage` (chỉ impure trong render, không phải callback).
+ */
+function maybeShowWelcomeToast(userName: string): void {
+  if (typeof window === "undefined") return;
+  const last = window.sessionStorage.getItem(WELCOME_STORAGE_KEY);
+  const now = Date.now();
+  if (last && now - Number(last) <= WELCOME_DEBOUNCE_MS) return;
+  window.sessionStorage.setItem(WELCOME_STORAGE_KEY, String(now));
+  toast.success(`Chào mừng ${userName || "bạn"} quay lại!`);
+}
 
 function FormItem({
   children,
@@ -87,22 +109,29 @@ export function LoginForm({ onSuccess }: LoginFormProps) {
         password: values.password,
       });
 
+      // Toast chỉ hiển thị 1 lần khi login thật sự (không hiện lại khi chuyển tab).
+      // Lý do: form có thể bị remount do layout/state — chỉ fire nếu đây là login mới.
+      maybeShowWelcomeToast(user.full_name);
       onSuccess?.(user);
     } catch (error) {
       if (error instanceof ApiError) {
         if (error.isNetworkError) {
           setConnectionError("Mất kết nối từ server, vui lòng thử lại.");
+          toast.error("Mất kết nối từ server, vui lòng thử lại.");
           return;
         }
 
+        const message = error.detail || "Email hoặc mật khẩu không chính xác";
         form.setError("password", {
-          message: error.detail || "Email hoặc mật khẩu không chính xác",
+          message,
         });
         form.resetField("password", { keepError: true });
+        toast.error(message);
         return;
       }
 
       setConnectionError("Đã có lỗi xảy ra, vui lòng thử lại.");
+      toast.error("Đã có lỗi xảy ra, vui lòng thử lại.");
     }
   }
 

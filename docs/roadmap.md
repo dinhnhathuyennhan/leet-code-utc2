@@ -10,12 +10,12 @@
 
 **Backend: đã có**
 
-- Auth: `POST /auth/login`, `/auth/change-password`, `/auth/logout`, `/auth/refresh-access-token` (`backend/app/routers/auth.py`)
+- Auth: `POST /auth/login`, `/auth/change-password`, `/auth/logout`, `/auth/refresh-access-token` (`backend/app/api/auth.py`)
 - Tài khoản: `POST /teachers`, `/students`, `/students/import` (Excel), `/users/{id}/reset-password`
-- Course: POST/GET list/GET detail/PATCH, enrollments POST/GET/DELETE (`backend/app/routers/course.py`)
+- Course: POST/GET list/GET detail/PATCH, enrollments POST/GET/DELETE (`backend/app/api/courses.py`)
 - Global Exception Handler, CI (ruff + pytest + eslint + build), docker-compose (Postgres + migrate + pgAdmin)
 
-**Backend: chưa có (mới có model trong `backend/models.py`)**
+**Backend: chưa có (mới có model trong `backend/app/models/entities.py`)**
 
 - `Class` (lớp hành chính): chưa có endpoint nào
 - `Lesson`, `Problem`, `Testcase`, `Submission`: **lõi của sản phẩm chấm code, chưa có dòng logic nào**
@@ -82,7 +82,7 @@ Sau khi BE xong một phase và trước khi FE bắt đầu phase tiếp theo, 
 | Review rồi merge `feature/get-course`                                                                                      | BE      | 0.5 ngày  |
 | Xoá `tsc-errors.txt`/`tsc.txt` và merge `feature/login-ui`                                                                 | FE      | 0.5 ngày  |
 | Gộp HTTP client (giữ 1 trong `lib/axios.ts` / `lib/api/client.ts`) và token store (giữ 1)                                  | FE      | 1 ngày    |
-| Viết `backend/tests/test_auth_service.py` (login sai/đúng, refresh hết hạn/bị revoke, token_version, logout)               | BE      | 1–2 ngày  |
+| Viết `backend/tests/unit/modules/auth/test_auth_service.py` (login sai/đúng, refresh hết hạn/bị revoke, token_version, logout)               | BE      | 1–2 ngày  |
 | Sửa Excel import thiếu `class_id`                                                                                          | BE      | 0.5 ngày  |
 | ~~Chốt quy ước timezone~~ ✅ đã xong, xem [Quy ước thời gian](api-design-course.md#quy-ước-thời-gian)                       | BE      | —         |
 | ~~Dựng Judge0~~ ✅ đã xong, xem [judge0-setup.md](judge0-setup.md)                                                         | Hạ tầng | —         |
@@ -153,7 +153,7 @@ Judge0 đã chạy sẵn, nên phase này chỉ còn phần tích hợp.
 
 | Việc                                                                                                                                                                                                                                            | Ước lượng |
 | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------- |
-| `app/services/judge_client.py`: bọc API Judge0 (httpx), map ngôn ngữ (Python 71, C++ 54, Java 62, C 50), chuẩn hoá status. **Luôn dùng `base64_encoded=true`** (xem judge0-setup.md). Thêm `JUDGE0_URL`, `JUDGE0_AUTH_TOKEN` vào `.env.example` | 2–3 ngày  |
+| `app/modules/submissions/judge_client.py`: bọc API Judge0 (httpx), map ngôn ngữ (Python 71, C++ 54, Java 62, C 50), chuẩn hoá status. **Luôn dùng `base64_encoded=true`** (xem judge0-setup.md). Thêm `JUDGE0_URL`, `JUDGE0_AUTH_TOKEN` vào `.env.example` | 2–3 ngày  |
 | `POST /problems/{id}/run`: chạy trên sample testcase, **không lưu**, dùng khi SV bấm "Run"                                                                                                                                                      | 1–2 ngày  |
 | `POST /problems/{id}/submissions`: chạy toàn bộ testcase, lưu `Submission` (status `pending` rồi cập nhật kết quả); chấm bất đồng bộ bằng Judge0 batch + `BackgroundTasks`                                                                      | 3–4 ngày  |
 | `GET /submissions/{id}` (FE poll), `GET /problems/{id}/submissions` (lịch sử của SV)                                                                                                                                                            | 1 ngày    |

@@ -4,7 +4,7 @@ import { useState } from "react";
 
 import { useCourseTerms, useCourses } from "@/lib/hooks/use-courses";
 import { useDebouncedValue } from "@/lib/hooks/use-debounced-value";
-import type { CourseView } from "@/lib/types/course";
+import type { CourseSummary, CourseView } from "@/lib/types/course";
 
 export interface CourseFilterState {
   search: string;
@@ -19,7 +19,13 @@ export interface CourseFilterState {
   setView: (value: CourseView) => void;
 }
 
-/** State bộ lọc + query danh sách lớp — dùng chung cho trang lớp của giảng viên và sinh viên. */
+/**
+ * State bộ lọc + query danh sách lớp — dùng chung cho trang lớp của giảng viên và sinh viên.
+ *
+ * - ``search`` được đẩy xuống server (BE `GET /courses?search=...`).
+ * - ``semester`` + ``academic_year`` đẩy xuống server qua params tương ứng.
+ * - ``view`` chỉ là state UI (grid / list), không ảnh hưởng tới request.
+ */
 export function useCourseList() {
   const [search, setSearch] = useState("");
   const [semester, setSemester] = useState<number | undefined>(undefined);
@@ -32,6 +38,7 @@ export function useCourseList() {
   const availableSemesters = terms.data?.semesters ?? [];
   const selectedYear = year === "" || availableYears.includes(year) ? year : "";
   const selectedSemester = semester === undefined || availableSemesters.includes(semester) ? semester : undefined;
+
   const query = useCourses({
     search: debouncedSearch.trim() || undefined,
     semester: selectedSemester || undefined,
@@ -50,5 +57,13 @@ export function useCourseList() {
     view,
     setView,
   };
-  return { filters, query };
+
+  // Trả về `courses` (mảng items) cho consumer dùng trực tiếp.
+  const courses: CourseSummary[] = query.data?.items ?? [];
+
+  return {
+    filters,
+    query,
+    courses,
+  };
 }

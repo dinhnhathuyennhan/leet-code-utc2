@@ -1,4 +1,4 @@
-import { BookOpen, ClipboardCheck, Timer } from "lucide-react";
+import { BookOpen, ClipboardCheck, GraduationCap, Timer } from "lucide-react";
 import type { ReactNode } from "react";
 
 import { CourseFilters } from "@/components/shared/course-filters";
@@ -15,7 +15,6 @@ interface CourseListViewProps {
   courses?: CourseSummary[];
   stats?: CourseListStats;
   isLoading: boolean;
-  /** Đang tải lại (đổi bộ lọc) — làm mờ lưới thay vì nhấp nháy skeleton. */
   isFetching: boolean;
   error: unknown;
   onRetry: () => void;
@@ -31,41 +30,27 @@ function buildStats(role: CourseListViewProps["role"], stats: CourseListStats): 
   ];
 }
 
-/** Màn hình danh sách lớp — thuần hiển thị, dữ liệu do page truyền xuống. */
 export function CourseListView({ role, filters, courses, stats, isLoading, isFetching, error, onRetry, hrefFor, actions }: CourseListViewProps) {
+  const heading = role === "teacher" ? "Lớp phụ trách" : "Lớp đang học";
+
   function renderBody() {
     if (isLoading) return <CourseGridSkeleton view={filters.view} />;
     if (error && !courses) return <ErrorState error={error} onRetry={onRetry} />;
     if (!courses?.length) {
-      return (
-        <EmptyState
-          title={filters.search ? "Không tìm thấy lớp phù hợp" : "Chưa có lớp học phần"}
-          description={filters.search ? "Thử đổi từ khoá hoặc học kỳ, năm học khác." : "Các lớp trong học kỳ này sẽ hiển thị tại đây."}
-        />
-      );
+      return <EmptyState icon={GraduationCap} title={filters.search ? "Không tìm thấy lớp phù hợp" : `Chưa có ${heading.toLowerCase()}`} description={filters.search ? "Thử đổi từ khoá khác." : "Các lớp của bạn sẽ hiển thị tại đây."} />;
     }
-    return (
-      <CourseGrid
-        courses={courses}
-        view={filters.view}
-        hrefFor={hrefFor}
-        className={cn("transition-opacity duration-200", isFetching && "opacity-60")}
-      />
-    );
+    return <CourseGrid view={filters.view} courses={courses} hrefFor={hrefFor} className={cn("transition-opacity duration-200", isFetching && "opacity-60")} />;
   }
 
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
-        {isLoading || !stats ? (
-          <CourseStatsBarSkeleton />
-        ) : (
-          <CourseStatsBar items={buildStats(role, stats)} />
-        )}
-
+        {isLoading || !stats ? <CourseStatsBarSkeleton /> : <CourseStatsBar items={buildStats(role, stats)} />}
         {actions && <div className="flex justify-end">{actions}</div>}
       </div>
-
+      <header className="flex flex-wrap items-baseline justify-between gap-2">
+        <h1 className="text-2xl font-semibold tracking-tight sm:text-3xl">{heading}</h1>
+      </header>
       <CourseFilters filters={filters} />
       {renderBody()}
     </div>

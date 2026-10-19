@@ -19,10 +19,7 @@ export function RecentCourses({ courses, hrefFor }: RecentCoursesProps) {
         const status = COURSE_STATUS[course.status];
         return (
           <li key={course.id} className="w-[19rem] shrink-0 snap-start">
-            <Link
-              href={hrefFor(course)}
-              className="group flex items-center justify-between gap-3 rounded-xl border bg-card p-5 shadow-sm outline-none transition duration-200 hover:-translate-y-0.5 hover:shadow-lg focus-visible:ring-2 focus-visible:ring-indigo-500"
-            >
+            <Link href={hrefFor(course)} className="group flex items-center justify-between gap-3 rounded-xl border bg-card p-5 shadow-sm outline-none transition duration-200 hover:-translate-y-0.5 hover:shadow-lg focus-visible:ring-2 focus-visible:ring-indigo-500">
               <div className="min-w-0 space-y-2">
                 <StatusBadge label={status.label} tone={status.tone} />
                 <p className="truncate text-lg font-semibold">{course.name}</p>
@@ -40,11 +37,5 @@ export function RecentCourses({ courses, hrefFor }: RecentCoursesProps) {
 }
 
 export function RecentCoursesSkeleton() {
-  return (
-    <div className="flex gap-4 overflow-hidden">
-      {[0, 1, 2, 3].map((i) => (
-        <Skeleton key={i} className="h-[7.5rem] w-[19rem] shrink-0 rounded-xl" />
-      ))}
-    </div>
-  );
+  return <div className="flex gap-4 overflow-hidden">{[0, 1, 2, 3].map((i) => <Skeleton key={i} className="h-[7.5rem] w-[19rem] shrink-0 rounded-xl" />)}</div>;
 }

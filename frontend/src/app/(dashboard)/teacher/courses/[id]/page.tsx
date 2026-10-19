@@ -8,7 +8,6 @@ import { useBreadcrumbLabel } from "@/components/shared/breadcrumb-context";
 import { EmptyState, ErrorState } from "@/components/shared/page-state";
 import { CourseDetailSkeleton } from "@/components/teacher/course-detail-skeleton";
 import { CourseDetailTabs, type CourseTab } from "@/components/teacher/course-detail-tabs";
-import { SessionList } from "@/components/teacher/session-list";
 import { ApiError } from "@/lib/api/error";
 import { useCourse, useCourseEnrollments } from "@/lib/hooks/use-courses";
 import { CourseHeaderCard } from "@/components/teacher/course-header-card";
@@ -16,6 +15,7 @@ import { CourseStudentsTable } from "@/components/teacher/course-students-table"
 import { CourseGradesTable } from "@/components/teacher/course-grades-table";
 import { SessionEditorDialog } from "@/components/teacher/session-editor-dialog";
 import { CourseEditDialog } from "@/components/teacher/course-edit-dialog";
+import { SessionList } from "@/components/teacher/session-list";
 
 export default function TeacherCourseDetailPage() {
   const { id } = useParams<{ id: string }>();
@@ -25,7 +25,7 @@ export default function TeacherCourseDetailPage() {
   const [editorOpen, setEditorOpen] = useState(false);
   const [courseEditorOpen, setCourseEditorOpen] = useState(false);
 
-  useBreadcrumbLabel(course?.code); // breadcrumb: Lớp học phần / JAVA01
+  useBreadcrumbLabel(course?.code); // breadcrumb: Lớp học phần / <code>
 
   if (isPending) return <CourseDetailSkeleton />;
 

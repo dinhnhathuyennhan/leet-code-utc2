@@ -2,7 +2,7 @@ import { ApiError } from "@/lib/api/error";
 import { getCourses } from "@/lib/api/endpoints/courses";
 import axiosInstance from "@/lib/axios";
 import { wrapAxiosError } from "@/lib/api/client";
-import type { PendingFilter, PendingSubmissionParams, PendingSubmissionsResponse, PlagiarismAlert, SubmissionDetail, TeacherOverview } from "@/lib/types/dashboard";
+import type { PendingFilter, PendingSubmissionParams, PendingSubmissionsResponse, PlagiarismAlert, StudentOverview, SubmissionDetail, TeacherOverview } from "@/lib/types/dashboard";
 import type { UserResponse } from "@/lib/api/types";
 
 export async function getTeacherOverview(): Promise<TeacherOverview> {
@@ -66,3 +66,14 @@ export async function getPlagiarismAlerts(): Promise<PlagiarismAlert[]> {
 }
 
 export const EMPTY_PENDING_COUNTS: Record<PendingFilter, number> = { all: 0, graded: 0, late_appeal: 0, similarity: 0, error: 0 };
+export async function getStudentOverview(studentId: string): Promise<StudentOverview> {
+  try {
+    const response = await axiosInstance.get<StudentOverview>(
+      `/students/${encodeURIComponent(studentId)}/dashboard`,
+    );
+    return response.data;
+  } catch (error) {
+    throw wrapAxiosError(error);
+  }
+}
+

@@ -1,0 +1,124 @@
+@startuml erd
+' Sơ đồ thực thể - quan hệ (ERD), lấy theo backend/app/models/entities.py
+skinparam shadowing false
+skinparam monochrome true
+skinparam linetype ortho
+skinparam defaultFontName Arial
+hide circle
+hide methods
+
+title Sơ đồ cơ sở dữ liệu (ERD) - Hệ thống Chấm Code
+
+entity "class\n(Lớp hành chính)" as e_class {
+  * <b>class_id</b> : varchar(50) <<PK>>
+  --
+  * type : varchar
+  * course_number : int
+  * department : varchar
+}
+
+entity "user\n(Tài khoản)" as e_user {
+  * <b>user_id</b> : varchar(50) <<PK>>
+  --
+  * full_name : varchar
+  avt_link : varchar(2048)
+  date_of_birth : date
+  * email : varchar(255) <<UNIQUE>>
+  * hashed_password : varchar
+  * must_change_password : bool
+  * role_id : int
+  * token_version : int
+  class_id : varchar(50) <<FK>>
+}
+
+entity "course\n(Lớp học phần)" as e_course {
+  * <b>course_id</b> : varchar(50) <<PK>>
+  --
+  * course_name : varchar
+  avt_link : varchar(2048)
+  * created_by : varchar(50) <<FK>>
+  * term : varchar
+  * start_date : timestamptz
+  * end_date : timestamptz
+  * total_number_student : int
+}
+
+entity "enrollment\n(Ghi danh)" as e_enrollment {
+  * <b>enrollment_id</b> : int <<PK>>
+  --
+  * course_id : varchar(50) <<FK>>
+  * student_id : varchar(50) <<FK>>
+}
+
+entity "lesson\n(Buổi học)" as e_lesson {
+  * <b>lesson_id</b> : int <<PK>>
+  --
+  * lesson_number : int
+  * lesson_name : varchar
+  * course_id : varchar(50) <<FK>>
+  * total_number_assignment : int
+  * total_number_student_finished : int
+  * start_date : date
+  * end_date : date
+}
+
+entity "problem\n(Bài tập)" as e_problem {
+  * <b>problem_id</b> : int <<PK>>
+  --
+  * lesson_id : int <<FK>>
+  * title : varchar
+  * description : text
+  * time_limit_seconds : int
+  * start_format_code : text
+  * constraints : text
+  * level : varchar
+  hint : text
+  complexity : varchar
+  * start_datetime : timestamptz
+  * end_datetime : timestamptz
+  * total_number_testcase : int
+  report : text
+}
+
+entity "testcase\n(Bộ test)" as e_testcase {
+  * <b>testcase_id</b> : int <<PK>>
+  --
+  * problem_id : int <<FK>>
+  * input : text
+  * expected_output : text
+  * is_sample : bool
+  * input_type : varchar
+  * expected_output_type : varchar
+}
+
+entity "submission\n(Bài nộp)" as e_submission {
+  * <b>submission_id</b> : int <<PK>>
+  --
+  * problem_id : int <<FK>>
+  * student_id : varchar(50) <<FK>>
+  * language : varchar
+  * submitted_code : text
+  * status : varchar
+  compile_output : text
+  feedback : text
+  * passed_count : int
+  * submitted_datetime : timestamptz
+}
+
+e_class |o--o{ e_user : "gồm"
+e_user ||--o{ e_course : "tạo (created_by)"
+e_user ||--o{ e_enrollment : "ghi danh"
+e_course ||--o{ e_enrollment : "có"
+e_course ||--o{ e_lesson : "gồm"
+e_lesson ||--o{ e_problem : "gồm"
+e_problem ||--o{ e_testcase : "có"
+e_problem ||--o{ e_submission : "nhận"
+e_user ||--o{ e_submission : "nộp"
+
+legend right
+  * : cột NOT NULL
+  role_id: 1 = Admin, 2 = Giáo viên, 3 = Sinh viên
+  user.class_id chỉ có giá trị với Sinh viên
+endlegend
+
+@enduml

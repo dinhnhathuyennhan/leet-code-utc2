@@ -19,7 +19,17 @@ export function BreadcrumbProvider({ children }: { children: ReactNode }) {
   return <BreadcrumbContext.Provider value={value}>{children}</BreadcrumbContext.Provider>;
 }
 
-/** Page gọi: useBreadcrumbLabel(course?.code) */
+/**
+ * Page gọi: useBreadcrumbLabel("CS101")
+ *
+ * Dùng useLayoutEffect (không useEffect) để set label CHẬM hơn render nhưng
+ * SỚM hơn browser paint → Topbar đã re-render với label mới trước khi user nhìn thấy.
+ * Tránh flash "…" / "—" ở frame đầu.
+ *
+ * useLayoutEffect chạy sync sau khi React commit DOM, trước khi browser paint.
+ * Vì Topbar là anh em của page trong cùng provider, setState trong layout effect của page
+ * sẽ khiến Topbar re-render trước paint → user thấy breadcrumb đúng từ frame đầu.
+ */
 export function useBreadcrumbLabel(label: string | null | undefined) {
   const pathname = usePathname();
   const { setLabel } = useContext(BreadcrumbContext);

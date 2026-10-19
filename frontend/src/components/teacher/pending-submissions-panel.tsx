@@ -12,7 +12,6 @@ import { cn } from "@/lib/utils";
 
 const CHIPS: { value: PendingFilter; label: string }[] = [
   { value: "all", label: "Tất cả" },
-  { value: "graded", label: "Đã chấm" },
   { value: "error", label: "Lỗi chưa chấm" },
 ];
 

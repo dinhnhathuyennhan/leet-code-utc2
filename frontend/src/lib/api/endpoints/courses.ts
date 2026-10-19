@@ -54,12 +54,12 @@ export async function updateCourse(courseId: string, data: CourseUpdateRequest):
 }
 
 
-function languageFromCover(cover: string | null): CourseLanguage {
-  const value = (cover ?? "").toLowerCase();
+function languageFromCover(cover: string | null, ...fallbacks: string[]): CourseLanguage {
+  const value = [cover ?? "", ...fallbacks].join(" ").toLowerCase();
   if (value.includes("python")) return "python";
   if (value.includes("javascript") || value === "js") return "javascript";
   if (value.includes("cpp") || value.includes("c++")) return "cpp";
-  if (value === "c") return "c";
+  if (/(^|[^a-z])c([^a-z]|$)/.test(value) || value.includes("background-c")) return "c";
   return "java";
 }
 
@@ -68,6 +68,16 @@ function statusFromDates(start: string, end: string): CourseDetail["status"] {
   if (now < new Date(start).getTime()) return "upcoming";
   if (now > new Date(end).getTime()) return "closed";
   return "ongoing";
+}
+
+function parseTerm(term: string): { semester: number; academicYear: string } {
+  const normalized = term.trim();
+  const semesterMatch = normalized.match(/(?:HK|HỌC KỲ|SEMESTER)\s*([1-3])/i);
+  const yearMatch = normalized.match(/(\d{4}\s*[-/]\s*\d{4})/);
+  return {
+    semester: Number(semesterMatch?.[1] ?? 1),
+    academicYear: yearMatch?.[1].replace(/\s+/g, "") ?? normalized,
+  };
 }
 
 function isDueThisWeek(deadline: string, now = new Date()): boolean {
@@ -79,14 +89,12 @@ function isDueThisWeek(deadline: string, now = new Date()): boolean {
 }
 
 function toSummary(record: CourseApiRecord) {
-  const termMatch = record.term.match(/^HK(\d)\s*(.+)$/i);
-  const semester = Number(termMatch?.[1] ?? 1);
-  const academicYear = termMatch?.[2] ?? record.term;
+  const { semester, academicYear } = parseTerm(record.term);
   return {
     id: record.course_id,
     code: record.course_id,
     name: record.course_name,
-    language: languageFromCover(record.avt_link),
+    language: languageFromCover(record.avt_link, record.course_id, record.course_name),
     status: statusFromDates(record.start_date, record.end_date),
     teacher_name: record.created_by,
     semester,
@@ -122,7 +130,8 @@ function toStudent(record: {
 export async function getCourses(params: CourseListParams = {}): Promise<CourseListResponse> {
   try {
     const response = await axiosInstance.get<CourseApiRecord[]>("/courses");
-    let items = response.data.map(toSummary);
+    const allItems = response.data.map(toSummary);
+    let items = allItems;
     if (params.search) {
       const query = params.search.toLowerCase();
       items = items.filter((course) => `${course.code} ${course.name}`.toLowerCase().includes(query));
@@ -130,7 +139,12 @@ export async function getCourses(params: CourseListParams = {}): Promise<CourseL
     if (params.semester) items = items.filter((course) => course.semester === params.semester);
     if (params.academic_year) items = items.filter((course) => course.academic_year === params.academic_year);
     
-    const dueThisWeek = items.reduce(
+    const statsItems = allItems.filter((course) => {
+      if (params.semester && course.semester !== params.semester) return false;
+      if (params.academic_year && course.academic_year !== params.academic_year) return false;
+      return true;
+    });
+    const dueThisWeek = statsItems.reduce(
       (total, course) =>
         total + (course.sessions ?? []).filter((session) => isDueThisWeek(session.deadline)).length,
       0,
@@ -138,9 +152,9 @@ export async function getCourses(params: CourseListParams = {}): Promise<CourseL
     return {
       items,
       stats: {
-        course_count: items.length,
-        active_course_count: items.filter((course) => course.status === "ongoing").length,
-        upcoming_courses: items.filter((course) => course.status === "upcoming").length,
+        course_count: statsItems.length,
+        active_course_count: statsItems.filter((course) => course.status === "ongoing").length,
+        upcoming_courses: statsItems.filter((course) => course.status === "upcoming").length,
         due_this_week: dueThisWeek,
       },
     };
@@ -189,7 +203,19 @@ export async function getCourseEnrollments(courseId: string): Promise<CourseStud
       total_lessons?: number; 
       progress_percent?: number 
     }>>(`/courses/${courseId}/enrollments`);
-    return response.data.map(toStudent);
+    const students = response.data.map(toStudent);
+    const course = await getCourseById(courseId);
+    const totalProblems = course.sessions.reduce((total, session) => total + session.problems.length, 0);
+    if (!totalProblems) return students;
+    const gradeByStudent = new Map((course.grades ?? []).map((row) => [row.student_id, row]));
+    return students.map((student) => {
+      const grade = gradeByStudent.get(student.student_id);
+      const submitted = grade
+        ? Object.values(grade.session_scores ?? {}).flat().filter((score) => score !== null && (typeof score === "object" ? score.submitted : true)).length
+        : 0;
+      const progressPercent = Math.round((submitted / totalProblems) * 100);
+      return { ...student, submitted_lessons: submitted, accepted_problems: submitted, total_lessons: totalProblems, progress_percent: progressPercent };
+    });
   } catch (error) {
     throw wrapAxiosError(error);
   }
@@ -237,8 +263,13 @@ export async function addStudentToCourse(courseId: string, studentId: string): P
 
 export async function addClassToCourse(courseId: string, classId: string): Promise<{ added_count: number; skipped_count: number }> {
   try {
-    const response = await axiosInstance.post<{ added_count: number; skipped_count: number }>(`/courses/${courseId}/enrollments/class`, { class_id: classId });
-    return response.data;
+    // Backend chỉ có endpoint thêm từng sinh viên, không có endpoint enrollment theo lớp.
+    const students = await getClassStudents(classId);
+    const results = await Promise.allSettled(students.map((student) => addStudentToCourse(courseId, student.user_id)));
+    return {
+      added_count: results.filter((result) => result.status === "fulfilled").length,
+      skipped_count: results.filter((result) => result.status === "rejected").length,
+    };
   } catch (error) {
     throw wrapAxiosError(error);
   }

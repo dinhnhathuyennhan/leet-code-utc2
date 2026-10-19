@@ -46,10 +46,10 @@ export default function TeacherCourseDetailPage() {
           <SessionList sessions={course.sessions} studentCount={course.student_count} courseId={course.code || id} />
         }
         students={enrollments.isPending ? <CourseDetailSkeleton /> : enrollments.error ? <ErrorState error={enrollments.error} onRetry={() => void enrollments.refetch()} /> : <CourseStudentsTable students={enrollments.data ?? []} courseId={course.code} onChanged={() => void enrollments.refetch()} />}
-        grades={<CourseGradesTable onUpdated={() => void refetch()} sessions={course.sessions.map((session) => ({ id: session.id, order: session.order, title: session.title, status: session.status, problems: session.problems.map((problem) => ({ id: problem.id, code: problem.report ?? problem.title, title: problem.title })) }))} rows={course.grades ?? (enrollments.data ?? []).map((student) => ({ student_id: student.student_id, full_name: student.full_name, class_id: student.class_id ?? null, problem_scores: [], overall_score: null, session_scores: {} }))} />}
+        grades={<CourseGradesTable onUpdated={() => void refetch()} sessions={course.sessions.map((session) => ({ id: session.id, order: session.order, title: session.title, status: session.status, problems: session.problems.map((problem) => ({ id: problem.id, code: problem.report ?? problem.title, title: problem.title })) }))} rows={course.grades ?? []} />}
       />
       <SessionEditorDialog key={`${editorOpen}-new`} course={course} session={null} open={editorOpen} onOpenChange={setEditorOpen} onSaved={() => void refetch()} />
-      <CourseEditDialog course={course} open={courseEditorOpen} onOpenChange={setCourseEditorOpen} onSaved={() => void refetch()} />
+      <CourseEditDialog key={`${courseEditorOpen}-${dataUpdatedAt}`} course={course} open={courseEditorOpen} onOpenChange={setCourseEditorOpen} onSaved={() => void refetch()} />
     </div>
   );
 }

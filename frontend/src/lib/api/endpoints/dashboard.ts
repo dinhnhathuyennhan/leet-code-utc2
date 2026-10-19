@@ -35,9 +35,20 @@ export async function getCurrentUser(): Promise<UserResponse> {
 export async function getPendingSubmissions(params: PendingSubmissionParams): Promise<PendingSubmissionsResponse> {
   try {
     const response = await axiosInstance.get<PendingSubmissionsResponse>("/submissions/pending", {
-      params: { filter: params.filter, search: params.search, limit: params.limit, course: params.course, lesson_id: params.lesson_id, problem_id: params.problem_id },
+      params: { filter: params.filter, search: params.search, limit: params.limit, course: params.course, lesson_id: params.lesson_id, problem_id: params.problem_id, include_graded: params.include_graded },
     });
-    return response.data;
+    const counts = response.data.counts ?? {};
+    return {
+      ...response.data,
+      counts: {
+        all: counts.all ?? response.data.total ?? 0,
+        graded: counts.graded ?? 0,
+        ungraded: counts.ungraded ?? 0,
+        late_appeal: counts.late_appeal ?? 0,
+        similarity: counts.similarity ?? 0,
+        error: counts.error ?? 0,
+      },
+    };
   } catch (error) {
     throw wrapAxiosError(error);
   }

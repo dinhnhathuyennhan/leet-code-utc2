@@ -17,6 +17,9 @@ export interface TeacherOverview {
 
 export interface PendingSubmission {
   id: number;
+  course_id: string;
+  lesson_id: number;
+  problem_id: number;
   student_name: string;
   student_code: string;
   course_code: string;
@@ -34,12 +37,13 @@ export interface PendingSubmissionParams {
   course?: string;
   lesson_id?: number;
   problem_id?: number;
+  include_graded?: boolean;
 }
 
 export interface PendingSubmissionsResponse {
   items: PendingSubmission[];
   total: number;
-  counts: Record<PendingFilter, number>;
+  counts: Record<PendingFilter, number> & { ungraded?: number };
 }
 
 export interface SubmissionTestcase {
@@ -64,7 +68,7 @@ export interface SubmissionDetail {
   status: string;
   compile_output: string | null;
   feedback: string | null;
-  manual_score: number | null;
+  manual_score?: number | null;
   passed_count: number;
   total_testcases: number;
   submitted_datetime: string;

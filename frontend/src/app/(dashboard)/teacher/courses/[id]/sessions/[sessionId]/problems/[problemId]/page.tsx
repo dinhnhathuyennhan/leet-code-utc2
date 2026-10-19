@@ -6,6 +6,7 @@ import { ArrowLeft, Clock3, FileCode2, FlaskConical, Lightbulb, MemoryStick, Ter
 import Link from "next/link";
 
 import { ErrorState } from "@/components/shared/page-state";
+import { ProblemSubmissionsPanel } from "@/components/teacher/problem-submissions-panel";
 import { useBreadcrumbLabels } from "@/components/shared/breadcrumb-context";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -35,7 +36,7 @@ export default function TeacherProblemDetailPage() {
           <Link href={`/teacher/courses/${courseId}/sessions/${sessionId}`} className="mb-2 inline-flex items-center gap-1 text-sm font-medium text-indigo-700 hover:underline"><ArrowLeft className="size-4" /> Quay lại buổi học</Link>
           <h1 className="text-2xl font-bold text-slate-900">{data.code ?? "Bài tập"}: {data.title}</h1>
         </div>
-        <Button className="bg-[#2f226b] text-white hover:bg-[#251b56]"><Terminal className="size-4" /> Xem bài nộp</Button>
+        <Button asChild className="bg-[#2f226b] text-white hover:bg-[#251b56]"><Link href={`/teacher/submissions?course=${encodeURIComponent(courseId)}&lesson_id=${encodeURIComponent(sessionId)}&problem_id=${encodeURIComponent(problemId)}`}><Terminal className="size-4" /> Xem bài nộp</Link></Button>
       </div>
 
       <div className="grid gap-4 sm:grid-cols-4">
@@ -55,6 +56,7 @@ export default function TeacherProblemDetailPage() {
 
         <section className="h-fit space-y-3 rounded-2xl border bg-card p-6 shadow-sm"><h2 className="font-bold text-slate-900">Test cases mẫu</h2>{data.testcases.filter((testcase) => testcase.is_sample).map((testcase, index) => <div key={testcase.id} className="rounded-xl bg-indigo-50 p-4 text-sm"><p className="mb-2 font-semibold text-indigo-900">Test #{index + 1}</p><div className="grid gap-2"><div><p className="text-xs text-muted-foreground">Input</p><pre className="whitespace-pre-wrap rounded bg-white p-2">{testcase.input}</pre></div><div><p className="text-xs text-muted-foreground">Output mong đợi</p><pre className="whitespace-pre-wrap rounded bg-white p-2">{testcase.expected_output}</pre></div></div></div>)}</section>
       </section>
+      <ProblemSubmissionsPanel courseId={courseId} lessonId={sessionId} problemId={problemId} />
     </div>
   );
 }

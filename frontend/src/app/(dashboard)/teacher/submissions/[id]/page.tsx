@@ -55,6 +55,7 @@ export default function SubmissionDetailPage() {
       const submission = await updateSubmission(id, {
         feedback,
         manual_score: parsedScore,
+
         ...(accept ? { status: "accepted" } : {}),
       });
       setData(submission);
@@ -103,7 +104,7 @@ export default function SubmissionDetailPage() {
           <div className="flex flex-wrap items-center justify-between gap-4 rounded-xl border bg-card p-4 shadow-xs">
             <div className="flex items-center gap-3">
               <span className="flex size-10 items-center justify-center rounded-full bg-indigo-100 font-bold text-indigo-900 dark:bg-indigo-500/20 dark:text-indigo-200">
-                A
+                {data.student_name.trim().charAt(0).toUpperCase() || "?"}
               </span>
               <div>
                 <p className="font-semibold text-slate-900 dark:text-slate-100">{data.student_name}</p>
@@ -113,7 +114,7 @@ export default function SubmissionDetailPage() {
 
             <div className="flex flex-wrap items-center gap-3 text-xs">
               <span className="flex items-center gap-1 rounded-md bg-amber-50 px-2.5 py-1 font-medium text-amber-800 dark:bg-amber-500/20 dark:text-amber-300">
-                <Clock className="size-3.5" /> Nộp trễ 45 phút
+                <Clock className="size-3.5" /> Nộp lúc {new Date(data.submitted_datetime).toLocaleString("vi-VN")}
               </span>
               <span className="rounded-md bg-red-100 px-2.5 py-1 font-semibold text-red-700 dark:bg-red-500/20 dark:text-red-300">
                 {statusLabel}: {data.passed_count}/{data.total_testcases} Test Passed

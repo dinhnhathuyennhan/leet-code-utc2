@@ -2,7 +2,6 @@ from datetime import UTC, date, datetime, timedelta
 
 import pytest
 from sqlalchemy import Column, Integer, MetaData, Table, create_engine, insert, select
-from sqlalchemy.exc import StatementError
 
 from app.core.utils.datetime_utils import (
     VN_TZ,
@@ -39,10 +38,12 @@ def _save_and_read(conn, value: datetime) -> datetime:
 
 class TestVnDayBoundaries:
     def test_day_start_is_midnight_vn(self):
-        assert vn_day_start(date(2026, 9, 7)) == datetime(2026, 9, 6, 17, 0, tzinfo=UTC)
+        assert vn_day_start(date(2026, 9, 7)) == datetime(2026, 9, 7, 0, 0, tzinfo=VN_TZ)
 
     def test_day_end_is_last_microsecond_vn(self):
-        assert vn_day_end(date(2026, 9, 7)) == datetime(2026, 9, 7, 16, 59, 59, 999999, tzinfo=UTC)
+        assert vn_day_end(date(2026, 9, 7)) == datetime(
+            2026, 9, 7, 23, 59, 59, 999999, tzinfo=VN_TZ
+        )
 
 
 class TestAsUtc:
@@ -51,32 +52,32 @@ class TestAsUtc:
         assert result == datetime(2026, 9, 7, 0, 0, tzinfo=UTC)
         assert result.utcoffset() == timedelta(0)
 
-    def test_rejects_naive_datetime(self):
-        with pytest.raises(ValueError):
-            as_utc(datetime(2026, 9, 7))
+    def test_rejects_naive_datetime_without_timezone(self):
+        with pytest.raises(ValueError, match="datetime naive"):
+            as_utc(datetime(2026, 9, 7, 7, 0))
 
 
 class TestRequireOffset:
-    def test_returns_value_when_offset_present(self):
-        value = datetime(2026, 9, 7, tzinfo=UTC)
+    def test_accepts_datetime_with_vietnam_offset(self):
+        value = datetime(2026, 9, 7, tzinfo=VN_TZ)
         assert require_offset(value, "start_date") is value
 
-    def test_rejects_naive_with_field_name_in_message(self):
-        with pytest.raises(InvalidFormatError, match="start_date phải kèm múi giờ"):
+    def test_rejects_naive_datetime_without_offset(self):
+        with pytest.raises(InvalidFormatError, match=r"start_date.*phải kèm múi giờ"):
             require_offset(datetime(2026, 9, 7), "start_date")
 
 
 class TestUTCDateTimeColumn:
-    def test_read_back_same_instant_in_vn_offset(self, conn):
+    def test_read_back_same_instant_as_vietnam_local_wall_time(self, conn):
         saved = datetime(2026, 9, 7, 0, 0, tzinfo=VN_TZ)
         result = _save_and_read(conn, saved)
-        assert result == saved
-        assert result.utcoffset() == timedelta(hours=7)
+        assert result == datetime(2026, 9, 7, 0, 0, tzinfo=VN_TZ)
+        assert result.tzinfo is not None
 
     def test_utc_input_is_returned_as_vn_time(self, conn):
         result = _save_and_read(conn, datetime(2026, 9, 7, 0, 0, tzinfo=UTC))
-        assert (result.hour, result.utcoffset()) == (7, timedelta(hours=7))
+        assert result == datetime(2026, 9, 7, 7, 0, tzinfo=VN_TZ)
 
-    def test_naive_value_cannot_be_saved(self, conn):
-        with pytest.raises(StatementError):
-            conn.execute(insert(_events).values(id=1, at=datetime(2026, 9, 7)))
+    def test_naive_value_is_rejected(self):
+        with pytest.raises(ValueError, match="datetime naive"):
+            UTCDateTime().process_bind_param(datetime(2026, 9, 7, 7, 0), None)

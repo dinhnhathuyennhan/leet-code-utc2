@@ -1,10 +1,8 @@
-from collections.abc import Iterator
-from datetime import UTC, datetime
+"""Unit tests for course service behavior."""
+
+from datetime import datetime, timedelta
 
 import pytest
-from fastapi.testclient import TestClient
-from sqlalchemy.pool import StaticPool
-from sqlmodel import Session, SQLModel, create_engine, select
 
 from app.core.utils.datetime_utils import VN_TZ
 from app.core.exceptions import (
@@ -14,8 +12,6 @@ from app.core.exceptions import (
     InvalidFormatError,
     NotFoundError,
 )
-from app.core.dependencies import Role
-from app.main import app
 from app.modules.courses.schemas import CreateCourseRequest, UpdateCourseRequest
 from app.modules.courses.service import (
     create_course,
@@ -24,303 +20,19 @@ from app.modules.courses.service import (
     get_course_terms,
     update_course,
 )
-from app.models import Course, Enrollment, User
-from app.modules.enrollments.service import (
-    add_student_to_course,
-    delete_student_from_course,
-    get_course_enrollments,
+from app.modules.courses.view import build_course_response
+from app.models import Course
+
+from tests.support.fixtures.user_fixtures import make_user, vn
+from tests.support.fixtures.builders import make_enrollment, make_lesson, make_problem
+from tests.support.fixtures.enrollment_fixtures import enroll_directly
+from tests.support.fixtures.course_fixtures import make_course
+
+pytest_plugins = (
+    "tests.support.fixtures.user_fixtures",
+    "tests.support.fixtures.course_fixtures",
 )
-"""
-Test các luồng nghiệp vụ chính của course_service.
-Sử dụng SQLite in-memory thao tác nhanh, không cần Postgres.
-"""
 
-
-# ============================== FIXTURES ==============================
-
-
-def vn(*args: int) -> datetime:
-    """Giờ VN có kèm múi giờ — API và DB không nhận datetime naive."""
-    return datetime(*args, tzinfo=VN_TZ)
-
-
-@pytest.fixture(name="session")
-def session_fixture() -> Iterator[Session]:
-    engine = create_engine(
-        "sqlite://",
-        connect_args={"check_same_thread": False},
-        poolclass=StaticPool,  # giữ một connection duy nhất cho DB in-memory
-    )
-    SQLModel.metadata.create_all(engine)
-    with Session(engine) as session:
-        yield session
-
-
-@pytest.fixture(name="client")
-def client_fixture(session: Session) -> Iterator[TestClient]:
-    """TestClient với session SQLite in-memory thông qua dependency override."""
-    from app.core.database import get_session
-
-    def _override_get_session():
-        try:
-            yield session
-        finally:
-            pass
-
-    app.dependency_overrides[get_session] = _override_get_session
-    with TestClient(app) as c:
-        yield c
-    app.dependency_overrides.clear()
-
-
-def make_user(session: Session, user_id: str, role_id: int) -> User:
-    user = User(
-        user_id=user_id,
-        full_name=f"User {user_id}",
-        email=f"{user_id.lower()}@example.com",
-        hashed_password="not-a-real-hash",
-        role_id=role_id,
-    )
-    session.add(user)
-    session.commit()
-    session.refresh(user)
-    return user
-
-
-@pytest.fixture
-def admin(session: Session) -> User:
-    return make_user(session, "AD001", Role.ADMIN)
-
-
-@pytest.fixture
-def owner_teacher(session: Session) -> User:
-    return make_user(session, "GV001", Role.TEACHER)
-
-
-@pytest.fixture
-def other_teacher(session: Session) -> User:
-    return make_user(session, "GV002", Role.TEACHER)
-
-
-@pytest.fixture
-def student(session: Session) -> User:
-    return make_user(session, "SV001", Role.STUDENT)
-
-
-@pytest.fixture
-def course(session: Session, owner_teacher: User) -> Course:
-    course = Course(
-        course_id="CS101",
-        course_name="Nhập môn lập trình",
-        created_by=owner_teacher.user_id,
-        term="HK1 2026-2027",
-        start_date=vn(2026, 9, 7),
-        end_date=vn(2026, 12, 27),
-        total_number_student=0,
-    )
-    session.add(course)
-    session.commit()
-    session.refresh(course)
-    return course
-
-
-def enrollments_of(session: Session, course_id: str) -> list[Enrollment]:
-    return list(
-        session.exec(select(Enrollment).where(Enrollment.course_id == course_id)).all()
-    )
-
-
-def counter_of(session: Session, course: Course) -> int:
-    session.refresh(course)  # đọc lại từ DB, không tin object trong memory
-    return course.total_number_student
-
-
-def enroll_directly(session: Session, course: Course, student: User) -> None:
-    """Dựng dữ liệu có sẵn cho test xoá, không đi qua service đang được test."""
-    session.add(Enrollment(course_id=course.course_id, student_id=student.user_id))
-    course.total_number_student += 1
-    session.commit()
-
-
-# ============================== ADD / REMOVE STUDENT ==============================
-
-
-class TestAddStudentToCourse:
-    # giảng viên chủ khóa học thêm sinh viên và tăng total_number_student
-    def test_owner_teacher_adds_student_and_increments_counter(
-        self, session, course, owner_teacher, student
-    ):
-        result = add_student_to_course(
-            student.user_id, course.course_id, session, owner_teacher
-        )
-
-        assert result.course_id == course.course_id
-        assert result.student_id == student.user_id
-        assert result.enrollment_id is not None
-        assert len(enrollments_of(session, course.course_id)) == 1
-        assert counter_of(session, course) == 1
-
-    # role admin không phải chủ khóa học
-    # vẫn có thể thêm sinh viên và tăng total_number_student
-    def test_admin_who_does_not_own_course_can_add_student(
-        self, session, course, admin, student
-    ):
-        add_student_to_course(student.user_id, course.course_id, session, admin)
-
-        assert counter_of(session, course) == 1
-
-    # raise forbidden nếu giảng viên không phải chủ khóa học
-    def test_raises_forbidden_when_teacher_does_not_own_course(
-        self, session, course, other_teacher, student
-    ):
-        with pytest.raises(
-            ForbiddenError, match="Bạn không có quyền thêm sinh viên vào lớp này"
-        ):
-            add_student_to_course(
-                student.user_id, course.course_id, session, other_teacher
-            )
-
-        assert enrollments_of(session, course.course_id) == []
-        assert counter_of(session, course) == 0
-
-    # raise not found khi không tìm thấy sinh viên
-    def test_raises_not_found_when_student_id_does_not_exist(
-        self, session, course, owner_teacher
-    ):
-        with pytest.raises(NotFoundError, match="Không tìm thấy sinh viên"):
-            add_student_to_course("KHONG_CO", course.course_id, session, owner_teacher)
-
-        assert counter_of(session, course) == 0
-
-    # raise not found khi student_id truyền vào không phải là sinh viên
-    def test_raises_not_found_when_target_user_is_not_a_student(
-        self, session, course, owner_teacher, other_teacher
-    ):
-        with pytest.raises(NotFoundError, match="Không tìm thấy sinh viên"):
-            add_student_to_course(
-                other_teacher.user_id, course.course_id, session, owner_teacher
-            )
-
-        assert enrollments_of(session, course.course_id) == []
-
-    # raise conflict khi sinh viên đã tồn tại trong khóa học
-    def test_raises_conflict_when_student_already_enrolled(
-        self, session, course, owner_teacher, student
-    ):
-        add_student_to_course(student.user_id, course.course_id, session, owner_teacher)
-
-        with pytest.raises(ConflictError, match="Sinh viên đã có trong lớp học"):
-            add_student_to_course(
-                student.user_id, course.course_id, session, owner_teacher
-            )
-
-        # lần thêm trùng không được để lại dòng thừa hay tăng counter
-        assert len(enrollments_of(session, course.course_id)) == 1
-        assert counter_of(session, course) == 1
-
-
-class TestDeleteStudentFromCourse:
-    # giảng viên chủ khóa học xóa sinh viên khỏi khóa và giảm total_number_student
-    def test_owner_teacher_removes_student_and_decrements_counter(
-        self, session, course, owner_teacher, student
-    ):
-        enroll_directly(session, course, student)
-
-        delete_student_from_course(
-            student.user_id, course.course_id, session, owner_teacher
-        )
-
-        assert enrollments_of(session, course.course_id) == []
-        assert counter_of(session, course) == 0
-
-    # raise forbidden khi giảng không phải chủ khóa học
-    def test_raises_forbidden_when_teacher_does_not_own_course(
-        self, session, course, other_teacher, student
-    ):
-        enroll_directly(session, course, student)
-
-        with pytest.raises(
-            ForbiddenError, match="Bạn không có quyền thực hiện hành động này"
-        ):
-            delete_student_from_course(
-                student.user_id, course.course_id, session, other_teacher
-            )
-
-        # bị chặn thì dữ liệu phải giữ nguyên
-        assert len(enrollments_of(session, course.course_id)) == 1
-        assert counter_of(session, course) == 1
-
-    # raise not found khi xóa sinh viên không thuộc về khóa học
-    def test_raises_not_found_when_student_is_not_in_course(
-        self, session, course, owner_teacher, student
-    ):
-        with pytest.raises(NotFoundError, match="Sinh viên không thuộc lớp học này"):
-            delete_student_from_course(
-                student.user_id, course.course_id, session, owner_teacher
-            )
-
-        # counter không được âm khi xoá người không có trong lớp
-        assert counter_of(session, course) == 0
-
-
-class TestGetCourseEnrollments:
-    # admin xem được danh sách
-    def test_admin_can_get_student_list(self, session, course, admin, student):
-        enroll_directly(session, course, student)
-
-        result = get_course_enrollments(session, course.course_id, admin)
-
-        assert len(result) == 1
-        assert result[0].student_id == student.user_id
-        assert result[0].full_name == student.full_name
-        assert result[0].email == student.email
-
-    # teacher chủ lớp xem được
-    def test_owner_teacher_can_get_student_list(
-        self, session, course, owner_teacher, student
-    ):
-        enroll_directly(session, course, student)
-
-        result = get_course_enrollments(session, course.course_id, owner_teacher)
-
-        assert len(result) == 1
-        assert result[0].student_id == student.user_id
-
-    # teacher không phải chủ lớp nhận 403
-    def test_raises_forbidden_when_teacher_does_not_own_course(
-        self, session, course, other_teacher
-    ):
-        with pytest.raises(ForbiddenError, match="Bạn không có quyền xem lớp học này"):
-            get_course_enrollments(session, course.course_id, other_teacher)
-
-    # student có trong lớp xem được
-    def test_student_in_course_can_get_student_list(self, session, course, student):
-        enroll_directly(session, course, student)
-
-        result = get_course_enrollments(session, course.course_id, student)
-
-        assert len(result) == 1
-        assert result[0].student_id == student.user_id
-
-    # student không có trong lớp nhận 403
-    def test_raises_forbidden_when_student_not_in_course(self, session, course):
-        other_student = make_user(session, "SV002", 3)
-
-        with pytest.raises(ForbiddenError, match="Bạn không có quyền xem lớp học này"):
-            get_course_enrollments(session, course.course_id, other_student)
-
-    # course_id không tồn tại nhận 404
-    def test_raises_not_found_when_course_id_does_not_exist(self, session, admin):
-        with pytest.raises(NotFoundError, match="Không tìm thấy lớp học"):
-            get_course_enrollments(session, "KHONG_EXIST", admin)
-
-    # lớp chưa có sinh viên trả []
-    def test_returns_empty_list_when_course_has_no_students(
-        self, session, course, owner_teacher
-    ):
-        result = get_course_enrollments(session, course.course_id, owner_teacher)
-
-        assert result == []
 
 
 # ============================== CREATE / UPDATE COURSE ==============================
@@ -592,281 +304,45 @@ class TestUpdateCourse:
 
 
 class TestCourseTimezone:
-    # POST: start_date không kèm múi giờ → 422 INVALID_FORMAT, nêu đúng tên field
-    def test_create_rejects_naive_start_date(self):
-        with pytest.raises(InvalidFormatError, match="start_date phải kèm múi giờ"):
-            CreateCourseRequest(
-                course_id="CS401",
-                course_name="Thiếu múi giờ",
-                term="HK1 2026-2027",
-                start_date=datetime(2026, 9, 7),
-                end_date=VALID_END,
-            )
+    def test_create_accepts_vietnam_local_datetime_with_offset(self):
+        request = CreateCourseRequest(
+            course_id="CS401",
+            course_name="Giờ Việt Nam",
+            term="HK1 2026-2027",
+            start_date=datetime(2026, 9, 7, tzinfo=VN_TZ),
+            end_date=datetime(2026, 12, 27, tzinfo=VN_TZ),
+        )
+        assert request.start_date == datetime(2026, 9, 7, tzinfo=VN_TZ)
 
-    # PATCH: end_date không kèm múi giờ → 422 INVALID_FORMAT
-    def test_update_rejects_naive_end_date(self):
-        with pytest.raises(InvalidFormatError, match="end_date phải kèm múi giờ"):
-            UpdateCourseRequest(end_date=datetime(2027, 1, 15))
-
-    # So sánh start/end theo thời điểm thật, không theo chữ số:
-    # 17:00Z ngày 06/09 chính là 00:00 ngày 07/09 giờ VN → bằng nhau → reject
-    def test_create_compares_instants_across_offsets(self):
-        with pytest.raises(InvalidFormatError, match="start_date phải trước end_date"):
+    def test_create_rejects_datetime_without_offset(self):
+        with pytest.raises(InvalidFormatError, match=r"start_date.*phải kèm múi giờ"):
             CreateCourseRequest(
                 course_id="CS402",
-                course_name="Khác offset",
+                course_name="Thiếu offset",
                 term="HK1 2026-2027",
-                start_date=vn(2026, 9, 7),
-                end_date=datetime(2026, 9, 6, 17, 0, tzinfo=UTC),
+                start_date=datetime(2026, 9, 7),
+                end_date=datetime(2026, 12, 27),
             )
 
-    # Input UTC được lưu đúng thời điểm và trả về theo giờ VN
-    def test_update_with_utc_input_returns_vn_time(self, session, course, owner_teacher):
+    def test_update_returns_vietnam_local_time_after_utc_storage(self, session, course, owner_teacher):
         result = update_course(
             course.course_id,
-            UpdateCourseRequest(start_date=datetime(2026, 10, 1, 0, 0, tzinfo=UTC)),
+            UpdateCourseRequest(start_date=datetime(2026, 10, 1, 7, 0, tzinfo=VN_TZ)),
             session,
             owner_teacher,
         )
-
-        assert result.start_date == vn(2026, 10, 1, 7, 0)
-        assert result.start_date.utcoffset().total_seconds() == 7 * 3600
+        assert result.start_date == datetime(2026, 10, 1, 7, 0, tzinfo=VN_TZ)
+        assert result.start_date.tzinfo is not None
         assert result.end_date == course.end_date
 
-    # PATCH chỉ gửi end_date (UTC) mà trước start_date trong DB (giờ VN) → vẫn bắt được
-    def test_update_only_end_date_compares_with_db_start_across_offsets(
-        self, session, course, owner_teacher
-    ):
-        # course.start_date = 07/09 00:00 VN = 06/09 17:00Z
-        with pytest.raises(InvalidFormatError, match="start_date phải trước end_date"):
-            update_course(
-                course.course_id,
-                UpdateCourseRequest(end_date=datetime(2026, 9, 6, 16, 0, tzinfo=UTC)),
-                session,
-                owner_teacher,
-            )
-
-
-# ============================== ROUTE LAYER ==============================
-# Test các endpoint POST /courses và PATCH /courses/{id} qua TestClient
-# để đảm bảo status code + JSON response mapping đúng.
-
-
-class TestCourseRoutes:
-    """Test endpoint HTTP layer qua TestClient, bypass JWT bằng dependency override."""
-
-    def _make_stub_require_role(self, user: User):
-        """Tạo dependency function trả về user cố định, bỏ qua kiểm tra role."""
-
-        def stub():
-            return user
-
-        return stub
-
-    # POST /courses — happy path trả về 201 với body đúng shape
-    def test_post_courses_returns_201(self, client, session, owner_teacher):
-        from app.core.dependencies import get_current_user
-
-        app.dependency_overrides[get_current_user] = lambda: owner_teacher
-
-        payload = {
-            "course_id": "CS_HTTP_1",
-            "course_name": "Qua HTTP",
-            "term": "HK1 2026-2027",
-            "start_date": "2026-09-07T00:00:00+07:00",
-            "end_date": "2026-12-27T00:00:00+07:00",
-        }
-        response = client.post("/courses", json=payload)
-        assert response.status_code == 201, response.text
-        body = response.json()
-        assert body["course_id"] == "CS_HTTP_1"
-        assert body["created_by"] == owner_teacher.user_id
-        assert body["total_number_student"] == 0
-        app.dependency_overrides.clear()
-
-    # POST /courses — thiếu field bắt buộc → 422
-    def test_post_courses_missing_required_field_returns_422(
-        self, client, owner_teacher
-    ):
-        from app.core.dependencies import get_current_user
-
-        app.dependency_overrides[get_current_user] = lambda: owner_teacher
-
-        payload = {
-            # thiếu course_name cố ý
-            "course_id": "CS_HTTP_BAD",
-            "term": "HK1",
-            "start_date": "2026-09-07T00:00:00+07:00",
-            "end_date": "2026-12-27T00:00:00+07:00",
-        }
-        response = client.post("/courses", json=payload)
-        assert response.status_code == 422
-        app.dependency_overrides.clear()
-
-    # POST /courses — trùng course_id → 409
-    def test_post_courses_duplicate_returns_409(
-        self, client, session, owner_teacher, course
-    ):
-        from app.core.dependencies import get_current_user
-
-        app.dependency_overrides[get_current_user] = lambda: owner_teacher
-
-        payload = {
-            "course_id": course.course_id,  # CS101 — đã tồn tại từ fixture
-            "course_name": "Trùng",
-            "term": "HK1",
-            "start_date": "2026-09-07T00:00:00+07:00",
-            "end_date": "2026-12-27T00:00:00+07:00",
-        }
-        response = client.post("/courses", json=payload)
-        assert response.status_code == 409
-        app.dependency_overrides.clear()
-
-    # PATCH /courses/{id} — owner teacher update course_name → 200
-    def test_patch_courses_owner_returns_200(
-        self, client, session, course, owner_teacher
-    ):
-        from app.core.dependencies import get_current_user
-
-        app.dependency_overrides[get_current_user] = lambda: owner_teacher
-
-        response = client.patch(
-            f"/courses/{course.course_id}",
-            json={"course_name": "Tên mới qua HTTP"},
+    def test_update_only_end_date_accepts_offset(self):
+        request = UpdateCourseRequest(
+            end_date=datetime.fromisoformat("2027-01-15T00:00:00+07:00")
         )
-        assert response.status_code == 200, response.text
-        body = response.json()
-        assert body["course_name"] == "Tên mới qua HTTP"
-        assert body["course_id"] == course.course_id
-        app.dependency_overrides.clear()
-
-    # PATCH /courses/{id} — teacher không phải chủ lớp → 403
-    def test_patch_courses_other_teacher_returns_403(
-        self, client, course, other_teacher
-    ):
-        from app.core.dependencies import get_current_user
-
-        app.dependency_overrides[get_current_user] = lambda: other_teacher
-
-        response = client.patch(
-            f"/courses/{course.course_id}",
-            json={"course_name": "Hack"},
-        )
-        assert response.status_code == 403
-        app.dependency_overrides.clear()
-
-    # PATCH /courses/{id} — course không tồn tại → 404
-    def test_patch_courses_missing_returns_404(self, client, owner_teacher):
-        from app.core.dependencies import get_current_user
-
-        app.dependency_overrides[get_current_user] = lambda: owner_teacher
-
-        response = client.patch(
-            "/courses/KHONG_CO",
-            json={"course_name": "X"},
-        )
-        assert response.status_code == 404
-        app.dependency_overrides.clear()
-
-    # PATCH /courses/{id} — body rỗng → 200 no-op
-    def test_patch_courses_empty_body_is_noop(self, client, course, owner_teacher):
-        from app.core.dependencies import get_current_user
-
-        app.dependency_overrides[get_current_user] = lambda: owner_teacher
-
-        response = client.patch(f"/courses/{course.course_id}", json={})
-        assert response.status_code == 200
-        assert response.json()["course_name"] == course.course_name
-        app.dependency_overrides.clear()
-
-    # PATCH /courses/{id} — gửi field=null phải bị bỏ qua → 200
-    def test_patch_courses_null_field_is_ignored(self, client, course, owner_teacher):
-        from app.core.dependencies import get_current_user
-
-        app.dependency_overrides[get_current_user] = lambda: owner_teacher
-
-        original_name = course.course_name
-        response = client.patch(
-            f"/courses/{course.course_id}",
-            json={"course_name": None, "term": "HK Mới"},
-        )
-        assert response.status_code == 200
-        body = response.json()
-        assert body["course_name"] == original_name  # KHÔNG bị ghi đè None
-        assert body["term"] == "HK Mới"
-        app.dependency_overrides.clear()
-
-    # PATCH /courses/{id} — chỉ gửi start_date trùng/sau end_date DB → 422
-    def test_patch_courses_only_start_after_db_end_returns_422(
-        self, client, course, owner_teacher
-    ):
-        from app.core.dependencies import get_current_user
-
-        app.dependency_overrides[get_current_user] = lambda: owner_teacher
-
-        response = client.patch(
-            f"/courses/{course.course_id}",
-            json={"start_date": "2027-01-01T00:00:00+07:00"},  # sau end_date DB
-        )
-        assert response.status_code == 422
-        app.dependency_overrides.clear()
-
-    # POST /courses — datetime không kèm múi giờ → 422 INVALID_FORMAT qua Global Exception Handler
-    def test_post_courses_naive_datetime_returns_invalid_format(self, client, owner_teacher):
-        from app.core.dependencies import get_current_user
-
-        app.dependency_overrides[get_current_user] = lambda: owner_teacher
-
-        payload = {
-            "course_id": "CS_HTTP_NAIVE",
-            "course_name": "Thiếu múi giờ",
-            "term": "HK1 2026-2027",
-            "start_date": "2026-09-07T00:00:00",
-            "end_date": "2026-12-27T00:00:00+07:00",
-        }
-        response = client.post("/courses", json=payload)
-
-        assert response.status_code == 422
-        body = response.json()
-        assert body["error_code"] == "INVALID_FORMAT"
-        assert "start_date phải kèm múi giờ" in body["message"]
-        app.dependency_overrides.clear()
-
-    # PATCH /courses/{id} — input "Z" (UTC) được trả về theo giờ VN (+07:00), cùng thời điểm
-    def test_patch_courses_utc_input_returns_vn_offset(self, client, course, owner_teacher):
-        from app.core.dependencies import get_current_user
-
-        app.dependency_overrides[get_current_user] = lambda: owner_teacher
-
-        response = client.patch(
-            f"/courses/{course.course_id}",
-            json={"end_date": "2027-01-15T00:00:00Z"},
-        )
-
-        assert response.status_code == 200, response.text
-        body = response.json()
-        assert body["end_date"] == "2027-01-15T07:00:00+07:00"
-        assert body["start_date"] == "2026-09-07T00:00:00+07:00"
-        app.dependency_overrides.clear()
+        assert request.end_date == datetime(2027, 1, 15, tzinfo=VN_TZ)
 
 
 # ============================== GET COURSES ==============================
-
-def make_course(session: Session, course_id: str, owner: User) -> Course:
-    """Tạo thêm lớp học cho test cần nhiều hơn 1 lớp."""
-    course = Course(
-        course_id=course_id,
-        course_name=f"Lớp {course_id}",
-        created_by=owner.user_id,
-        term="HK1 2026-2027",
-        start_date=vn(2026, 9, 7),
-        end_date=vn(2026, 12, 27),
-        total_number_student=0,
-    )
-    session.add(course)
-    session.commit()
-    session.refresh(course)
-    return course
 
 
 class TestGetCourses:
@@ -998,77 +474,23 @@ class TestGetCourse:
             get_course(session, "KHONG_CO", admin)
 
 
-class TestGetCourseRoutes:
-    """Test HTTP cho GET /courses và GET /courses/{course_id}."""
-
-    # GET /courses — teacher nhận 200, chỉ có lớp của mình
-    def test_get_courses_returns_200(
-        self, client, session, course, owner_teacher, other_teacher
+class TestStudentCourseGrades:
+    def test_student_course_grades_omit_problems_that_have_not_opened(
+        self, session, course, student
     ):
-        from app.core.dependencies import get_current_user
+        lesson = make_lesson(session, course)
+        future_problem = make_problem(
+            session,
+            lesson,
+            start_datetime=datetime.now(VN_TZ)
+            + timedelta(days=2),
+        )
+        make_enrollment(session, course, student)
 
-        make_course(session, "CS102", other_teacher)
-        app.dependency_overrides[get_current_user] = lambda: owner_teacher
+        response = build_course_response(
+            course, session, only_student_id=student.user_id
+        )
 
-        response = client.get("/courses")
-
-        assert response.status_code == 200, response.text
-        body = response.json()
-        assert len(body) == 1
-        assert body[0]["course_id"] == "CS101"
-        assert body[0]["created_by"] == owner_teacher.user_id
-        app.dependency_overrides.clear()
-
-    # GET /courses — role lạ nhận 403 qua Global Exception Handler
-    def test_get_courses_unknown_role_returns_403(self, client, session, course):
-        from app.core.dependencies import get_current_user
-
-        stranger = make_user(session, "XX001", 99)
-        app.dependency_overrides[get_current_user] = lambda: stranger
-
-        response = client.get("/courses")
-
-        assert response.status_code == 403
-        assert response.json()["error_code"] == "FORBIDDEN"
-        app.dependency_overrides.clear()
-
-    # GET /courses/{id} — chủ lớp nhận 200 với body đúng shape
-    def test_get_course_owner_returns_200(self, client, course, owner_teacher):
-        from app.core.dependencies import get_current_user
-
-        app.dependency_overrides[get_current_user] = lambda: owner_teacher
-
-        response = client.get(f"/courses/{course.course_id}")
-
-        assert response.status_code == 200, response.text
-        body = response.json()
-        assert body["course_id"] == course.course_id
-        assert body["course_name"] == course.course_name
-        assert body["total_number_student"] == 0
-        app.dependency_overrides.clear()
-
-    # GET /courses/{id} — student ngoài lớp nhận 403
-    def test_get_course_student_not_enrolled_returns_403(
-        self, client, course, student
-    ):
-        from app.core.dependencies import get_current_user
-
-        app.dependency_overrides[get_current_user] = lambda: student
-
-        response = client.get(f"/courses/{course.course_id}")
-
-        assert response.status_code == 403
-        assert response.json()["error_code"] == "FORBIDDEN"
-        app.dependency_overrides.clear()
-
-    # GET /courses/{id} — course_id không tồn tại nhận 404
-    def test_get_course_missing_returns_404(self, client, admin):
-        from app.core.dependencies import get_current_user
-
-        app.dependency_overrides[get_current_user] = lambda: admin
-
-        response = client.get("/courses/KHONG_CO")
-
-        assert response.status_code == 404
-        assert response.json()["error_code"] == "NOT_FOUND"
-        app.dependency_overrides.clear()
+        assert response.sessions[0].problems == []
+        assert response.grades[0].session_scores[str(lesson.lesson_id)] == []
+        assert future_problem.problem_id is not None

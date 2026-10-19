@@ -19,7 +19,7 @@ Covers:
 
 import os
 import sys
-from datetime import UTC, datetime
+from datetime import datetime
 from pathlib import Path
 
 # Add project root vào sys.path
@@ -42,6 +42,7 @@ from app.core.security.passwords import hash_password  # noqa: E402
 from app.core.security.tokens import create_access_token  # noqa: E402
 from app.core.database import get_session  # noqa: E402
 from app.core.dependencies import Role  # noqa: E402
+from app.core.utils.datetime_utils import VN_TZ  # noqa: E402
 from app.main import app  # noqa: E402
 from app.models import Class, Course, Enrollment, User  # noqa: E402
 
@@ -118,32 +119,32 @@ def setup_test_db() -> Session:
             course_name="Nhập môn lập trình",
             term="HK1 2026-2027",
             created_by="GV001",
-            start_date=datetime(2026, 9, 7, tzinfo=UTC),
-            end_date=datetime(2026, 12, 27, tzinfo=UTC),
+            start_date=datetime(2026, 9, 7, tzinfo=VN_TZ),
+            end_date=datetime(2026, 12, 27, tzinfo=VN_TZ),
         ),
         Course(
             course_id="CS102",
             course_name="Cấu trúc dữ liệu",
             term="HK1 2026-2027",
             created_by="GV001",
-            start_date=datetime(2026, 9, 7, tzinfo=UTC),
-            end_date=datetime(2026, 12, 27, tzinfo=UTC),
+            start_date=datetime(2026, 9, 7, tzinfo=VN_TZ),
+            end_date=datetime(2026, 12, 27, tzinfo=VN_TZ),
         ),
         Course(
             course_id="MATH201",
             course_name="Toán rời rạc",
             term="HK2 2026-2027",
             created_by="GV002",
-            start_date=datetime(2027, 1, 5, tzinfo=UTC),
-            end_date=datetime(2027, 4, 30, tzinfo=UTC),
+            start_date=datetime(2027, 1, 5, tzinfo=VN_TZ),
+            end_date=datetime(2027, 4, 30, tzinfo=VN_TZ),
         ),
         Course(
             course_id="DB101",
             course_name="Cơ sở dữ liệu",
             term="HK2 2025-2026",
             created_by="GV001",
-            start_date=datetime(2026, 1, 5, tzinfo=UTC),
-            end_date=datetime(2026, 4, 30, tzinfo=UTC),
+            start_date=datetime(2026, 1, 5, tzinfo=VN_TZ),
+            end_date=datetime(2026, 4, 30, tzinfo=VN_TZ),
         ),
     ]
     session.add_all(courses)

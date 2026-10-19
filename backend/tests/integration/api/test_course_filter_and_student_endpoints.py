@@ -11,7 +11,7 @@ Test cả 2 layer:
 
 import os
 from collections.abc import Iterator
-from datetime import UTC, datetime
+from datetime import datetime
 from pathlib import Path
 
 # Load .env ở root project TRƯỚC khi import app modules
@@ -27,6 +27,7 @@ if not os.getenv("JWT_SECRET_KEY"):
 
 import pytest  # noqa: E402
 from fastapi.testclient import TestClient  # noqa: E402
+from sqlalchemy.exc import IntegrityError  # noqa: E402
 from sqlalchemy.pool import StaticPool  # noqa: E402
 from sqlmodel import Session, SQLModel, create_engine  # noqa: E402
 
@@ -34,6 +35,7 @@ from app.core.exceptions import ForbiddenError, NotFoundError  # noqa: E402
 from app.core.security.passwords import hash_password  # noqa: E402
 from app.core.security.tokens import create_access_token  # noqa: E402
 from app.core.dependencies import Role  # noqa: E402
+from app.core.utils.datetime_utils import VN_TZ  # noqa: E402
 from app.main import app  # noqa: E402
 from app.modules.courses.service import (  # noqa: E402
     get_courses,
@@ -107,8 +109,8 @@ def make_course(
         course_name=course_name or f"Lớp {course_id}",
         created_by=owner.user_id,
         term=term,
-        start_date=datetime(2026, 9, 7, tzinfo=UTC),
-        end_date=datetime(2026, 12, 27, tzinfo=UTC),
+        start_date=datetime(2026, 9, 7, tzinfo=VN_TZ),
+        end_date=datetime(2026, 12, 27, tzinfo=VN_TZ),
         total_number_student=0,
     )
     session.add(course)
@@ -274,17 +276,18 @@ class TestGetCoursesFilter:
         # cũng không thấy CS103 (HK2, đã filter)
         assert ids == {"CS101"}
 
-    def test_student_with_duplicate_enrollments_deduped(
+    def test_student_course_filter_returns_course_once_when_duplicate_enrollment_is_rejected(
         self, session, teacher_a, student_a
     ):
-        """Lỗi 6: enrollment trùng (nếu có sẵn) phải được dedupe ở query student."""
+        """Unique constraint rejects a duplicate enrollment; the student still sees the course."""
         c1 = make_course(session, "CS101", teacher_a)
         assert c1.course_id == "CS101"
 
-        # Insert 2 enrollment cùng course/student (giả lập data bẩn)
+        enroll(session, c1.course_id, student_a.user_id)
         session.add(Enrollment(course_id="CS101", student_id=student_a.user_id))
-        session.add(Enrollment(course_id="CS101", student_id=student_a.user_id))
-        session.commit()
+        with pytest.raises(IntegrityError):
+            session.commit()
+        session.rollback()
 
         result = get_courses(session, student_a)
         assert len(result) == 1
@@ -368,12 +371,16 @@ class TestGetStudentCourses:
         with pytest.raises(NotFoundError, match="Không tìm thấy sinh viên"):
             get_student_courses(session, teacher_a.user_id, admin)
 
-    def test_dedupes_duplicate_enrollments(self, session, admin, student_a, teacher_a):
-        """Nếu data bẩn có duplicate enrollment, kết quả vẫn unique."""
-        make_course(session, "CS101", teacher_a)
+    def test_student_courses_returns_course_once_when_duplicate_enrollment_is_rejected(
+        self, session, admin, student_a, teacher_a
+    ):
+        """Unique constraint rejects a duplicate enrollment; the result remains unique."""
+        course = make_course(session, "CS101", teacher_a)
+        enroll(session, course.course_id, student_a.user_id)
         session.add(Enrollment(course_id="CS101", student_id=student_a.user_id))
-        session.add(Enrollment(course_id="CS101", student_id=student_a.user_id))
-        session.commit()
+        with pytest.raises(IntegrityError):
+            session.commit()
+        session.rollback()
 
         result = get_student_courses(session, student_a.user_id, admin)
         assert len(result) == 1

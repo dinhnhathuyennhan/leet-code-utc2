@@ -1,5 +1,6 @@
 import axiosInstance from "@/lib/axios";
 import { wrapAxiosError } from "@/lib/api/client";
+import { vnWeekRange } from "@/lib/helpers/datetime";
 import type { 
   ClassApiRecord, 
   CourseApiRecord, 
@@ -17,12 +18,48 @@ import type {
   StudentSearchResult 
 } from "@/lib/types/course";
 
-function languageFromCover(cover: string | null): CourseLanguage {
-  const value = (cover ?? "").toLowerCase();
+export interface CourseCreateRequest {
+  course_id: string;
+  course_name: string;
+  avt_link: string;
+  term: string;
+  start_date: string;
+  end_date: string;
+}
+
+export interface CourseUpdateRequest {
+  course_name?: string;
+  term?: string;
+  avt_link?: string;
+  start_date?: string;
+  end_date?: string;
+}
+
+export async function createCourse(data: CourseCreateRequest): Promise<CourseApiRecord> {
+  try {
+    const response = await axiosInstance.post<CourseApiRecord>("/courses", data);
+    return response.data;
+  } catch (error) {
+    throw wrapAxiosError(error);
+  }
+}
+
+export async function updateCourse(courseId: string, data: CourseUpdateRequest): Promise<CourseApiRecord> {
+  try {
+    const response = await axiosInstance.patch<CourseApiRecord>(`/courses/${courseId}`, data);
+    return response.data;
+  } catch (error) {
+    throw wrapAxiosError(error);
+  }
+}
+
+
+function languageFromCover(cover: string | null, ...fallbacks: string[]): CourseLanguage {
+  const value = [cover ?? "", ...fallbacks].join(" ").toLowerCase();
   if (value.includes("python")) return "python";
   if (value.includes("javascript") || value === "js") return "javascript";
   if (value.includes("cpp") || value.includes("c++")) return "cpp";
-  if (value === "c") return "c";
+  if (/(^|[^a-z])c([^a-z]|$)/.test(value) || value.includes("background-c")) return "c";
   return "java";
 }
 
@@ -33,36 +70,38 @@ function statusFromDates(start: string, end: string): CourseDetail["status"] {
   return "ongoing";
 }
 
+function parseTerm(term: string): { semester: number; academicYear: string } {
+  const normalized = term.trim();
+  const semesterMatch = normalized.match(/(?:HK|HỌC KỲ|SEMESTER)\s*([1-3])/i);
+  const yearMatch = normalized.match(/(\d{4}\s*[-/]\s*\d{4})/);
+  return {
+    semester: Number(semesterMatch?.[1] ?? 1),
+    academicYear: yearMatch?.[1].replace(/\s+/g, "") ?? normalized,
+  };
+}
+
 function isDueThisWeek(deadline: string, now = new Date()): boolean {
   const date = new Date(deadline);
   if (Number.isNaN(date.getTime())) return false;
-
-  const startOfWeek = new Date(now);
-  const day = startOfWeek.getDay();
-  const daysSinceMonday = (day + 6) % 7;
-  startOfWeek.setDate(startOfWeek.getDate() - daysSinceMonday);
-  startOfWeek.setHours(0, 0, 0, 0);
-
-  const endOfWeek = new Date(startOfWeek);
-  endOfWeek.setDate(endOfWeek.getDate() + 7);
+  // F2: Tính khoảng tuần theo lịch VN để tránh lệch khi browser ở múi giờ khác.
+  const [startOfWeek, endOfWeek] = vnWeekRange(now);
   return date >= startOfWeek && date < endOfWeek;
 }
 
 function toSummary(record: CourseApiRecord) {
-  const termMatch = record.term.match(/^HK(\d)\s*(.+)$/i);
-  const semester = Number(termMatch?.[1] ?? 1);
-  const academicYear = termMatch?.[2] ?? record.term;
+  const { semester, academicYear } = parseTerm(record.term);
   return {
     id: record.course_id,
     code: record.course_id,
     name: record.course_name,
-    language: languageFromCover(record.avt_link),
+    language: languageFromCover(record.avt_link, record.course_id, record.course_name),
     status: statusFromDates(record.start_date, record.end_date),
     teacher_name: record.created_by,
     semester,
     academic_year: academicYear,
     group: 1,
     sessions: record.sessions ?? [],
+    start_date: record.start_date,
   };
 }
 
@@ -73,13 +112,15 @@ function toStudent(record: {
   full_name: string; 
   email: string; 
   class_id?: string | null; 
-  submitted_lessons?: number; 
+  submitted_lessons?: number;
+  accepted_problems?: number;
   total_lessons?: number; 
   progress_percent?: number 
 }): CourseStudent {
   return { 
     ...record, 
-    submitted_lessons: record.submitted_lessons ?? 0, 
+    submitted_lessons: record.submitted_lessons ?? record.accepted_problems ?? 0,
+    accepted_problems: record.accepted_problems ?? record.submitted_lessons ?? 0,
     total_lessons: record.total_lessons ?? 0, 
     progress_percent: record.progress_percent ?? 0, 
     submission_history: [] 
@@ -89,7 +130,8 @@ function toStudent(record: {
 export async function getCourses(params: CourseListParams = {}): Promise<CourseListResponse> {
   try {
     const response = await axiosInstance.get<CourseApiRecord[]>("/courses");
-    let items = response.data.map(toSummary);
+    const allItems = response.data.map(toSummary);
+    let items = allItems;
     if (params.search) {
       const query = params.search.toLowerCase();
       items = items.filter((course) => `${course.code} ${course.name}`.toLowerCase().includes(query));
@@ -97,22 +139,22 @@ export async function getCourses(params: CourseListParams = {}): Promise<CourseL
     if (params.semester) items = items.filter((course) => course.semester === params.semester);
     if (params.academic_year) items = items.filter((course) => course.academic_year === params.academic_year);
     
-    const dueThisWeek = items.reduce(
+    const statsItems = allItems.filter((course) => {
+      if (params.semester && course.semester !== params.semester) return false;
+      if (params.academic_year && course.academic_year !== params.academic_year) return false;
+      return true;
+    });
+    const dueThisWeek = statsItems.reduce(
       (total, course) =>
         total + (course.sessions ?? []).filter((session) => isDueThisWeek(session.deadline)).length,
-      0,
-    );
-    const totalProblems = items.reduce(
-      (total, course) =>
-        total + (course.sessions ?? []).reduce((sessionTotal, session) => sessionTotal + session.problems.length, 0),
       0,
     );
     return {
       items,
       stats: {
-        course_count: items.length,
-        completed_problems: 0,
-        total_problems: totalProblems,
+        course_count: statsItems.length,
+        active_course_count: statsItems.filter((course) => course.status === "ongoing").length,
+        upcoming_courses: statsItems.filter((course) => course.status === "upcoming").length,
         due_this_week: dueThisWeek,
       },
     };
@@ -139,7 +181,7 @@ export async function getCourseById(courseId: number | string): Promise<CourseDe
       room: "", 
       end_date: response.data.end_date, 
       student_count: response.data.total_number_student, 
-      updated_at: "", 
+      updated_at: response.data.updated_at ?? null,
       sessions: response.data.sessions ?? [], 
       grades: response.data.grades ?? [] 
     };
@@ -156,11 +198,24 @@ export async function getCourseEnrollments(courseId: string): Promise<CourseStud
       full_name: string; 
       email: string; 
       class_id?: string | null; 
-      submitted_lessons?: number; 
+      submitted_lessons?: number;
+      accepted_problems?: number;
       total_lessons?: number; 
       progress_percent?: number 
     }>>(`/courses/${courseId}/enrollments`);
-    return response.data.map(toStudent);
+    const students = response.data.map(toStudent);
+    const course = await getCourseById(courseId);
+    const totalProblems = course.sessions.reduce((total, session) => total + session.problems.length, 0);
+    if (!totalProblems) return students;
+    const gradeByStudent = new Map((course.grades ?? []).map((row) => [row.student_id, row]));
+    return students.map((student) => {
+      const grade = gradeByStudent.get(student.student_id);
+      const submitted = grade
+        ? Object.values(grade.session_scores ?? {}).flat().filter((score) => score !== null && (typeof score === "object" ? score.submitted : true)).length
+        : 0;
+      const progressPercent = Math.round((submitted / totalProblems) * 100);
+      return { ...student, submitted_lessons: submitted, accepted_problems: submitted, total_lessons: totalProblems, progress_percent: progressPercent };
+    });
   } catch (error) {
     throw wrapAxiosError(error);
   }
@@ -208,8 +263,13 @@ export async function addStudentToCourse(courseId: string, studentId: string): P
 
 export async function addClassToCourse(courseId: string, classId: string): Promise<{ added_count: number; skipped_count: number }> {
   try {
-    const response = await axiosInstance.post<{ added_count: number; skipped_count: number }>(`/courses/${courseId}/enrollments/class`, { class_id: classId });
-    return response.data;
+    // Backend chỉ có endpoint thêm từng sinh viên, không có endpoint enrollment theo lớp.
+    const students = await getClassStudents(classId);
+    const results = await Promise.allSettled(students.map((student) => addStudentToCourse(courseId, student.user_id)));
+    return {
+      added_count: results.filter((result) => result.status === "fulfilled").length,
+      skipped_count: results.filter((result) => result.status === "rejected").length,
+    };
   } catch (error) {
     throw wrapAxiosError(error);
   }
@@ -256,7 +316,9 @@ export async function uploadProblemTestcases(courseId: string, lessonId: string 
   try {
     const formData = new FormData();
     formData.append("file", file);
-    const response = await axiosInstance.post<ProblemDetailData>(`/courses/${courseId}/lessons/${lessonId}/problems/${problemId}/testcases/upload`, formData);
+    const response = await axiosInstance.post<ProblemDetailData>(`/courses/${courseId}/lessons/${lessonId}/problems/${problemId}/testcases/upload`, formData, {
+      headers: { "Content-Type": "multipart/form-data" },
+    });
     return response.data;
   } catch (error) {
     throw wrapAxiosError(error);
@@ -272,7 +334,7 @@ export async function createLesson(courseId: string, data: LessonMutationRequest
       room: "", 
       end_date: response.data.end_date, 
       student_count: response.data.total_number_student, 
-      updated_at: "", 
+      updated_at: response.data.updated_at ?? null,
       sessions: response.data.sessions ?? [], 
       grades: response.data.grades ?? [] 
     };
@@ -290,7 +352,7 @@ export async function updateLesson(courseId: string, lessonId: number, data: Les
       room: "", 
       end_date: response.data.end_date, 
       student_count: response.data.total_number_student, 
-      updated_at: "", 
+      updated_at: response.data.updated_at ?? null,
       sessions: response.data.sessions ?? [], 
       grades: response.data.grades ?? [] 
     };
@@ -301,4 +363,14 @@ export async function updateLesson(courseId: string, lessonId: number, data: Les
 
 export function isCourseSessionDataAvailable(sessions: CourseSession[]): boolean {
   return sessions.length > 0;
+}
+
+/** Tạo bài tập mới thủ công trong một buổi học */
+export async function createProblem(courseId: string, lessonId: string | number, data: ProblemUpdateRequest): Promise<ProblemDetailData> {
+  try {
+    const response = await axiosInstance.post<ProblemDetailData>(`/courses/${courseId}/lessons/${lessonId}/problems`, data);
+    return response.data;
+  } catch (error) {
+    throw wrapAxiosError(error);
+  }
 }

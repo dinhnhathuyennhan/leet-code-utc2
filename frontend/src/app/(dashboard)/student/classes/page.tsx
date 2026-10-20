@@ -13,6 +13,7 @@ export default function StudentHomePage() {
       role="student"
       filters={filters}
       courses={courses}
+      stats={query.data?.stats}
       isLoading={query.isPending}
       isFetching={query.isFetching}
       error={query.error}

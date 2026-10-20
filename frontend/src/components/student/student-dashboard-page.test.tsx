@@ -27,10 +27,10 @@ vi.mock("@/lib/api/endpoints/dashboard", async (importOriginal) => {
       total_problems: 12,
       average_score: 7.5,
       courses: [
-        { id: "CS101", code: "CS101", name: "Nhập môn lập trình", language: "java", status: "ongoing", teacher_name: "Nguyễn Văn A", semester: 1, academic_year: "2024-2025", group: 1 },
-        { id: "CS201", code: "CS201", name: "Cấu trúc dữ liệu và giải thuật", language: "java", status: "ongoing", teacher_name: "Trần Thị B", semester: 1, academic_year: "2024-2025", group: 1 },
-        { id: "PY101", code: "PY101", name: "Lập trình Python cơ bản", language: "python", status: "ongoing", teacher_name: "Lê Văn C", semester: 2, academic_year: "2024-2025", group: 1 },
-        { id: "JS101", code: "JS101", name: "JavaScript nâng cao", language: "javascript", status: "upcoming", teacher_name: "Phạm Thị D", semester: 2, academic_year: "2024-2025", group: 1 },
+        { id: "CS101", code: "CS101", name: "Nhập môn lập trình", start_date: "2024-09-01", language: "java", status: "ongoing", teacher_name: "Nguyễn Văn A", semester: 1, academic_year: "2024-2025", group: 1 },
+        { id: "CS201", code: "CS201", name: "Cấu trúc dữ liệu và giải thuật", start_date: "2024-09-01", language: "java", status: "ongoing", teacher_name: "Trần Thị B", semester: 1, academic_year: "2024-2025", group: 1 },
+        { id: "PY101", code: "PY101", name: "Lập trình Python cơ bản", start_date: "2025-01-15", language: "python", status: "ongoing", teacher_name: "Lê Văn C", semester: 2, academic_year: "2024-2025", group: 1 },
+        { id: "JS101", code: "JS101", name: "JavaScript nâng cao", start_date: "2025-01-15", language: "javascript", status: "upcoming", teacher_name: "Phạm Thị D", semester: 2, academic_year: "2024-2025", group: 1 },
       ],
     })),
   };

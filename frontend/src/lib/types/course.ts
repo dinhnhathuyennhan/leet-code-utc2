@@ -14,6 +14,7 @@ export interface CourseApiRecord {
   term: string;
   start_date: string;
   end_date: string;
+  updated_at?: string | null;
   total_number_student: number;
   sessions?: CourseSession[];
   grades?: GradeRow[];
@@ -62,6 +63,7 @@ export interface CourseSummary {
   semester: number;
   academic_year: string;
   group: number;
+  start_date: string;
   sessions?: CourseSession[];
 }
 
@@ -73,8 +75,8 @@ export interface CourseListParams {
 
 export interface CourseListStats {
   course_count: number;
-  completed_problems: number;
-  total_problems: number;
+  active_course_count: number;
+  upcoming_courses: number;
   due_this_week: number;
 }
 
@@ -115,9 +117,10 @@ export interface CourseSession {
 
 export interface CourseDetail extends CourseSummary {
   room: string;
+  start_date: string;
   end_date: string;
   student_count: number;
-  updated_at: string;
+  updated_at: string | null;
   sessions: CourseSession[];
   grades?: GradeRow[];
 }
@@ -157,6 +160,7 @@ export interface CourseStudent {
   full_name: string;
   email: string;
   submitted_lessons: number;
+  accepted_problems: number;
   total_lessons: number;
   progress_percent: number;
   submission_history: StudentSubmission[];
@@ -186,6 +190,11 @@ export interface GradeScore {
   submitted?: boolean;
   is_similar?: boolean;
   is_overridden?: boolean;
+  submission_id?: number | null;
+  feedback?: string | null;
+  status?: string | null;
+  submitted_datetime?: string | null;
+  manual_score?: number | null;
 }
 
 export type GradeScoreValue = number | null | GradeScore;
@@ -226,7 +235,7 @@ export interface SessionDetailData {
     ast_cases: number;
     ast_similarity: string;
   };
-  alert: {
+  alert?: {
     problem_code: string;
     missing_students: number;
     problem_name: string;

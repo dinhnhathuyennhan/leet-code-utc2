@@ -16,6 +16,7 @@ const baseCourse: CourseSummary = {
   id: "CS101",
   code: "CS101.K64",
   name: "Nhập môn lập trình",
+  start_date: "2024-09-01",
   language: "java",
   status: "ongoing",
   teacher_name: "Nguyễn Văn A",

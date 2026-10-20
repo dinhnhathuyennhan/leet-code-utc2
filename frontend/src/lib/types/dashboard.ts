@@ -1,8 +1,8 @@
 import type { CourseSummary } from "@/lib/types/course";
 
-export type JudgeKind = "wrong_answer" | "similarity" | "compile_error";
+export type JudgeKind = "pending" | "wrong_answer" | "similarity" | "compile_error" | "graded";
 
-export type PendingFilter = "all" | "late_appeal" | "similarity" | "error";
+export type PendingFilter = "all" | "graded" | "late_appeal" | "similarity" | "error";
 
 export interface TeacherOverview {
   teacher_name: string;
@@ -17,6 +17,9 @@ export interface TeacherOverview {
 
 export interface PendingSubmission {
   id: number;
+  course_id: string;
+  lesson_id: number;
+  problem_id: number;
   student_name: string;
   student_code: string;
   course_code: string;
@@ -31,12 +34,16 @@ export interface PendingSubmissionParams {
   filter: PendingFilter;
   search?: string;
   limit?: number;
+  course?: string;
+  lesson_id?: number;
+  problem_id?: number;
+  include_graded?: boolean;
 }
 
 export interface PendingSubmissionsResponse {
   items: PendingSubmission[];
   total: number;
-  counts: Record<PendingFilter, number>;
+  counts: Record<PendingFilter, number> & { ungraded?: number };
 }
 
 export interface SubmissionTestcase {
@@ -61,6 +68,7 @@ export interface SubmissionDetail {
   status: string;
   compile_output: string | null;
   feedback: string | null;
+  manual_score?: number | null;
   passed_count: number;
   total_testcases: number;
   submitted_datetime: string;

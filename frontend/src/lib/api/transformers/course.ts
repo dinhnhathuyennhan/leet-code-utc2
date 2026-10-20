@@ -56,6 +56,7 @@ export function toCourseSummary(raw: CourseResponseRaw): CourseSummary {
     id: raw.course_id,
     code: raw.course_id,
     name: raw.course_name,
+    start_date: raw.start_date,
     language: inferLanguage(raw.avt_link, raw.course_id),
     status: inferStatus(raw.start_date, raw.end_date),
     teacher_name: raw.created_by,

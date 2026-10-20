@@ -6,6 +6,9 @@ from pydantic import BaseModel, Field
 
 class PendingSubmissionResponse(BaseModel):
     id: int
+    course_id: str
+    lesson_id: int
+    problem_id: int
     student_name: str
     student_code: str
     course_code: str
@@ -44,6 +47,7 @@ class SubmissionDetailResponse(BaseModel):
     status: str
     compile_output: str | None
     feedback: str | None
+    manual_score: float | None
     passed_count: int
     total_testcases: int
     submitted_datetime: datetime
@@ -53,3 +57,4 @@ class SubmissionDetailResponse(BaseModel):
 class SubmissionUpdateRequest(BaseModel):
     feedback: str | None = Field(default=None, max_length=10000)
     status: str | None = Field(default=None, max_length=50)
+    manual_score: float | None = Field(default=None, ge=0, le=10)

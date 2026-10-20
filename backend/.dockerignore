@@ -1,8 +1,10 @@
 # Bí mật — không được bake vào image
+
 .env
 .env.*
 
 # Môi trường ảo & cache
+
 venv/
 .venv/
 env/
@@ -16,13 +18,16 @@ __pycache__/
 htmlcov/
 
 # Không cần trong image production
+
 tests/
 requirements-dev.txt
 Dockerfile
 .dockerignore
 .gitignore
+.git/
 
 # IDE / OS
+
 .vs/
 .vscode/
 .idea/

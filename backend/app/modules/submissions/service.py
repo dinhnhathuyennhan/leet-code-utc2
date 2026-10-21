@@ -13,8 +13,9 @@ from app.modules.submissions.schemas import (
 from app.models import Course, Lesson, Problem, Submission, Testcase, User
 
 
-_VISIBLE_STATUSES = {"pending", "wrong_answer", "compile_error"}
-_ALLOWED_UPDATE_STATUSES = {"pending", "accepted", "wrong_answer", "compile_error"}
+_NEW_STATUSES = {"processing", "time_limit_exceeded", "runtime_error", "internal_error"}
+_VISIBLE_STATUSES = {"pending", "wrong_answer", "compile_error"} | _NEW_STATUSES
+_ALLOWED_UPDATE_STATUSES = {"pending", "accepted", "wrong_answer", "compile_error"} | _NEW_STATUSES
 
 
 def _teacher_course_ids(session: Session, current_user: User) -> set[str] | None:
@@ -59,6 +60,10 @@ def _judge_label(status: str) -> str:
         "pending": "Đang chờ chấm",
         "wrong_answer": "Sai kết quả",
         "compile_error": "Lỗi biên dịch",
+        "processing": "Đang chấm",
+        "time_limit_exceeded": "Quá thời gian",
+        "runtime_error": "Lỗi khi chạy",
+        "internal_error": "Lỗi hệ thống chấm",
     }.get(status.lower(), status)
 
 

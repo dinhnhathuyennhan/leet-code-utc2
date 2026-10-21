@@ -84,7 +84,7 @@ def build_course_response(
         for lesson_problems in problems_by_lesson.values()
         for problem in lesson_problems
     ]
-    best = grade_service.best_passed_counts(
+    best = grade_service.best_grade_scores(
         session, grade_problem_ids, [student.user_id for _, student in enrollments]
     )
     response.sessions = [CourseLessonResponse.model_validate(item) for item in lesson_responses]

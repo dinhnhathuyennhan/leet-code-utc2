@@ -142,6 +142,7 @@ class Submission(SQLModel, table=True):
     manual_score: float | None = None
     passed_count: int = Field(default=0)
     submitted_datetime: datetime = Field(sa_type=UTCDateTime)
+    judge_tokens: list[str] | None = Field(default=None, sa_type=JSON)
 
     problem: Problem | None = Relationship(back_populates="submissions")
     student: User | None = Relationship(back_populates="submissions")

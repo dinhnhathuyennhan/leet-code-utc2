@@ -1,9 +1,23 @@
 import os
+import logging
+import sys
 from contextlib import asynccontextmanager
 
 from dotenv import load_dotenv
 
 load_dotenv()
+from app.modules.submissions.judge0.grading_queue import start as start_grading  # noqa: E402
+from app.modules.submissions.judge0.grading_queue import stop as stop_grading  # noqa: E402
+app_logger = logging.getLogger("app")
+app_logger.setLevel(os.getenv("APP_LOG_LEVEL", "INFO").upper())
+app_logger.propagate = False
+if not any(getattr(handler, "_cham_code_console", False) for handler in app_logger.handlers):
+    console_handler = logging.StreamHandler(sys.stdout)
+    console_handler._cham_code_console = True
+    console_handler.setFormatter(
+        logging.Formatter("%(asctime)s %(levelname)s %(name)s: %(message)s")
+    )
+    app_logger.addHandler(console_handler)
 
 from fastapi import FastAPI  # noqa: E402
 from fastapi.middleware.cors import CORSMiddleware  # noqa: E402
@@ -17,7 +31,9 @@ from app.seed.seed_data import seed_data  # noqa: E402
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     seed_data()
+    start_grading()
     yield
+    stop_grading()
 
 
 app = FastAPI(lifespan=lifespan)

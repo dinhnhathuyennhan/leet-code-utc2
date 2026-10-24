@@ -11,6 +11,7 @@ import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useAuth } from "@/context/auth-context";
 import { getHomePath } from "@/lib/auth/redirect";
 import { Loader2 } from "lucide-react";
+import { ConnectionLostState } from "@/components/shared/page-state";
 
 const PUBLIC_ROUTES = ["/login", "/forgot-password"];
 const LOGIN_ROUTE = "/login";
@@ -80,6 +81,7 @@ function getRedirectTarget(
 
 export function RouteGuard({ children }: { children: React.ReactNode }) {
   const auth = useAuth();
+  const [retryingConnection, setRetryingConnection] = useState(false);
   const isHydrated = useSyncExternalStore(
     subscribeToHydration,
     getClientHydrationSnapshot,
@@ -143,6 +145,10 @@ export function RouteGuard({ children }: { children: React.ReactNode }) {
     );
   }
 
+  if (auth.status === "connection-lost") {
+    return <ConnectionLostState retrying={retryingConnection} onRetry={() => { setRetryingConnection(true); void auth.retryConnection().finally(() => setRetryingConnection(false)); }} />;
+  }
+
   // --- LUỒNG 2: Xử lý hiển thị màn hình 403 (Sai quyền) ---
   if (
     auth.status === "authenticated" &&
@@ -182,5 +188,6 @@ export function RouteGuard({ children }: { children: React.ReactNode }) {
     );
   }
 
-  return <Fragment key={pathname}>{children}</Fragment>;
+  // Đổi tài khoản phải remount toàn bộ dashboard để không giữ state/tab của user cũ.
+  return <Fragment key={`${pathname}:${auth.status === "authenticated" ? auth.user.user_id : "guest"}`}>{children}</Fragment>;
 }

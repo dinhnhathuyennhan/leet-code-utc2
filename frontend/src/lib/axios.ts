@@ -82,6 +82,11 @@ const REFRESH_EXEMPT_PATHS = new Set([
 ]);
 
 let refreshPromise: Promise<string | null> | null = null;
+let lastRefreshWasNetworkError = false;
+
+export function wasLastRefreshNetworkError(): boolean {
+  return lastRefreshWasNetworkError;
+}
 
 /**
  * POST /auth/refresh-access-token — cookie refresh_token tự đi kèm nhờ withCredentials.
@@ -92,6 +97,7 @@ export function refreshAccessToken(): Promise<string | null> {
 
   refreshPromise = (async () => {
     try {
+      lastRefreshWasNetworkError = false;
       // Dùng axios.post thuần — tránh kích hoạt lại response interceptor
       const response = await axios.post<RefreshResponse>(
         `${API_URL}/auth/refresh-access-token`,
@@ -101,7 +107,8 @@ export function refreshAccessToken(): Promise<string | null> {
       const newToken = response.data.access_token;
       setAccessToken(newToken);
       return newToken;
-    } catch {
+    } catch (error) {
+      lastRefreshWasNetworkError = !axios.isAxiosError(error) || !error.response;
       setAccessToken(null);
       return null;
     } finally {

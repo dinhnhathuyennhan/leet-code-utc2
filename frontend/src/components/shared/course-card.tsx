@@ -40,7 +40,7 @@ export function CourseCard({ course, href, view }: CourseCardProps) {
 
       <div className={cn("min-h-[142px] space-y-3 p-4", isList && "flex flex-1 flex-col justify-center")}>
         <StatusBadge label={status.label} tone={status.tone} className="w-fit" />
-        <h3 className="text-[15px] font-semibold leading-snug">{course.name}</h3>
+        <h3 className="truncate text-[15px] font-semibold leading-snug" title={course.name}>{course.name}</h3>
         <p className="flex items-center gap-2 text-sm font-medium">
           <CircleUser className="size-4 shrink-0 text-muted-foreground" />
           <span className="truncate">{course.teacher_name}</span>

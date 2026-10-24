@@ -57,7 +57,7 @@ export async function updateCourse(courseId: string, data: CourseUpdateRequest):
 function languageFromCover(cover: string | null, ...fallbacks: string[]): CourseLanguage {
   const value = [cover ?? "", ...fallbacks].join(" ").toLowerCase();
   if (value.includes("python")) return "python";
-  if (value.includes("javascript") || value === "js") return "javascript";
+  if (value.includes("javascript") || value.includes("background-js") || value === "js") return "javascript";
   if (value.includes("cpp") || value.includes("c++")) return "cpp";
   if (/(^|[^a-z])c([^a-z]|$)/.test(value) || value.includes("background-c")) return "c";
   return "java";

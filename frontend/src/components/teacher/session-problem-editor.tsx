@@ -4,7 +4,7 @@ import { useState } from "react";
 import { FileArchive, Plus, Save, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 
-import { updateProblem, uploadProblemTestcases } from "@/lib/api/endpoints/courses";
+import { deleteProblem, updateProblem, uploadProblemTestcases } from "@/lib/api/endpoints/courses";
 import type { ProblemUpdateRequest, SessionExercise } from "@/lib/types/course";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -15,6 +15,7 @@ interface SessionProblemEditorProps {
   sessionId: string;
   exercise: SessionExercise;
   onSaved: (exercise: SessionExercise) => void;
+  onDeleted: () => void;
 }
 
 type Draft = Pick<SessionExercise, "title" | "description" | "constraints" | "level" | "time_limit_seconds" | "starter_code"> & {
@@ -27,7 +28,7 @@ function toDraft(exercise: SessionExercise): Draft {
   return { title: exercise.title, description: exercise.description, constraints: exercise.constraints, level: exercise.level, time_limit_seconds: exercise.time_limit_seconds, starter_code: exercise.starter_code, hint: exercise.hint ?? "", complexity: exercise.complexity ?? "", testcases: (exercise.testcases ?? []).map((testcase) => ({ ...testcase })) };
 }
 
-export function SessionProblemEditor({ courseId, sessionId, exercise, onSaved }: SessionProblemEditorProps) {
+export function SessionProblemEditor({ courseId, sessionId, exercise, onSaved, onDeleted }: SessionProblemEditorProps) {
   const [draft, setDraft] = useState<Draft>(() => toDraft(exercise));
   const [saving, setSaving] = useState(false);
   const [uploading, setUploading] = useState(false);
@@ -63,7 +64,16 @@ export function SessionProblemEditor({ courseId, sessionId, exercise, onSaved }:
     } catch (error) { toast.error(error instanceof Error ? error.message : "Không thể đọc file testcase."); } finally { setUploading(false); }
   }
 
-  return <section className="space-y-4 rounded-xl border bg-card p-4 shadow-sm"><div className="flex items-center justify-between"><div><h2 className="font-bold text-[#2f226b]">SOẠN THẢO BÀI {exercise.order}</h2><p className="text-xs text-muted-foreground">Chỉnh nội dung theo dữ liệu bài tập đang chọn.</p></div><Button onClick={() => void save()} disabled={saving} className="bg-[#2f226b] text-white"><Save className="size-4" /> {saving ? "Đang lưu..." : "Lưu bài tập"}</Button></div>
+  async function removeProblem() {
+    if (!window.confirm("Xóa bài tập này khỏi buổi học? Chỉ bài chưa có bài nộp mới được xóa.")) return;
+    try {
+      await deleteProblem(courseId, sessionId, exercise.id);
+      onDeleted();
+      toast.success("Đã xóa bài tập.");
+    } catch (error) { toast.error(error instanceof Error ? error.message : "Không thể xóa bài tập."); }
+  }
+
+  return <section className="space-y-4 rounded-xl border bg-card p-4 shadow-sm"><div className="flex items-center justify-between"><div><h2 className="font-bold text-[#2f226b]">SOẠN THẢO BÀI {exercise.order}</h2><p className="text-xs text-muted-foreground">Chỉnh nội dung theo dữ liệu bài tập đang chọn.</p></div><div className="flex gap-2"><Button variant="outline" onClick={() => void removeProblem()} className="text-red-600"><Trash2 className="size-4" /> Xóa bài</Button><Button onClick={() => void save()} disabled={saving} className="bg-[#2f226b] text-white"><Save className="size-4" /> {saving ? "Đang lưu..." : "Lưu bài tập"}</Button></div></div>
     <label className="block space-y-1 text-xs font-semibold">Tên bài tập<Input value={draft.title} onChange={(event) => setField("title", event.target.value)} className="bg-indigo-50/70" /></label>
     <div className="grid gap-3 sm:grid-cols-3"><label className="space-y-1 text-xs font-semibold">Mức độ<select value={draft.level} onChange={(event) => setField("level", event.target.value as Draft["level"])} className="mt-1 h-9 w-full rounded-lg border bg-indigo-50/70 px-2 text-sm"><option value="easy">Dễ</option><option value="medium">Trung bình</option><option value="hard">Khó</option></select></label><label className="space-y-1 text-xs font-semibold">Giới hạn thời gian (giây)<Input type="number" value={draft.time_limit_seconds} onChange={(event) => setField("time_limit_seconds", Number(event.target.value))} className="bg-indigo-50/70" /></label><div className="space-y-1 text-xs font-semibold"><span>Điểm tối đa</span><div className="flex h-9 items-center rounded-lg bg-indigo-50/70 px-3 text-sm text-muted-foreground">Theo testcase</div></div></div>
     <label className="block space-y-1 text-xs font-semibold">Mô tả bài<Textarea value={draft.description} onChange={(event) => setField("description", event.target.value)} className="min-h-40 bg-indigo-50/70" /></label>

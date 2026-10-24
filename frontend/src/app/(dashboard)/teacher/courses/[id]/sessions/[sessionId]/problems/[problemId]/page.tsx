@@ -7,6 +7,7 @@ import Link from "next/link";
 
 import { ErrorState } from "@/components/shared/page-state";
 import { ProblemSubmissionsPanel } from "@/components/teacher/problem-submissions-panel";
+import { TestcaseManager } from "@/components/teacher/testcase-manager";
 import { useBreadcrumbLabels } from "@/components/shared/breadcrumb-context";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -57,6 +58,7 @@ export default function TeacherProblemDetailPage() {
         <section className="h-fit space-y-3 rounded-2xl border bg-card p-6 shadow-sm"><h2 className="font-bold text-slate-900">Test cases mẫu</h2>{data.testcases.filter((testcase) => testcase.is_sample).map((testcase, index) => <div key={testcase.id} className="rounded-xl bg-indigo-50 p-4 text-sm"><p className="mb-2 font-semibold text-indigo-900">Test #{index + 1}</p><div className="grid gap-2"><div><p className="text-xs text-muted-foreground">Input</p><pre className="whitespace-pre-wrap rounded bg-white p-2">{testcase.input}</pre></div><div><p className="text-xs text-muted-foreground">Output mong đợi</p><pre className="whitespace-pre-wrap rounded bg-white p-2">{testcase.expected_output}</pre></div></div></div>)}</section>
       </section>
       <ProblemSubmissionsPanel courseId={courseId} lessonId={sessionId} problemId={problemId} />
+      <TestcaseManager courseId={courseId} lessonId={sessionId} problemId={problemId} />
     </div>
   );
 }

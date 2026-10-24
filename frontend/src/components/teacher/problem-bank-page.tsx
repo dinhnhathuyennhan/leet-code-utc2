@@ -1,54 +1,41 @@
 "use client";
 
-import { useMemo, useState } from "react";
-import { Pencil, Plus, Search, Trash2, UserPlus } from "lucide-react";
+import { useEffect, useState } from "react";
+import { Filter, Plus, Search } from "lucide-react";
 import { toast } from "sonner";
-
-import { MOCK_MY_PROBLEMS, MOCK_PUBLIC_PROBLEMS, type MockProblemBankItem } from "@/lib/mock/problem-bank";
+import { getProblems, type ProblemListItem } from "@/lib/api/endpoints/problems";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { ErrorState } from "@/components/shared/page-state";
+import { Skeleton } from "@/components/ui/skeleton";
 
-type ProblemBankTab = "public" | "mine";
-
-const levelClassName: Record<MockProblemBankItem["level"], string> = {
-  DỄ: "bg-emerald-100 text-emerald-700",
-  "TRUNG BÌNH": "bg-amber-100 text-amber-700",
-  KHÓ: "bg-violet-100 text-violet-700",
-};
+const LEVELS = [{ value: "", label: "Tất cả mức độ" }, { value: "easy", label: "Dễ" }, { value: "medium", label: "Trung bình" }, { value: "hard", label: "Khó" }] as const;
 
 export function ProblemBankPage() {
-  const [activeTab, setActiveTab] = useState<ProblemBankTab>("public");
   const [query, setQuery] = useState("");
-  const [myProblems, setMyProblems] = useState(MOCK_MY_PROBLEMS);
-  const problems = activeTab === "public" ? MOCK_PUBLIC_PROBLEMS : myProblems;
-  const filteredProblems = useMemo(() => {
-    const normalizedQuery = query.trim().toLowerCase();
-    if (!normalizedQuery) return problems;
-    return problems.filter((problem) => `${problem.code} ${problem.title} ${problem.description}`.toLowerCase().includes(normalizedQuery));
-  }, [problems, query]);
+  const [level, setLevel] = useState<"" | "easy" | "medium" | "hard">("");
+  const [page, setPage] = useState(1);
+  const [items, setItems] = useState<ProblemListItem[]>([]);
+  const [total, setTotal] = useState(0);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<unknown>(null);
+  const [refreshKey, setRefreshKey] = useState(0);
+  const pageSize = 12;
 
-  function showMockAction(message: string) {
-    // MOCKUP: Không gọi API khi nghiệp vụ ngân hàng đề chưa được triển khai.
-    toast.info(message);
-  }
+  useEffect(() => {
+    let active = true;
+    void getProblems({ q: query.trim() || undefined, level: level || undefined, page, page_size: pageSize }).then((response) => { if (!active) return; setError(null); setItems(response.items); setTotal(response.total); }).catch((requestError) => { if (active) setError(requestError); }).finally(() => { if (active) setLoading(false); });
+    return () => { active = false; };
+  }, [query, level, page, refreshKey]);
 
-  function removeMockProblem(id: string) {
-    // MOCKUP: Chỉ xóa khỏi state cục bộ để mô phỏng thao tác trên tab của tôi.
-    setMyProblems((current) => current.filter((problem) => problem.id !== id));
-    toast.success("Đã xóa đề khỏi danh sách mockup.");
-  }
-
-  return <section className="min-h-[calc(100dvh-110px)] rounded-xl bg-[#f8f9ff] p-0 shadow-sm">
-    <div className="flex items-center justify-between border-b bg-card px-4"><div className="flex gap-8"><TabButton active={activeTab === "public"} onClick={() => setActiveTab("public")}>Ngân hàng đề UTC2</TabButton><TabButton active={activeTab === "mine"} onClick={() => setActiveTab("mine")}>Ngân hàng của tôi {activeTab === "mine" && <span className="rounded bg-[#34227a] px-1.5 py-0.5 text-[10px] text-white">{myProblems.length}</span>}</TabButton></div></div>
-    <div className="m-4 rounded-xl bg-card p-3"><div className="flex flex-wrap items-center justify-between gap-3"><div className="relative w-full max-w-sm"><Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-slate-400" /><Input value={query} onChange={(event) => setQuery(event.target.value)} className="h-9 border-0 bg-[#f8f9ff] pl-9 shadow-none" placeholder="Nhập mã bài tập, tên bài cần tìm..." /></div><Button disabled={activeTab === "public"} onClick={() => showMockAction("Mở form thêm bài tập mockup.")} className="bg-[#34227a] text-white disabled:bg-slate-200 disabled:text-white"><UserPlus className="size-4" /> Thêm bài tập</Button></div></div>
-    <div className="grid gap-4 px-4 pb-6 md:grid-cols-2 xl:grid-cols-3">{filteredProblems.map((problem) => <ProblemCard key={problem.id} problem={problem} editable={activeTab === "mine"} onEdit={() => showMockAction(`Mở form sửa ${problem.code}.`)} onDelete={() => removeMockProblem(problem.id)} />)}{filteredProblems.length === 0 && <div className="col-span-full rounded-xl bg-card p-10 text-center text-sm text-muted-foreground">Không tìm thấy bài tập phù hợp.</div>}</div>
+  const totalPages = Math.max(1, Math.ceil(total / pageSize));
+  return <section className="min-h-[calc(100dvh-110px)] rounded-xl bg-[#f8f9ff] shadow-sm"><header className="flex flex-wrap items-center justify-between gap-3 border-b bg-card px-4 py-3 sm:px-6"><div><h1 className="text-xl font-bold text-[#2f226b] sm:text-2xl">Ngân hàng bài</h1><p className="text-sm text-muted-foreground">Danh sách bài từ backend, gồm bài dùng chung và bài thuộc các khóa học của bạn.</p></div><Button onClick={() => toast.info("Form tạo bài đã được tích hợp trong trang soạn buổi học.")} className="bg-[#34227a] text-white"><Plus className="size-4" /> Tạo bài</Button></header>
+    <div className="m-4 flex flex-wrap items-center gap-3 rounded-xl bg-card p-3"><div className="relative min-w-0 flex-1 sm:min-w-64"><Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-slate-400" /><Input value={query} onChange={(event) => { setQuery(event.target.value); setPage(1); }} className="h-9 pl-9" placeholder="Tìm mã hoặc tên bài..." /></div><div className="flex items-center gap-2"><Filter className="size-4 text-muted-foreground" /><select value={level} onChange={(event) => { setLevel(event.target.value as typeof level); setPage(1); }} className="h-9 rounded-md border bg-background px-3 text-sm">{LEVELS.map((item) => <option key={item.value} value={item.value}>{item.label}</option>)}</select></div></div>
+    {loading ? <div className="grid gap-4 px-4 pb-6 md:grid-cols-2 xl:grid-cols-3">{Array.from({ length: 6 }, (_, index) => <Skeleton key={index} className="h-36 rounded-xl" />)}</div> : error ? <div className="p-4"><ErrorState error={error} onRetry={() => setRefreshKey((current) => current + 1)} /></div> : <><div className="grid gap-4 px-4 pb-6 md:grid-cols-2 xl:grid-cols-3">{items.map((problem) => <ProblemCard key={problem.id} problem={problem} />)}{!items.length && <div className="col-span-full rounded-xl bg-card p-10 text-center text-sm text-muted-foreground">Không tìm thấy bài phù hợp.</div>}</div><footer className="flex flex-wrap items-center justify-between gap-3 border-t px-4 py-4 text-sm text-muted-foreground"><span>{total} bài · Trang {page}/{totalPages}</span><div className="flex gap-2"><Button variant="outline" size="sm" disabled={page <= 1} onClick={() => setPage((current) => current - 1)}>Trang trước</Button><Button variant="outline" size="sm" disabled={page >= totalPages} onClick={() => setPage((current) => current + 1)}>Trang sau</Button></div></footer></>}
   </section>;
 }
 
-function TabButton({ active, onClick, children }: { active: boolean; onClick: () => void; children: React.ReactNode }) {
-  return <button type="button" onClick={onClick} className={`flex items-center gap-1.5 border-b-2 px-4 py-3 text-sm font-medium transition ${active ? "border-indigo-600 text-indigo-700" : "border-transparent text-slate-600 hover:text-indigo-700"}`}>{children}</button>;
-}
-
-function ProblemCard({ problem, editable, onEdit, onDelete }: { problem: MockProblemBankItem; editable: boolean; onEdit: () => void; onDelete: () => void }) {
-  return <article className="group min-h-[128px] rounded-xl bg-card p-4 shadow-sm transition hover:-translate-y-0.5 hover:shadow-md"><div className="flex items-start justify-between gap-3"><div><p className="font-mono text-[11px] font-semibold text-indigo-900">{problem.code}</p><h2 className="mt-1 text-sm font-bold text-indigo-950">{problem.title} <span className={`ml-1 rounded px-1.5 py-0.5 text-[10px] font-semibold ${levelClassName[problem.level]}`}>{problem.level}</span></h2></div>{editable && <div className="flex gap-2"><Button variant="ghost" size="icon" className="size-8 bg-[#34227a] text-white hover:bg-indigo-900" onClick={onEdit} aria-label={`Sửa ${problem.title}`}><Pencil className="size-4" /></Button><Button variant="ghost" size="icon" className="size-8 bg-[#34227a] text-white hover:bg-red-700" onClick={onDelete} aria-label={`Xóa ${problem.title}`}><Trash2 className="size-4" /></Button></div>}</div><p className="mt-3 text-xs leading-5 text-slate-600">{problem.description}</p>{!editable && <Button variant="ghost" size="sm" className="mt-2 h-7 px-0 text-xs text-indigo-700" onClick={() => toast.info("Đã chọn đề mockup.")}><Plus className="size-3" /> Chọn vào buổi học</Button>}</article>;
+function ProblemCard({ problem }: { problem: ProblemListItem }) {
+  const level = problem.level === "easy" ? "Dễ" : problem.level === "hard" ? "Khó" : "Trung bình";
+  return <article className="min-w-0 rounded-xl bg-card p-4 shadow-sm"><div className="flex items-start justify-between gap-3"><div className="min-w-0"><p className="font-mono text-xs text-indigo-700">{problem.code ?? `Problem #${problem.id}`}</p><h2 className="mt-1 truncate font-bold text-slate-900" title={problem.title}>{problem.title}</h2></div><span className="shrink-0 rounded px-2 py-0.5 text-xs font-semibold bg-indigo-50 text-indigo-700">{level}</span></div><div className="mt-4 flex items-center justify-between text-xs text-muted-foreground"><span>{problem.total_number_testcase} testcase</span><span>{problem.lesson_id === null ? "Ngân hàng chung" : "Đã gắn lớp"}</span></div></article>;
 }

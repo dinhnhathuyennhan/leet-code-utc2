@@ -280,13 +280,7 @@ export function CourseStudentsTable({
               </div>
               <div className="flex justify-end">
                 <Button
-                  disabled={
-                    adding || mode === "class"
-                      ? !classId ||
-                        classStudents.isPending ||
-                        !candidates.length
-                      : !studentId.trim()
-                  }
+                  disabled={adding || (mode === "class" ? !classId || classStudents.isPending || !candidates.length : !studentId.trim())}
                   onClick={() => void add()}
                   className="bg-[#34227a] text-white"
                 >

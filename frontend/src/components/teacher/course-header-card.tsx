@@ -37,6 +37,9 @@ export function CourseHeaderCard({ course, onCreateSession, onEditCourse }: Cour
         </div>
         <div className="flex flex-wrap items-center gap-x-8 gap-y-2 text-[15px]">
           <MetaItem icon={<CalendarCheck className="size-4 text-slate-500" />}>
+            Ngày bắt đầu: <strong>{formatDate(course.start_date)}</strong>
+          </MetaItem>
+          <MetaItem icon={<CalendarCheck className="size-4 text-slate-500" />}>
             Ngày kết thúc: <strong>{formatDate(course.end_date)}</strong>
           </MetaItem>
           <MetaItem icon={<UserCheck className="size-4 text-slate-500" />}>

@@ -35,6 +35,34 @@ export interface CourseUpdateRequest {
   end_date?: string;
 }
 
+export interface ProblemCreateRequest {
+  title: string;
+  function_name: string;
+  description: string;
+  constraints: string;
+  level: "easy" | "medium" | "hard";
+  time_limit_seconds: number;
+  starter_codes: Record<"python" | "c" | "cpp" | "java", string>;
+  start_datetime: string;
+  end_datetime: string;
+  hint?: string | null;
+  complexity?: string | null;
+  testcases: Array<{ input: unknown[]; expected_output: unknown; is_sample: boolean }>;
+}
+
+export async function createBankProblem(data: ProblemCreateRequest): Promise<ProblemDetailData> {
+  try {
+    const response = await axiosInstance.post<ProblemDetailData>("/problems", data);
+    return response.data;
+  } catch (error) { throw wrapAxiosError(error); }
+}
+
+export async function attachProblemsToLesson(courseId: string, lessonId: string | number, problemIds: number[]): Promise<void> {
+  try {
+    await axiosInstance.post(`/courses/${courseId}/lessons/${lessonId}/problems`, { problem_ids: problemIds });
+  } catch (error) { throw wrapAxiosError(error); }
+}
+
 export async function createCourse(data: CourseCreateRequest): Promise<CourseApiRecord> {
   try {
     const response = await axiosInstance.post<CourseApiRecord>("/courses", data);
@@ -172,24 +200,6 @@ export async function getCourseTerms(): Promise<CourseTermsResponse> {
   }
 }
 
-export async function getCourseById(courseId: number | string): Promise<CourseDetail> {
-  try {
-    const response = await axiosInstance.get<CourseApiRecord>(`/courses/${courseId}`);
-    const course = toSummary(response.data);
-    return { 
-      ...course, 
-      room: "", 
-      end_date: response.data.end_date, 
-      student_count: response.data.total_number_student, 
-      updated_at: response.data.updated_at ?? null,
-      sessions: response.data.sessions ?? [], 
-      grades: response.data.grades ?? [] 
-    };
-  } catch (error) {
-    throw wrapAxiosError(error);
-  }
-}
-
 export async function getCourseEnrollments(courseId: string): Promise<CourseStudent[]> {
   try {
     const response = await axiosInstance.get<Array<{ 
@@ -311,6 +321,12 @@ export async function updateProblem(courseId: string, lessonId: string | number,
   }
 }
 
+export async function deleteProblem(courseId: string, lessonId: string | number, problemId: string | number): Promise<void> {
+  try {
+    await axiosInstance.delete(`/courses/${courseId}/lessons/${lessonId}/problems/${problemId}`);
+  } catch (error) { throw wrapAxiosError(error); }
+}
+
 // SỬA: Upload ZIP/JSON testcase tới backend để giải nén, chuẩn hóa và lưu theo Problem hiện tại.
 export async function uploadProblemTestcases(courseId: string, lessonId: string | number, problemId: string | number, file: File): Promise<ProblemDetailData> {
   try {
@@ -325,40 +341,25 @@ export async function uploadProblemTestcases(courseId: string, lessonId: string 
   }
 }
 
+export async function getCourseById(courseId: number | string): Promise<CourseDetail> {
+  try {
+    const response = await axiosInstance.get<CourseApiRecord>(`/courses/${courseId}`);
+    return toCourseDetail(response.data);
+  } catch (error) { throw wrapAxiosError(error); }
+}
+
 export async function createLesson(courseId: string, data: LessonMutationRequest): Promise<CourseDetail> {
   try {
     const response = await axiosInstance.post<CourseApiRecord>(`/courses/${courseId}/lessons`, data);
-    const course = toSummary(response.data);
-    return { 
-      ...course, 
-      room: "", 
-      end_date: response.data.end_date, 
-      student_count: response.data.total_number_student, 
-      updated_at: response.data.updated_at ?? null,
-      sessions: response.data.sessions ?? [], 
-      grades: response.data.grades ?? [] 
-    };
-  } catch (error) {
-    throw wrapAxiosError(error);
-  }
+    return toCourseDetail(response.data);
+  } catch (error) { throw wrapAxiosError(error); }
 }
 
 export async function updateLesson(courseId: string, lessonId: number, data: LessonMutationRequest): Promise<CourseDetail> {
   try {
     const response = await axiosInstance.patch<CourseApiRecord>(`/courses/${courseId}/lessons/${lessonId}`, data);
-    const course = toSummary(response.data);
-    return { 
-      ...course, 
-      room: "", 
-      end_date: response.data.end_date, 
-      student_count: response.data.total_number_student, 
-      updated_at: response.data.updated_at ?? null,
-      sessions: response.data.sessions ?? [], 
-      grades: response.data.grades ?? [] 
-    };
-  } catch (error) {
-    throw wrapAxiosError(error);
-  }
+    return toCourseDetail(response.data);
+  } catch (error) { throw wrapAxiosError(error); }
 }
 
 export function isCourseSessionDataAvailable(sessions: CourseSession[]): boolean {
@@ -373,4 +374,43 @@ export async function createProblem(courseId: string, lessonId: string | number,
   } catch (error) {
     throw wrapAxiosError(error);
   }
+}
+
+function toCourseDetail(data: CourseApiRecord): CourseDetail {
+  return {
+    ...toSummary(data),
+    room: "",
+    end_date: data.end_date,
+    student_count: data.total_number_student,
+    updated_at: data.updated_at ?? null,
+    sessions: data.sessions ?? [],
+    grades: data.grades ?? [],
+  };
+}
+
+/** 204. 409 nếu buổi còn bài tập. */
+export async function deleteLesson(courseId: string, lessonId: string | number): Promise<void> {
+  try {
+    await axiosInstance.delete(`/courses/${courseId}/lessons/${lessonId}`);
+  } catch (error) { throw wrapAxiosError(error); }
+}
+
+/** 201, trả Course đích. 403/404/422 theo tài liệu. */
+export async function duplicateLesson(
+  courseId: string,
+  lessonId: string | number,
+  body: { new_start_date: string; new_end_date: string; target_course_id?: string | null },
+): Promise<CourseDetail> {
+  try {
+    const response = await axiosInstance.post<CourseApiRecord>(`/courses/${courseId}/lessons/${lessonId}/duplicate`, body);
+    return toCourseDetail(response.data);
+  } catch (error) { throw wrapAxiosError(error); }
+}
+
+/** Dùng cho tab Buổi học (kéo thả). `order` phải chứa đủ mọi lesson_id, không trùng. */
+export async function reorderLessons(courseId: string, order: number[]): Promise<CourseDetail> {
+  try {
+    const response = await axiosInstance.patch<CourseApiRecord>(`/courses/${courseId}/lessons/reorder`, { order });
+    return toCourseDetail(response.data);
+  } catch (error) { throw wrapAxiosError(error); }
 }

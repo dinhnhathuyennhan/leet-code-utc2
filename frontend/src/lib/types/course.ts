@@ -230,7 +230,7 @@ export interface SessionDetailData {
   stats: {
     submission_rate: number;
     completed_students: number;
-    avg_score: number;
+    avg_score: number | null  ;
     score_diff: string;
     ast_cases: number;
     ast_similarity: string;
@@ -261,8 +261,8 @@ export interface ProblemUpdateRequest {
 
 export interface ProblemDetailData {
   id: number;
-  lesson_id: number;
-  course_id: string;
+  lesson_id: number | null;
+  course_id: string | null;
   code: string | null;
   title: string;
   description: string;
@@ -275,5 +275,6 @@ export interface ProblemDetailData {
   start_datetime: string;
   end_datetime: string;
   starter_code: string;
+  starter_codes?: Record<string, string>;
   testcases: Array<{ id: number; input: string; expected_output: string; is_sample: boolean }>;
 }

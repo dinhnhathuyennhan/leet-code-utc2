@@ -1,3 +1,5 @@
+"use client";
+
 import { useState, type ReactNode } from "react";
 import Link from "next/link";
 import { Inbox, Loader2, RefreshCw, WifiOff, TriangleAlert, type LucideIcon } from "lucide-react";

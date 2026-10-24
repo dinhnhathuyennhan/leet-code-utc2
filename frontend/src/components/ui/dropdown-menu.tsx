@@ -1,13 +1,24 @@
 "use client";
 
-import { cloneElement, createContext, useContext, useState, type ComponentProps, type ReactElement, type ReactNode } from "react";
+import {  cloneElement, createContext, useContext, useEffect, useRef, useState, type ComponentProps, type ReactElement, type ReactNode } from "react";
 import { cn } from "@/lib/utils";
 
 const MenuContext = createContext<{ open: boolean; setOpen: (open: boolean) => void } | null>(null);
 
 export function DropdownMenu({ children }: { children: ReactNode }) {
   const [open, setOpen] = useState(false);
-  return <MenuContext.Provider value={{ open, setOpen }}><div className="relative">{children}</div></MenuContext.Provider>;
+  const ref = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!open) return;
+    const onDown = (e: MouseEvent) => { if (!ref.current?.contains(e.target as Node)) setOpen(false); };
+    const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") setOpen(false); };
+    document.addEventListener("mousedown", onDown);
+    document.addEventListener("keydown", onKey);
+    return () => { document.removeEventListener("mousedown", onDown); document.removeEventListener("keydown", onKey); };
+  }, [open]);
+
+  return <MenuContext.Provider value={{ open, setOpen }}><div ref={ref} className="relative">{children}</div></MenuContext.Provider>;
 }
 
 export function DropdownMenuTrigger({ asChild, children, ...props }: ComponentProps<"button"> & { asChild?: boolean }) {

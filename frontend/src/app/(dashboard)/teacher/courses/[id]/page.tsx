@@ -46,7 +46,7 @@ export default function TeacherCourseDetailPage() {
         value={tab}
         onValueChange={(next) => { setTab(next); router.replace(`${pathname}?tab=${next}`, { scroll: false }); }}
         sessions={
-          <SessionList sessions={course.sessions} studentCount={course.student_count} courseId={course.code || id} />
+          <SessionList key={course.sessions.map((session) => `${session.id}:${session.order}`).join(",")} sessions={course.sessions} studentCount={course.student_count} courseId={course.code || id} onChanged={() => void refetch()} />
         }
         students={enrollments.isPending ? <CourseDetailSkeleton /> : enrollments.error ? <ErrorState error={enrollments.error} onRetry={() => void enrollments.refetch()} /> : <CourseStudentsTable students={enrollments.data ?? []} courseId={course.code} onChanged={() => void enrollments.refetch()} />}
         grades={<CourseGradesTable onUpdated={() => void refetch()} sessions={course.sessions.map((session) => ({ id: session.id, order: session.order, title: session.title, status: session.status, problems: session.problems.map((problem) => ({ id: problem.id, code: problem.report ?? problem.title, title: problem.title })) }))} rows={course.grades ?? []} />}

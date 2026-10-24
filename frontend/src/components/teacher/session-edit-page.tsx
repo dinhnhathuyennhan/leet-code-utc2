@@ -6,9 +6,10 @@ import { toast } from "sonner";
 import { useRouter } from "next/navigation";
 import { useQueryClient } from "@tanstack/react-query";
 
-import { attachProblemsToLesson, createBankProblem, getSessionDetail, updateLesson } from "@/lib/api/endpoints/courses";
+import { attachProblemsToLesson, createBankProblem, getSessionDetail, updateLesson, updateProblem } from "@/lib/api/endpoints/courses";
+import { getProblems, type ProblemListItem } from "@/lib/api/endpoints/problems";
 import { courseKeys } from "@/lib/hooks/use-courses";
-import { toDateInput } from "@/lib/helpers/datetime";
+import { fromDateInput, toDateInput } from "@/lib/helpers/datetime";
 import type { SessionDetailData, SessionExercise } from "@/lib/types/course";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -23,6 +24,7 @@ function NewProblemModal({
   endDate,
   onCreated,
   onClose,
+  existingTitles,
 }: {
   courseId: string;
   sessionId: string;
@@ -30,6 +32,7 @@ function NewProblemModal({
   endDate: string;
   onCreated: (exercise: SessionExercise) => void;
   onClose: () => void;
+  existingTitles: string[];
 }) {
   const [title, setTitle] = useState("");
   const [functionName, setFunctionName] = useState("solution");
@@ -42,12 +45,31 @@ function NewProblemModal({
   const [testcaseOutput, setTestcaseOutput] = useState("0");
   const [hint, setHint] = useState("");
   const [saving, setSaving] = useState(false);
+  const [errors, setErrors] = useState<Record<string, string | undefined>>({});
+  const [openTime, setOpenTime] = useState("00:00");
+  const [closeTime, setCloseTime] = useState("23:59");
+
+  function errorFor(field: string) {
+    return errors[field] ? <p className="mt-1 text-xs font-normal text-red-600">{errors[field]}</p> : null;
+  }
 
   async function handleCreate() {
-    if (!title.trim()) { toast.error("Tên bài tập không được để trống."); return; }
-    let input: unknown[];
-    let output: unknown;
-    try { input = JSON.parse(testcaseInput); output = JSON.parse(testcaseOutput); if (!Array.isArray(input)) throw new Error(); } catch { toast.error("Testcase phải là JSON hợp lệ, input phải là mảng."); return; }
+    const nextErrors: Record<string, string> = {};
+    if (!title.trim()) nextErrors.title = "Tên bài tập không được để trống.";
+    if (existingTitles.some((item) => item.trim().toLocaleLowerCase() === title.trim().toLocaleLowerCase())) nextErrors.title = "Buổi học đã có bài trùng nội dung này.";
+    if (!functionName.trim()) nextErrors.functionName = "Tên hàm không được để trống.";
+    if (!description.trim()) nextErrors.description = "Mô tả bài không được để trống.";
+    if (!constraints.trim()) nextErrors.constraints = "Ràng buộc không được để trống.";
+    if (!starterCode.trim()) nextErrors.starterCode = "Mã nguồn khởi tạo không được để trống.";
+    if (!Number.isInteger(timeLimit) || timeLimit < 1) nextErrors.timeLimit = "Giới hạn thời gian phải từ 1 giây.";
+    if (startDate === endDate && openTime >= closeTime) nextErrors.closeTime = "Giờ đóng phải sau giờ mở.";
+    if (startDate > endDate) nextErrors.closeTime = "Thời gian đóng phải sau thời gian mở.";
+    let input: unknown[] = [];
+    let output: unknown = null;
+    try { input = JSON.parse(testcaseInput); output = JSON.parse(testcaseOutput); if (!Array.isArray(input)) throw new Error("Input phải là một mảng JSON."); }
+    catch (error) { nextErrors.testcaseInput = error instanceof Error ? `Testcase #1: ${error.message}` : "Testcase #1 không hợp lệ."; }
+    setErrors(nextErrors);
+    if (Object.keys(nextErrors).length) return;
     setSaving(true);
     try {
       const payload = {
@@ -60,12 +82,15 @@ function NewProblemModal({
         hint: hint || null,
         testcases: [{ input, expected_output: output, is_sample: true }],
       };
-      const created = await createBankProblem({ ...payload, function_name: functionName.trim() || "solution", starter_codes: { python: starterCode || "# code", c: starterCode || "/* code */", cpp: starterCode || "// code", java: starterCode || "// code" }, start_datetime: `${startDate}T00:00:00+07:00`, end_datetime: `${endDate}T23:59:59+07:00`, testcases: [{ input, expected_output: output, is_sample: true }] });
+      const created = await createBankProblem({ ...payload, function_name: functionName.trim(), starter_codes: { python: starterCode, c: starterCode, cpp: starterCode, java: starterCode }, start_datetime: fromDateInput(startDate, `${openTime}:00`), end_datetime: fromDateInput(endDate, `${closeTime}:00`), testcases: [{ input, expected_output: output, is_sample: true }] });
       await attachProblemsToLesson(courseId, sessionId, [created.id]);
       const refreshed = await getSessionDetail(courseId, sessionId);
       const attached = refreshed.exercises.find((item) => item.title === created.title);
       if (!attached) throw new Error("Không tìm thấy bài tập vừa thêm vào buổi học.");
-      const exercise: SessionExercise = { ...attached, order: 1 };
+      await updateProblem(courseId, sessionId, attached.id, { start_datetime: fromDateInput(startDate, `${openTime}:00`), end_datetime: fromDateInput(endDate, `${closeTime}:00`) });
+      const withSchedule = await getSessionDetail(courseId, sessionId);
+      const scheduled = withSchedule.exercises.find((item) => item.id === attached.id) ?? attached;
+      const exercise: SessionExercise = { ...scheduled, order: 1 };
       onCreated(exercise);
       toast.success("Đã tạo bài tập mới.");
       onClose();
@@ -86,9 +111,9 @@ function NewProblemModal({
         <div style={{ padding: "1.25rem 1.5rem", display: "flex", flexDirection: "column", gap: "0.875rem" }}>
           <label style={{ display: "block", fontSize: "0.75rem", fontWeight: 600 }}>
             Tên bài tập <span style={{ color: "red" }}>*</span>
-            <Input value={title} onChange={(e) => setTitle(e.target.value)} placeholder="Ví dụ: Tính tổng dãy số" style={{ marginTop: "0.25rem", background: "#eef2ff" }} />
+            <Input aria-invalid={Boolean(errors.title)} value={title} onChange={(e) => { setTitle(e.target.value); setErrors((current) => ({ ...current, title: undefined })); }} placeholder="Ví dụ: Tính tổng dãy số" style={{ marginTop: "0.25rem", background: "#eef2ff" }} />{errorFor("title")}
           </label>
-          <label style={{ display: "block", fontSize: "0.75rem", fontWeight: 600 }}>Tên hàm<Input value={functionName} onChange={(e) => setFunctionName(e.target.value)} placeholder="solution" style={{ marginTop: "0.25rem", background: "#eef2ff" }} /></label>
+          <label style={{ display: "block", fontSize: "0.75rem", fontWeight: 600 }}>Tên hàm<Input aria-invalid={Boolean(errors.functionName)} value={functionName} onChange={(e) => setFunctionName(e.target.value)} placeholder="solution" style={{ marginTop: "0.25rem", background: "#eef2ff" }} />{errorFor("functionName")}</label>
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: "0.75rem" }}>
             <label style={{ fontSize: "0.75rem", fontWeight: 600 }}>
               Mức độ
@@ -100,7 +125,7 @@ function NewProblemModal({
             </label>
             <label style={{ fontSize: "0.75rem", fontWeight: 600 }}>
               Giới hạn thời gian (s)
-              <Input type="number" value={timeLimit} onChange={(e) => setTimeLimit(Number(e.target.value))} style={{ marginTop: "0.25rem", background: "#eef2ff" }} />
+              <Input aria-invalid={Boolean(errors.timeLimit)} type="number" value={timeLimit} onChange={(e) => setTimeLimit(Number(e.target.value))} style={{ marginTop: "0.25rem", background: "#eef2ff" }} />{errorFor("timeLimit")}
             </label>
             <div style={{ fontSize: "0.75rem", fontWeight: 600 }}>
               <span>Điểm tối đa</span>
@@ -109,22 +134,23 @@ function NewProblemModal({
           </div>
           <label style={{ display: "block", fontSize: "0.75rem", fontWeight: 600 }}>
             Mô tả bài
-            <Textarea value={description} onChange={(e) => setDescription(e.target.value)} rows={4} style={{ marginTop: "0.25rem", background: "#eef2ff" }} placeholder="Trình bày đề bài..." />
+            <Textarea aria-invalid={Boolean(errors.description)} value={description} onChange={(e) => setDescription(e.target.value)} rows={4} style={{ marginTop: "0.25rem", background: "#eef2ff" }} placeholder="Trình bày đề bài..." />{errorFor("description")}
           </label>
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "0.75rem" }}><label style={{ fontSize: "0.75rem", fontWeight: 600 }}>Input testcase mẫu<textarea value={testcaseInput} onChange={(e) => setTestcaseInput(e.target.value)} rows={2} style={{ marginTop: "0.25rem", width: "100%", borderRadius: "0.5rem", border: "1px solid #e2e8f0", padding: "0.5rem" }} /></label><label style={{ fontSize: "0.75rem", fontWeight: 600 }}>Output testcase mẫu<textarea value={testcaseOutput} onChange={(e) => setTestcaseOutput(e.target.value)} rows={2} style={{ marginTop: "0.25rem", width: "100%", borderRadius: "0.5rem", border: "1px solid #e2e8f0", padding: "0.5rem" }} /></label></div>
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "0.75rem" }}><label style={{ fontSize: "0.75rem", fontWeight: 600 }}>Input testcase mẫu<textarea aria-invalid={Boolean(errors.testcaseInput)} value={testcaseInput} onChange={(e) => setTestcaseInput(e.target.value)} rows={2} style={{ marginTop: "0.25rem", width: "100%", borderRadius: "0.5rem", border: "1px solid #e2e8f0", padding: "0.5rem" }} />{errorFor("testcaseInput")}</label><label style={{ fontSize: "0.75rem", fontWeight: 600 }}>Output testcase mẫu<textarea aria-invalid={Boolean(errors.testcaseOutput)} value={testcaseOutput} onChange={(e) => setTestcaseOutput(e.target.value)} rows={2} style={{ marginTop: "0.25rem", width: "100%", borderRadius: "0.5rem", border: "1px solid #e2e8f0", padding: "0.5rem" }} />{errorFor("testcaseOutput")}</label></div>
           <label style={{ display: "block", fontSize: "0.75rem", fontWeight: 600 }}>
             Ràng buộc
-            <Textarea value={constraints} onChange={(e) => setConstraints(e.target.value)} rows={2} style={{ marginTop: "0.25rem", background: "#eef2ff" }} placeholder="VD: 1 ≤ n ≤ 10^5" />
+            <Textarea aria-invalid={Boolean(errors.constraints)} value={constraints} onChange={(e) => setConstraints(e.target.value)} rows={2} style={{ marginTop: "0.25rem", background: "#eef2ff" }} placeholder="VD: 1 ≤ n ≤ 10^5" />{errorFor("constraints")}
           </label>
+          <div className="grid grid-cols-2 gap-3"><label style={{ display: "block", fontSize: "0.75rem", fontWeight: 600 }}>Giờ mở<Input type="time" value={openTime} onChange={(e) => setOpenTime(e.target.value)} /></label><label style={{ display: "block", fontSize: "0.75rem", fontWeight: 600 }}>Giờ đóng/nộp<Input aria-invalid={Boolean(errors.closeTime)} type="time" value={closeTime} onChange={(e) => setCloseTime(e.target.value)} />{errorFor("closeTime")}</label></div>
           <label style={{ display: "block", fontSize: "0.75rem", fontWeight: 600 }}>
             Gợi ý thuật toán (tuỳ chọn)
             <Textarea value={hint} onChange={(e) => setHint(e.target.value)} rows={2} style={{ marginTop: "0.25rem", background: "#eef2ff" }} placeholder="Gợi ý cách tiếp cận..." />
           </label>
           <label style={{ display: "block", fontSize: "0.75rem", fontWeight: 600 }}>
             Mã nguồn khởi tạo (tuỳ chọn)
-            <textarea value={starterCode} onChange={(e) => setStarterCode(e.target.value)} rows={4}
+            <textarea aria-invalid={Boolean(errors.starterCode)} value={starterCode} onChange={(e) => setStarterCode(e.target.value)} rows={4}
               style={{ marginTop: "0.25rem", width: "100%", borderRadius: "0.5rem", border: "1px solid #e2e8f0", background: "#0f172a", color: "#e2e8f0", padding: "0.75rem", fontFamily: "monospace", fontSize: "0.75rem" }}
-              placeholder="def solution():\n    pass" />
+              placeholder="def solution():\n    pass" />{errorFor("starterCode")}
           </label>
         </div>
         <div style={{ borderTop: "1px solid #e2e8f0", padding: "1rem 1.5rem", display: "flex", justifyContent: "flex-end", gap: "0.5rem" }}>
@@ -150,6 +176,11 @@ export function SessionEditPage({ courseId, sessionId, data, onSaved }: { course
   const [saving, setSaving] = useState(false);
   const [showNewProblem, setShowNewProblem] = useState(false);
   const [dateErrors, setDateErrors] = useState<{ start?: string; end?: string }>({});
+  const [bankPickerOpen, setBankPickerOpen] = useState(false);
+  const [bankCandidates, setBankCandidates] = useState<ProblemListItem[]>([]);
+  const [selectedBankIds, setSelectedBankIds] = useState<number[]>([]);
+  const [bankLoading, setBankLoading] = useState(false);
+  const [bankSaving, setBankSaving] = useState(false);
   const selectedExercise = exercises.find((exercise) => exercise.id === selectedId) ?? exercises[0];
 
   async function saveSession() {
@@ -165,7 +196,9 @@ export function SessionEditPage({ courseId, sessionId, data, onSaved }: { course
     }
     setSaving(true);
     try {
-      const updatedCourse = await updateLesson(courseId, Number(sessionId), { lesson_name: title.trim(), start_date: startDate, end_date: endDate, problem_ids: exercises.map((exercise) => exercise.id) });
+      // PATCH lesson chỉ cập nhật thông tin buổi. Các bài đã được attach/copy
+      // trước đó không được gửi lại, tránh tạo bản sao trùng khi lưu lần nữa.
+      const updatedCourse = await updateLesson(courseId, Number(sessionId), { lesson_name: title.trim(), start_date: startDate, end_date: endDate, problem_ids: [] });
       queryClient.setQueryData(courseKeys.detail(courseId), updatedCourse);
       void queryClient.invalidateQueries({ queryKey: courseKeys.detail(courseId) });
       toast.success("Đã lưu thay đổi buổi học.");
@@ -194,6 +227,28 @@ export function SessionEditPage({ courseId, sessionId, data, onSaved }: { course
     setSelectedId((current) => current === problemId ? null : current);
   }
 
+  async function openBankPicker() {
+    setBankPickerOpen(true); setBankLoading(true); setSelectedBankIds([]);
+    try {
+      const [bank, courseProblems] = await Promise.all([getProblems({ page: 1, page_size: 100 }), getProblems({ course_id: courseId, page: 1, page_size: 100 })]);
+      const currentTitles = new Set(exercises.map((exercise) => exercise.title.trim().toLocaleLowerCase()));
+      const merged = [...bank.items.filter((item) => item.lesson_id === null), ...courseProblems.items.filter((item) => item.lesson_id !== Number(sessionId))];
+      setBankCandidates(Array.from(new Map(merged.filter((item) => item.total_number_testcase > 0 && !currentTitles.has(item.title.trim().toLocaleLowerCase())).map((item) => [item.id, item])).values()));
+    } catch (error) { toast.error(error instanceof Error ? error.message : "Không thể tải ngân hàng bài."); setBankPickerOpen(false); }
+    finally { setBankLoading(false); }
+  }
+
+  async function attachSelectedBankProblems() {
+    if (!selectedBankIds.length) return;
+    setBankSaving(true);
+    try {
+      await attachProblemsToLesson(courseId, sessionId, selectedBankIds);
+      const refreshed = await getSessionDetail(courseId, sessionId);
+      setExercises(refreshed.exercises); setSelectedId(refreshed.exercises.at(-1)?.id ?? null); setBankPickerOpen(false); toast.success("Đã sao chép bài vào buổi học.");
+    } catch (error) { toast.error(error instanceof Error ? error.message : "Không thể thêm bài vào buổi học."); }
+    finally { setBankSaving(false); }
+  }
+
   return <div className="space-y-5">
     {showNewProblem && (
       <NewProblemModal
@@ -203,6 +258,7 @@ export function SessionEditPage({ courseId, sessionId, data, onSaved }: { course
         endDate={endDate}
         onCreated={addNewExercise}
         onClose={() => setShowNewProblem(false)}
+        existingTitles={exercises.map((exercise) => exercise.title)}
       />
     )}
 
@@ -252,6 +308,7 @@ export function SessionEditPage({ courseId, sessionId, data, onSaved }: { course
               >
                 <Plus className="size-3.5" /> Thêm bài tập mới
               </Button>
+              <Button size="sm" variant="outline" onClick={() => void openBankPicker()}><Plus className="size-3.5" /> Thêm từ ngân hàng</Button>
             </div>
           </div>
           <div className="grid gap-3 sm:grid-cols-3">
@@ -277,12 +334,17 @@ export function SessionEditPage({ courseId, sessionId, data, onSaved }: { course
         </section>
 
         {selectedExercise
-          ? <SessionProblemEditor key={selectedExercise.id} courseId={courseId} sessionId={sessionId} exercise={selectedExercise} onSaved={replaceExercise} onDeleted={() => removeExercise(selectedExercise.id)} />
+          ? <SessionProblemEditor key={selectedExercise.id} courseId={courseId} sessionId={sessionId} exercise={selectedExercise} lessonStartDate={startDate} lessonEndDate={endDate} onSaved={replaceExercise} onDeleted={() => removeExercise(selectedExercise.id)} />
           : <section className="rounded-xl border bg-card p-6 text-sm text-muted-foreground">Chọn một bài tập để bắt đầu chỉnh sửa.</section>
         }
       </main>
     </div>
+    {bankPickerOpen && <BankPicker candidates={bankCandidates} loading={bankLoading} selectedIds={selectedBankIds} saving={bankSaving} onToggle={(id) => setSelectedBankIds((current) => current.includes(id) ? current.filter((item) => item !== id) : [...current, id])} onClose={() => setBankPickerOpen(false)} onConfirm={() => void attachSelectedBankProblems()} />}
   </div>;
+}
+
+function BankPicker({ candidates, loading, selectedIds, saving, onToggle, onClose, onConfirm }: { candidates: ProblemListItem[]; loading: boolean; selectedIds: number[]; saving: boolean; onToggle: (id: number) => void; onClose: () => void; onConfirm: () => void }) {
+  return <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4"><div className="w-full max-w-2xl space-y-4 rounded-2xl bg-card p-6"><div className="flex items-center justify-between"><h2 className="text-xl font-bold">Thêm bài từ ngân hàng/lesson khác</h2><Button variant="ghost" size="icon" onClick={onClose}><X className="size-4" /></Button></div><p className="text-sm text-muted-foreground">Bài được chọn sẽ được sao chép thành bản riêng của buổi học. Không thể chọn nội dung trùng bài đã có.</p>{loading ? <p className="py-8 text-center text-sm text-muted-foreground">Đang tải...</p> : <div className="max-h-[50vh] space-y-2 overflow-y-auto">{candidates.map((problem) => <button type="button" key={problem.id} onClick={() => onToggle(problem.id)} className={`flex w-full items-center justify-between rounded-lg border p-3 text-left ${selectedIds.includes(problem.id) ? "border-indigo-400 bg-indigo-50" : "bg-card"}`}><span><strong>{problem.title}</strong><span className="ml-2 text-xs text-muted-foreground">{problem.total_number_testcase} testcase · {problem.lesson_id === null ? "Ngân hàng" : "Lesson khác"}</span></span><span className="text-xs font-semibold">{selectedIds.includes(problem.id) ? "Đã chọn" : "Chọn"}</span></button>)}{!candidates.length && <p className="py-8 text-center text-sm text-muted-foreground">Không có bài phù hợp.</p>}</div>}<div className="flex justify-end gap-2"><Button variant="outline" onClick={onClose}>Hủy</Button><Button disabled={!selectedIds.length || saving} onClick={onConfirm}>{saving ? "Đang thêm..." : `Xác nhận thêm (${selectedIds.length})`}</Button></div></div></div>;
 }
 
 function InfoCard({ icon, label, value, hint }: { icon: React.ReactNode; label: string; value: string; hint: string }) {

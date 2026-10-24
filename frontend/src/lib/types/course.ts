@@ -47,8 +47,8 @@ export interface ProblemApiRecord {
   level: string;
   hint: string | null;
   complexity: string | null;
-  start_datetime: string;
-  end_datetime: string;
+  start_datetime?: string;
+  end_datetime?: string;
   total_number_testcase: number;
   report: string | null;
 }
@@ -203,6 +203,7 @@ export interface SessionExercise {
   id: number;
   order: number;
   title: string;
+  function_name: string | null;
   report: string | null;
   level: "easy" | "medium" | "hard";
   description: string;
@@ -213,6 +214,9 @@ export interface SessionExercise {
   hint: string | null;
   complexity: string | null;
   starter_code: string;
+  starter_codes?: Record<string, string>;
+  start_datetime: string;
+  end_datetime: string;
   testcases: Array<{ id: number; input: string; expected_output: string; is_sample: boolean }>;
 }
 
@@ -256,7 +260,9 @@ export interface ProblemUpdateRequest {
   start_datetime?: string;
   end_datetime?: string;
   starter_code?: string;
-  testcases?: Array<{ input: string; expected_output: string; is_sample: boolean; input_type?: string; expected_output_type?: string }>;
+  function_name?: string;
+  starter_codes?: Record<string, string>;
+  testcases?: Array<{ input: unknown[]; expected_output: unknown; is_sample: boolean; input_type?: string; expected_output_type?: string }>;
 }
 
 export interface ProblemDetailData {
@@ -265,6 +271,7 @@ export interface ProblemDetailData {
   course_id: string | null;
   code: string | null;
   title: string;
+  function_name: string | null;
   description: string;
   constraints: string;
   level: string;
@@ -277,4 +284,5 @@ export interface ProblemDetailData {
   starter_code: string;
   starter_codes?: Record<string, string>;
   testcases: Array<{ id: number; input: string; expected_output: string; is_sample: boolean }>;
+  submitted_count?: number;
 }

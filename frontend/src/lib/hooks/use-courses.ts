@@ -49,11 +49,11 @@ export function useStudentSearch(email: string, enabled = true) {
   });
 }
 
-export function useCourseEnrollments(courseId: string | undefined) {
+export function useCourseEnrollments(courseId: string | undefined, enabled = true) {
   return useQuery({
     queryKey: courseKeys.enrollments(courseId ?? ""),
     queryFn: () => getCourseEnrollments(courseId as string),
-    enabled: Boolean(courseId),
+    enabled: enabled && Boolean(courseId),
   });
 }
 

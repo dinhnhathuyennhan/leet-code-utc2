@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import { CalendarDays, Check, Loader2, Plus, Trash2 } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
@@ -26,6 +26,7 @@ export function SessionEditorDialog({ course, session, open, onOpenChange, onSav
   const [endDate, setEndDate] = useState(session?.deadline ? toDateInput(session.deadline) : "");
   const [selectedProblemIds, setSelectedProblemIds] = useState<number[]>(session?.problems.map((problem) => problem.id) ?? []);
   const [saving, setSaving] = useState(false);
+  const savingRef = useRef(false);
 
   const availableProblems = useMemo(
     () => course.sessions.flatMap((item) => item.problems.map((problem) => ({ ...problem, sessionId: item.id }))),
@@ -37,6 +38,7 @@ export function SessionEditorDialog({ course, session, open, onOpenChange, onSav
   }
 
   async function submit() {
+    if (savingRef.current) return;
     if (!title.trim() || !startDate || !endDate) {
       toast.error("Vui lòng nhập đủ tên buổi học và thời gian.");
       return;
@@ -48,6 +50,7 @@ export function SessionEditorDialog({ course, session, open, onOpenChange, onSav
       end_date: endDate,
       problem_ids: selectedProblemIds,
     };
+    savingRef.current = true;
     setSaving(true);
     try {
       if (session) await updateLesson(course.code, session.id, data);
@@ -57,9 +60,7 @@ export function SessionEditorDialog({ course, session, open, onOpenChange, onSav
       onSaved();
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Không thể lưu buổi học.");
-    } finally {
-      setSaving(false);
-    }
+    } finally { savingRef.current = false; setSaving(false); }
   }
 
   return (

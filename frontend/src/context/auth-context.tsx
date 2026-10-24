@@ -12,7 +12,7 @@ import {
 import { useQueryClient } from "@tanstack/react-query";
 
 import { setSessionExpiredHandler } from "@/lib/api/client";
-import { wasLastRefreshNetworkError } from "@/lib/axios";
+import { getLastRefreshStatus, wasLastRefreshNetworkError } from "@/lib/axios";
 import {
   changePassword as changePasswordRequest,
   login as loginRequest,
@@ -32,6 +32,7 @@ type AuthState =
   | { status: "loading"; user?: undefined }
   | { status: "unauthenticated"; user?: undefined }
   | { status: "connection-lost"; user?: undefined }
+  | { status: "server-error"; user?: undefined }
   | { status: "authenticated"; user: UserResponse };
 
 type AuthContextValue = AuthState & {
@@ -128,7 +129,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setState({ status: "loading" });
     const token = await refreshRequest();
     const user = token ? buildUserFromAccessToken(token) : null;
-    setState(user ? { status: "authenticated", user } : wasLastRefreshNetworkError() ? { status: "connection-lost" } : { status: "unauthenticated" });
+    setState(user ? { status: "authenticated", user } : getLastRefreshStatus() !== null && getLastRefreshStatus()! >= 500 ? { status: "server-error" } : wasLastRefreshNetworkError() ? { status: "connection-lost" } : { status: "unauthenticated" });
   }, []);
 
   useEffect(() => {
@@ -139,7 +140,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       if (cancelled) return;
 
       const user = token ? buildUserFromAccessToken(token) : null;
-      setState(user ? { status: "authenticated", user } : wasLastRefreshNetworkError() ? { status: "connection-lost" } : { status: "unauthenticated" });
+      setState(user ? { status: "authenticated", user } : getLastRefreshStatus() !== null && getLastRefreshStatus()! >= 500 ? { status: "server-error" } : wasLastRefreshNetworkError() ? { status: "connection-lost" } : { status: "unauthenticated" });
     }
 
     void hydrate();

@@ -11,7 +11,7 @@ import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useAuth } from "@/context/auth-context";
 import { getHomePath } from "@/lib/auth/redirect";
 import { Loader2 } from "lucide-react";
-import { ConnectionLostState } from "@/components/shared/page-state";
+import { ConnectionLostState, ForbiddenState, ServerErrorState } from "@/components/shared/page-state";
 
 const PUBLIC_ROUTES = ["/login", "/forgot-password"];
 const LOGIN_ROUTE = "/login";
@@ -149,23 +149,16 @@ export function RouteGuard({ children }: { children: React.ReactNode }) {
     return <ConnectionLostState retrying={retryingConnection} onRetry={() => { setRetryingConnection(true); void auth.retryConnection().finally(() => setRetryingConnection(false)); }} />;
   }
 
+  if (auth.status === "server-error") {
+    return <ServerErrorState retrying={retryingConnection} onRetry={() => { setRetryingConnection(true); void auth.retryConnection().finally(() => setRetryingConnection(false)); }} />;
+  }
+
   // --- LUỒNG 2: Xử lý hiển thị màn hình 403 (Sai quyền) ---
   if (
     auth.status === "authenticated" &&
     !hasRouteAccess(pathname, auth.user.role_id)
   ) {
-    return (
-      <div className="flex h-[100dvh] w-full flex-col items-center justify-center bg-slate-900 text-slate-200">
-        <h1 className="text-4xl font-bold mb-4">403</h1>
-        <p className="mb-6">Bạn không có quyền truy cập vào trang này.</p>
-        <button
-          onClick={() => router.replace(getHomePath(auth.user))}
-          className="rounded-md bg-blue-600 px-4 py-2 hover:bg-blue-700 transition"
-        >
-          Quay lại trang chủ
-        </button>
-      </div>
-    );
+    return <ForbiddenState />;
   }
 
   // --- LUỒNG 1: Xử lý che màn hình khi đang Redirect ---

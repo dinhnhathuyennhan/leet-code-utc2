@@ -48,7 +48,7 @@ export function CourseHeaderCard({ course, onCreateSession, onEditCourse }: Cour
         </div>
       </div>
 
-      <div className="flex w-full flex-col gap-3 sm:w-auto">
+      <div className="flex w-full flex-col gap-3 sm:w-auto sm:shrink-0">
         <Button
           onClick={onCreateSession}
           className="h-11 bg-[#2f226b] px-6 text-[15px] font-semibold text-white shadow-sm hover:bg-[#251b56]"

@@ -83,9 +83,14 @@ const REFRESH_EXEMPT_PATHS = new Set([
 
 let refreshPromise: Promise<string | null> | null = null;
 let lastRefreshWasNetworkError = false;
+let lastRefreshStatus: number | null = null;
 
 export function wasLastRefreshNetworkError(): boolean {
   return lastRefreshWasNetworkError;
+}
+
+export function getLastRefreshStatus(): number | null {
+  return lastRefreshStatus;
 }
 
 /**
@@ -98,6 +103,7 @@ export function refreshAccessToken(): Promise<string | null> {
   refreshPromise = (async () => {
     try {
       lastRefreshWasNetworkError = false;
+      lastRefreshStatus = null;
       // Dùng axios.post thuần — tránh kích hoạt lại response interceptor
       const response = await axios.post<RefreshResponse>(
         `${API_URL}/auth/refresh-access-token`,
@@ -109,6 +115,7 @@ export function refreshAccessToken(): Promise<string | null> {
       return newToken;
     } catch (error) {
       lastRefreshWasNetworkError = !axios.isAxiosError(error) || !error.response;
+      lastRefreshStatus = axios.isAxiosError(error) ? (error.response?.status ?? null) : null;
       setAccessToken(null);
       return null;
     } finally {

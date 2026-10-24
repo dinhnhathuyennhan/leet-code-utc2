@@ -36,7 +36,7 @@ export function CourseCreateDialog({ onCreated }: { onCreated: () => void }) {
   const savingRef = useRef(false);
   const set = (key: FieldName, value: string) => { setForm((current) => ({ ...current, [key]: value })); setErrors((current) => ({ ...current, [key]: undefined, ...(key === "start_date" ? { end_date: undefined } : {}) })); };
   const reset = () => { setForm(EMPTY_FORM); setErrors({}); };
-  const close = (nextOpen: boolean) => { if (!nextOpen && !savingRef.current) reset(); setOpen(nextOpen); };
+  const close = (nextOpen: boolean) => { if (!nextOpen && !savingRef.current) reset(); if (nextOpen) setErrors({}); setOpen(nextOpen); };
 
   async function submit() {
     if (savingRef.current) return;

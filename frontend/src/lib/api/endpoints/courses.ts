@@ -327,20 +327,6 @@ export async function deleteProblem(courseId: string, lessonId: string | number,
   } catch (error) { throw wrapAxiosError(error); }
 }
 
-// SỬA: Upload ZIP/JSON testcase tới backend để giải nén, chuẩn hóa và lưu theo Problem hiện tại.
-export async function uploadProblemTestcases(courseId: string, lessonId: string | number, problemId: string | number, file: File): Promise<ProblemDetailData> {
-  try {
-    const formData = new FormData();
-    formData.append("file", file);
-    const response = await axiosInstance.post<ProblemDetailData>(`/courses/${courseId}/lessons/${lessonId}/problems/${problemId}/testcases/upload`, formData, {
-      headers: { "Content-Type": "multipart/form-data" },
-    });
-    return response.data;
-  } catch (error) {
-    throw wrapAxiosError(error);
-  }
-}
-
 export async function getCourseById(courseId: number | string): Promise<CourseDetail> {
   try {
     const response = await axiosInstance.get<CourseApiRecord>(`/courses/${courseId}`);

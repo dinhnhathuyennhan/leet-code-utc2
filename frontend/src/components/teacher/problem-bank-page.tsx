@@ -10,6 +10,7 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { ErrorState } from "@/components/shared/page-state";
 import { Skeleton } from "@/components/ui/skeleton";
+import { parseInputText, parseOutputText } from "@/lib/helpers/testcases";
 
 const LEVELS = [{ value: "", label: "Tất cả mức độ" }, { value: "easy", label: "Dễ" }, { value: "medium", label: "Trung bình" }, { value: "hard", label: "Khó" }] as const;
 
@@ -56,20 +57,19 @@ function BankProblemCreateDialog({ onClose, onCreated }: { onClose: () => void; 
   const [description, setDescription] = useState("");
   const [constraints, setConstraints] = useState("");
   const [starterCode, setStarterCode] = useState("");
-  const [input, setInput] = useState("[]");
+  const [input, setInput] = useState("");
   const [output, setOutput] = useState("0");
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
   async function save() {
     try {
-      const parsedInput = JSON.parse(input) as unknown;
-      const parsedOutput = JSON.parse(output) as unknown;
-      if (!Array.isArray(parsedInput)) throw new Error("Testcase #1: Input phải là một mảng JSON.");
+      const parsedInput = parseInputText(input);
+      const parsedOutput = parseOutputText(output);
       if (!title.trim() || !functionName.trim() || !description.trim() || !constraints.trim() || !starterCode.trim()) throw new Error("Vui lòng điền đủ các trường bắt buộc.");
       const data: ProblemCreateRequest = { title: title.trim(), function_name: functionName.trim(), description, constraints, level: "easy", time_limit_seconds: 1, starter_codes: { python: starterCode, c: starterCode, cpp: starterCode, java: starterCode }, start_datetime: "2026-01-01T00:00:00+07:00", end_datetime: "2099-12-31T23:59:00+07:00", testcases: [{ input: parsedInput, expected_output: parsedOutput, is_sample: true }] };
       setSaving(true); await createBankProblem(data); toast.success("Đã tạo bài trong ngân hàng (lesson_id = null)."); onCreated();
     } catch (requestError) { setError(requestError instanceof Error ? requestError.message : "Không thể tạo bài."); }
     finally { setSaving(false); }
   }
-  return <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4"><div className="max-h-[95dvh] w-full max-w-2xl space-y-4 overflow-y-auto rounded-2xl bg-card p-6"><div className="flex items-center justify-between"><h2 className="text-xl font-bold">Tạo bài trong ngân hàng</h2><Button variant="ghost" size="icon" onClick={onClose}><X className="size-4" /></Button></div>{error && <p className="rounded-lg bg-red-50 p-3 text-sm text-red-700">{error}</p>}<label className="block text-sm font-medium">Tên bài<Input value={title} onChange={(event) => setTitle(event.target.value)} /></label><label className="block text-sm font-medium">Tên hàm<Input value={functionName} onChange={(event) => setFunctionName(event.target.value)} /></label><label className="block text-sm font-medium">Mô tả<Textarea value={description} onChange={(event) => setDescription(event.target.value)} /></label><label className="block text-sm font-medium">Ràng buộc<Textarea value={constraints} onChange={(event) => setConstraints(event.target.value)} /></label><label className="block text-sm font-medium">Starter code<Textarea value={starterCode} onChange={(event) => setStarterCode(event.target.value)} /></label><div className="grid gap-3 sm:grid-cols-2"><label className="text-sm font-medium">Testcase #1 input JSON<Textarea value={input} onChange={(event) => setInput(event.target.value)} /></label><label className="text-sm font-medium">Testcase #1 output JSON<Textarea value={output} onChange={(event) => setOutput(event.target.value)} /></label></div><div className="flex justify-end gap-2"><Button variant="outline" onClick={onClose}>Hủy</Button><Button disabled={saving} onClick={() => void save()}>{saving ? "Đang tạo..." : "Tạo bài"}</Button></div></div></div>;
+  return <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4"><div className="max-h-[95dvh] w-full max-w-4xl space-y-4 overflow-y-auto rounded-2xl bg-card p-6"><div className="flex items-center justify-between"><h2 className="text-xl font-bold">Tạo bài trong ngân hàng</h2><Button variant="ghost" size="icon" onClick={onClose}><X className="size-4" /></Button></div>{error && <p className="rounded-lg bg-red-50 p-3 text-sm text-red-700">{error}</p>}<label className="block text-sm font-medium">Tên bài<Input value={title} onChange={(event) => setTitle(event.target.value)} /></label><label className="block text-sm font-medium">Tên hàm<Input value={functionName} onChange={(event) => setFunctionName(event.target.value)} /></label><label className="block text-sm font-medium">Mô tả<Textarea value={description} onChange={(event) => setDescription(event.target.value)} /></label><label className="block text-sm font-medium">Ràng buộc<Textarea value={constraints} onChange={(event) => setConstraints(event.target.value)} /></label><label className="block text-sm font-medium">Starter code<textarea value={starterCode} onChange={(event) => setStarterCode(event.target.value)} className="min-h-[320px] w-full resize-y rounded-lg border bg-slate-900 p-4 font-mono text-sm leading-6 text-white" /></label><div className="grid gap-3 sm:grid-cols-2"><label className="text-sm font-medium">Testcase #1 input (ví dụ: 2, 7, 11, 15)<Textarea value={input} onChange={(event) => setInput(event.target.value)} className="min-h-32 font-mono" /></label><label className="text-sm font-medium">Testcase #1 output<Textarea value={output} onChange={(event) => setOutput(event.target.value)} className="min-h-32 font-mono" /></label></div><div className="flex justify-end gap-2"><Button variant="outline" onClick={onClose}>Hủy</Button><Button disabled={saving} onClick={() => void save()}>{saving ? "Đang tạo..." : "Tạo bài"}</Button></div></div></div>;
 }

@@ -20,10 +20,9 @@ export async function deleteTestcase(args: Path & { testcaseId: number }): Promi
 export async function downloadTestcases(args: Path, format: "json" | "zip" = "json"): Promise<Blob> {
   try { return (await axiosInstance.get<Blob>(`${path(args)}/download`, { params: { format }, responseType: "blob" })).data; } catch (error) { throw wrapAxiosError(error); }
 }
-export async function uploadTestcases(args: Path, file: File): Promise<void> {
-  const formData = new FormData(); formData.append("file", file);
-  try { await axiosInstance.post(`${path(args)}/upload`, formData, { headers: { "Content-Type": "multipart/form-data" } }); } catch (error) { throw wrapAxiosError(error); }
+export async function batchUpdateSamples(args: Path, testcaseIds: number[], isSample: boolean): Promise<void> {
+  try { await axiosInstance.patch(`${path(args)}/batch`, { testcase_ids: testcaseIds, is_sample: isSample }); } catch (error) { throw wrapAxiosError(error); }
 }
-export async function previewTestcases(testcases: unknown[]): Promise<{ valid: boolean; count: number; sample_count: number; hidden_count: number; errors: Array<{ index: number; message: string }>; warnings: Array<{ message: string }> }> {
-  try { return (await axiosInstance.post("/testcases/preview", { testcases })).data; } catch (error) { throw wrapAxiosError(error); }
+export async function previewTestcases(args: Path, testcases: unknown[]): Promise<{ valid: boolean; count: number; sample_count: number; hidden_count: number; errors: Array<{ index: number; message: string }>; warnings: Array<{ message: string }> }> {
+  try { return (await axiosInstance.post(`${path(args)}/preview`, { testcases })).data; } catch (error) { throw wrapAxiosError(error); }
 }

@@ -15,7 +15,6 @@ export function DashboardBanner({ overview }: DashboardBannerProps) {
   const items = [
     { label: "Lớp đang dạy", value: stats.active_courses },
     { label: "Bài cần chấm", value: stats.pending_grading },
-    { label: "Đạo văn", value: stats.plagiarism_cases },
   ];
 
   return (

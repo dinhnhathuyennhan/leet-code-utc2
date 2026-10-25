@@ -16,12 +16,11 @@ type Props = {
   exercises: Exercise[];
   courseId: string;
   sessionId: string;
-  courseCode: string;
   editHref: string;
 };
 
-export function ExerciseList({ exercises, courseId, sessionId, courseCode, editHref }: Props) {
-  const submissionsOf = (query: string) => `/teacher/submissions?course=${encodeURIComponent(courseCode)}&${query}`;
+export function ExerciseList({ exercises, courseId, sessionId, editHref }: Props) {
+  const submissionsOf = `/teacher/courses/${courseId}/sessions/${sessionId}#submissions`;
 
   return (
     <section className="space-y-4">
@@ -29,7 +28,7 @@ export function ExerciseList({ exercises, courseId, sessionId, courseCode, editH
         <h2 className="text-base font-bold uppercase tracking-wider text-slate-900 dark:text-slate-100">
           Danh sách bài tập thực hành ({String(exercises.length).padStart(2, "0")})
         </h2>
-        <Link href={submissionsOf(`lesson_id=${sessionId}`)} className="flex items-center gap-1.5 text-sm font-semibold text-[#2f226b] hover:underline dark:text-indigo-300">
+        <Link href={submissionsOf} className="flex items-center gap-1.5 text-sm font-semibold text-[#2f226b] hover:underline dark:text-indigo-300">
           Xem tất cả bài nộp buổi này <ArrowRight className="size-4" />
         </Link>
       </div>
@@ -79,7 +78,7 @@ export function ExerciseList({ exercises, courseId, sessionId, courseCode, editH
                   </Link>
                 </Button>
                 <Button asChild className="h-10 gap-1.5 bg-[#2f226b] font-semibold text-white hover:bg-[#251b56]">
-                  <Link href={submissionsOf(`problem_id=${item.id}`)}>
+                  <Link href={`/teacher/courses/${courseId}/sessions/${sessionId}/problems/${item.id}#submissions`}>
                     Xem {item.submitted_count} bài nộp <ArrowRight className="size-4" />
                   </Link>
                 </Button>

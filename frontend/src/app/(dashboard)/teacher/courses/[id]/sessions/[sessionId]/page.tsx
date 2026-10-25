@@ -19,6 +19,7 @@ import { SessionStats } from "@/components/teacher/session-stats";
 import { SessionDeadlineAlert } from "@/components/teacher/session-deadline-alert";
 import { SessionActions } from "@/components/teacher/session-actions";
 import { ExerciseList } from "@/components/teacher/exercise-list";
+import { ProblemSubmissionsPanel } from "@/components/teacher/problem-submissions-panel";
 
 function PageSkeleton() {
   return (
@@ -73,7 +74,7 @@ export default function TeacherSessionDetailPage() {
   }
 
   const base = `/teacher/courses/${courseId}/sessions/${sessionId}`;
-  const submissionsHref = `/teacher/submissions?course=${encodeURIComponent(data.course_code)}&lesson_id=${sessionId}`;
+  const submissionsHref = `${base}#submissions`;
 
   return (
     <div className="space-y-6">
@@ -114,9 +115,9 @@ export default function TeacherSessionDetailPage() {
         exercises={data.exercises}
         courseId={courseId}
         sessionId={sessionId}
-        courseCode={data.course_code}
         editHref={`${base}?mode=edit`}
       />
+      <ProblemSubmissionsPanel courseId={courseId} lessonId={sessionId} title="Bài nộp của buổi học" />
     </div>
   );
 }

@@ -15,7 +15,7 @@ export default function SubmissionsPage() {
   const searchParams = useSearchParams();
   const debouncedSearch = useDebouncedValue(search, 300);
 
-  const pending = usePendingSubmissions({ filter, search: debouncedSearch.trim() || undefined, course: searchParams.get("course") ?? undefined, lesson_id: Number(searchParams.get("lesson_id")) || undefined, problem_id: Number(searchParams.get("problem_id")) || undefined });
+  const pending = usePendingSubmissions({ filter, search: debouncedSearch.trim() || undefined, limit: 500, course: searchParams.get("course") ?? undefined, lesson_id: Number(searchParams.get("lesson_id")) || undefined, problem_id: Number(searchParams.get("problem_id")) || undefined });
 
   return (
     <div className="space-y-6">

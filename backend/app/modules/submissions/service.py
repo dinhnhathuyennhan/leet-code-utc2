@@ -48,7 +48,9 @@ def _submission_rows(session: Session, current_user: User) -> list[tuple[Submiss
 def _judge_kind(status: str) -> str:
     normalized = status.lower()
     if normalized == "accepted":
-        return "graded"
+        return "accepted"
+    if normalized == "pending":
+        return "pending"
     if normalized == "compile_error":
         return "compile_error"
     return "wrong_answer"
@@ -138,8 +140,9 @@ def list_pending_submissions(
             session_label=f"Buổi {lesson.lesson_number}: {lesson.lesson_name}",
             topic=problem.title,
             judge_kind=_judge_kind(submission.status),
-            judge_label=_judge_label(submission.status),
+        judge_label=_judge_label(submission.status),
             issue=_issue(submission, problem),
+        manual_score=submission.manual_score,
         )
         for submission, problem, lesson, course, student in filtered[:max(limit, 1)]
     ]

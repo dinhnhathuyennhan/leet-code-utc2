@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { useParams } from "next/navigation";
+import { useParams, useRouter, useSearchParams } from "next/navigation";
 import {
   ArrowLeft,
   CheckCircle2,
@@ -12,7 +12,7 @@ import {
   XCircle,
 } from "lucide-react";
 
-import { useBreadcrumbLabel } from "@/components/shared/breadcrumb-context";
+import { useBreadcrumbLabels } from "@/components/shared/breadcrumb-context";
 import { ErrorState } from "@/components/shared/page-state";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -22,13 +22,17 @@ import type { SubmissionDetail } from "@/lib/types/dashboard";
 
 export default function SubmissionDetailPage() {
   const { id } = useParams<{ id: string }>();
-  useBreadcrumbLabel(`Chấm bài #${id}`);
+  const searchParams = useSearchParams();
+  const router = useRouter();
 
   const [data, setData] = useState<SubmissionDetail | null>(null);
   const [error, setError] = useState<unknown>(null);
   const [feedback, setFeedback] = useState("");
   const [manualScore, setManualScore] = useState("");
   const [saved, setSaved] = useState(false);
+  const [status, setStatus] = useState("pending");
+
+  useBreadcrumbLabels(data?.course_code, data?.session_label, data ? `${data.problem_code ?? "Bài tập"} · Bài nộp #${id}` : `Bài nộp #${id}`);
 
   useEffect(() => {
     getSubmissionDetail(id)
@@ -38,6 +42,7 @@ export default function SubmissionDetailPage() {
         setManualScore(submission.manual_score == null
           ? (submission.total_testcases ? ((submission.passed_count / submission.total_testcases) * 10).toFixed(1) : "0.0")
           : String(submission.manual_score));
+        setStatus(submission.status);
       })
       .catch(setError);
   }, [id]);
@@ -45,7 +50,7 @@ export default function SubmissionDetailPage() {
   if (error) return <ErrorState error={error} />;
   if (!data) return <div className="rounded-xl border bg-card p-6 text-sm text-muted-foreground">Đang tải bài nộp...</div>;
 
-  async function saveSubmission(accept: boolean) {
+  async function saveSubmission() {
     const parsedScore = Number(manualScore);
     if (!Number.isFinite(parsedScore) || parsedScore < 0 || parsedScore > 10) {
       setError(new Error("Điểm phải nằm trong khoảng 0 đến 10."));
@@ -56,16 +61,20 @@ export default function SubmissionDetailPage() {
         feedback,
         manual_score: parsedScore,
 
-        ...(accept ? { status: "accepted" } : {}),
+        status,
       });
       setData(submission);
+      setStatus(submission.status);
       setSaved(true);
+      window.dispatchEvent(new CustomEvent("submission:updated", { detail: submission }));
+      const returnTo = searchParams.get("returnTo");
+      if (returnTo === "/teacher/submissions") router.push(returnTo);
     } catch (requestError) {
       setError(requestError);
     }
   }
 
-  const statusLabel = data.status === "compile_error" ? "Lỗi biên dịch" : data.status === "accepted" ? "Đã chấp nhận" : "Sai kết quả";
+  const statusLabel = data.status === "compile_error" ? "Lỗi biên dịch" : data.status === "accepted" ? "Đã chấp nhận" : data.status === "pending" ? "Đang chờ" : "Sai kết quả";
 
   return (
     <div className="space-y-6">
@@ -73,7 +82,7 @@ export default function SubmissionDetailPage() {
       <div className="flex flex-wrap items-center justify-between gap-4">
         <div className="flex items-center gap-3">
           <Button asChild variant="outline" size="sm" className="gap-1.5 border-slate-300">
-            <Link href="/teacher">
+            <Link href={searchParams.get("returnTo") || "/teacher/submissions"}>
               <ArrowLeft className="size-4" /> Quay lại
             </Link>
           </Button>
@@ -89,7 +98,7 @@ export default function SubmissionDetailPage() {
 
         <div className="flex items-center gap-3">
           <Button
-            onClick={() => void saveSubmission(false)}
+            onClick={() => void saveSubmission()}
             className="h-10 bg-[#2f226b] gap-2 font-semibold text-white shadow-sm hover:bg-[#251b56]"
           >
             <Save className="size-4" /> {saved ? "Đã lưu kết quả" : "Lưu điểm & Gửi phản hồi"}
@@ -131,7 +140,7 @@ export default function SubmissionDetailPage() {
               </div>
               <span className="text-xs text-slate-400">{new Date(data.submitted_datetime).toLocaleString("vi-VN", { timeZone: "Asia/Ho_Chi_Minh" })}</span>
             </div>
-            <pre className="overflow-x-auto p-4 font-mono text-xs leading-relaxed text-slate-200">
+            <pre className="max-h-[720px] min-h-[420px] overflow-auto whitespace-pre-wrap p-5 font-mono text-sm leading-6 text-slate-200">
               <code>{data.submitted_code}</code>
             </pre>
           </div>
@@ -161,6 +170,16 @@ export default function SubmissionDetailPage() {
             <h3 className="text-base font-bold text-slate-900 dark:text-slate-100">
               Đánh giá & Chấm điểm
             </h3>
+
+            <div>
+              <label className="text-xs font-semibold text-slate-700 dark:text-slate-300">Trạng thái</label>
+              <select value={status} onChange={(event) => setStatus(event.target.value)} className="mt-1 h-11 w-full rounded-md border bg-background px-3 text-sm">
+                <option value="pending">Đang chờ</option>
+                <option value="accepted">Đã chấp nhận</option>
+                <option value="wrong_answer">Sai kết quả</option>
+                <option value="compile_error">Lỗi biên dịch</option>
+              </select>
+            </div>
 
             <div>
               <label className="text-xs font-semibold text-slate-700 dark:text-slate-300">
@@ -201,7 +220,7 @@ export default function SubmissionDetailPage() {
             </div>
 
             <Button
-              onClick={() => void saveSubmission(true)}
+              onClick={() => void saveSubmission()}
               className="w-full h-11 bg-[#2f226b] font-semibold text-white shadow-sm hover:bg-[#251b56]"
             >
               <Save className="size-4 mr-2" /> {saved ? "Đã lưu nhận xét" : "Lưu nhận xét"}

@@ -10,7 +10,8 @@ export function isSimilarGrade(score: GradeScoreValue | undefined): boolean {
 }
 
 export function isOverriddenGrade(score: GradeScoreValue | undefined): boolean {
-  return typeof score === "object" && score !== null && score.is_overridden === true;
+  return typeof score === "object" && score !== null
+    && (score.is_overridden === true || score.manual_score !== null && score.manual_score !== undefined);
 }
 
 export function hasSubmittedGrade(score: GradeScoreValue | undefined): boolean {
@@ -27,8 +28,8 @@ export function hasMeaningfulGrade(rowScores: Record<string, GradeScoreValue[]> 
 }
 
 export function sessionAverage(scores: GradeScoreValue[] | undefined): string {
-  const values = (scores ?? []).map(normalizeGradeScore).filter((score): score is number => score !== null);
-  return values.length ? (values.reduce((sum, score) => sum + score, 0) / values.length).toFixed(1) : "–";
+  const values = (scores ?? []).map((score) => normalizeGradeScore(score) ?? 0);
+  return values.length ? (values.reduce((sum, score) => sum + score, 0) / values.length).toFixed(1) : "0.0";
 }
 
 export function GradeCell({ score, suppressWarning = false }: { score: GradeScoreValue | undefined; suppressWarning?: boolean }) {

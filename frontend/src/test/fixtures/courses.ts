@@ -49,6 +49,7 @@ export const mockCourses: CourseSummary[] = rawCourses.map((r) => ({
   id: r.course_id,
   code: r.course_id,
   name: r.course_name,
+  start_date: r.start_date,
   language: "java" as const,
   status: "ongoing" as const,
   teacher_name: r.created_by,

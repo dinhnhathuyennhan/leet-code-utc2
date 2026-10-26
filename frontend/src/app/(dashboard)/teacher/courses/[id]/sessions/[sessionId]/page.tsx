@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { useParams, useSearchParams } from "next/navigation";
+import { useParams, useRouter, useSearchParams } from "next/navigation";
 import {
   ArrowRight,
   Bell,
@@ -24,10 +24,12 @@ import { Button } from "@/components/ui/button";
 import { getSessionDetail } from "@/lib/api/endpoints/courses";
 import type { SessionDetailData } from "@/lib/types/course";
 import { SessionEditPage } from "@/components/teacher/session-edit-page";
+import { formatDate } from "@/lib/helpers/format";
 
 export default function TeacherSessionDetailPage() {
   const { id: courseId, sessionId } = useParams<{ id: string; sessionId: string }>();
   const searchParams = useSearchParams();
+  const router = useRouter();
   const [data, setData] = useState<SessionDetailData | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<unknown>(null);
@@ -70,7 +72,7 @@ export default function TeacherSessionDetailPage() {
           <div className="flex flex-wrap items-center gap-6 text-[15px] text-muted-foreground">
             <span className="flex items-center gap-2">
               <Calendar className="size-4 text-slate-500" />
-              Mở - đóng: <strong>{data.start_date} → {data.end_date}</strong>
+              Mở - đóng: <strong>{formatDate(data.start_date)} → {formatDate(data.end_date)}</strong>
             </span>
             <span className="flex items-center gap-2">
               <Users className="size-4 text-slate-500" />
@@ -81,10 +83,7 @@ export default function TeacherSessionDetailPage() {
 
         <div className="flex flex-col items-end gap-2">
           <div className="flex items-center gap-3">
-                <Button variant="outline" className="h-10 border-slate-300 gap-1.5 font-medium text-slate-700 dark:text-slate-200">
-              <Plus className="size-4" /> Xem chi tiết
-            </Button>
-            <Button className="h-10 bg-[#2f226b] gap-1.5 font-semibold text-white hover:bg-[#251b56]">
+            <Button onClick={() => router.push(`/teacher/courses/${courseId}/sessions/${sessionId}?mode=edit`)} className="h-10 bg-[#2f226b] gap-1.5 font-semibold text-white hover:bg-[#251b56]">
               <Plus className="size-4" /> Thêm bài tập
             </Button>
           </div>
@@ -140,6 +139,7 @@ export default function TeacherSessionDetailPage() {
       </div>
 
       {/* ─── Cảnh báo hạn chót nộp bài ─────────────────────────────────────── */}
+      {data.alert && data.alert.missing_students > 0 && (
       <section className="flex flex-wrap items-center justify-between gap-4 rounded-2xl border border-amber-200 bg-[#fefce8] p-5 shadow-xs dark:border-amber-500/30 dark:bg-amber-500/10">
         <div className="flex items-center gap-4">
           <div className="flex size-12 shrink-0 items-center justify-center rounded-xl bg-red-600 text-white shadow-sm">
@@ -150,25 +150,31 @@ export default function TeacherSessionDetailPage() {
               <h3 className="text-base font-bold text-slate-900 dark:text-slate-100">
                 Cảnh báo hạn chót nộp bài
               </h3>
-              <span className="rounded bg-red-100 px-2 py-0.5 font-mono text-xs font-bold text-red-700 dark:bg-red-500/20 dark:text-red-300">
-                {data.alert.problem_code}
-              </span>
+              {data.alert.problem_code && (
+                <span className="rounded bg-red-100 px-2 py-0.5 font-mono text-xs font-bold text-red-700 dark:bg-red-500/20 dark:text-red-300">
+                  {data.alert.problem_code}
+                </span>
+              )}
             </div>
             <p className="text-sm text-slate-700 dark:text-slate-300">
-              Có <strong className="font-bold text-slate-900 dark:text-slate-100">{data.alert.missing_students} sinh viên</strong> chưa nộp bài {data.alert.problem_name}. Hạn chót đóng hệ thống tự động vào {data.alert.deadline_text}.
+              Có <strong className="font-bold text-slate-900 dark:text-slate-100">{data.alert.missing_students} sinh viên</strong> chưa nộp bài {data.alert.problem_name ?? ""}. Hạn chót đóng hệ thống tự động vào {data.alert.deadline_text ?? ""}.
             </p>
           </div>
         </div>
 
         <div className="flex flex-wrap items-center gap-3">
-          <Button variant="outline" className="h-10 bg-white font-semibold text-slate-800 shadow-xs hover:bg-slate-50 dark:bg-slate-800 dark:text-slate-200">
+          <Button asChild variant="outline" className="h-10 bg-white font-semibold text-slate-800 shadow-xs hover:bg-slate-50 dark:bg-slate-800 dark:text-slate-200">
+            <Link href={`/teacher/submissions?course=${encodeURIComponent(data.course_code)}&lesson_id=${sessionId}`}>
             Xem danh sách {data.alert.missing_students} SV
+            </Link>
           </Button>
-          <Button className="h-10 bg-[#facc15] font-semibold text-amber-950 shadow-xs hover:bg-[#eab308]">
+          {/* TODO: Backend chưa cung cấp API gửi nhắc nhở. */}
+          <Button disabled title="Tính năng chưa được backend hỗ trợ" className="h-10 bg-[#facc15] font-semibold text-amber-950 shadow-xs hover:bg-[#eab308]">
             <Send className="size-4" /> Gửi nhắc nhở
           </Button>
         </div>
       </section>
+      )}
 
       {/* ─── Danh sách bài tập thực hành ───────────────────────────────────── */}
       <section className="space-y-4">
@@ -177,7 +183,7 @@ export default function TeacherSessionDetailPage() {
             DANH SÁCH BÀI TẬP THỰC HÀNH ({String(data.exercises.length).padStart(2, "0")})
           </h2>
           <Link
-            href={`/teacher/submissions?course=${data.course_code}&session=${data.order}`}
+            href={`/teacher/submissions?course=${encodeURIComponent(data.course_code)}&lesson_id=${sessionId}`}
             className="flex items-center gap-1.5 text-sm font-semibold text-[#2f226b] hover:underline dark:text-indigo-300"
           >
             Xem tất cả bài nộp buổi này <ArrowRight className="size-4" />
@@ -227,8 +233,10 @@ export default function TeacherSessionDetailPage() {
                 <Button asChild variant="outline" className="h-10 gap-1.5 border-slate-300 font-medium text-slate-700 dark:text-slate-200">
                   <Link href={`/teacher/courses/${courseId}/sessions/${sessionId}/problems/${item.id}`}><Plus className="size-4" /> Xem chi tiết</Link>
                 </Button>
-                <Button className="h-10 bg-[#2f226b] gap-1.5 font-semibold text-white hover:bg-[#251b56]">
+                <Button asChild className="h-10 bg-[#2f226b] gap-1.5 font-semibold text-white hover:bg-[#251b56]">
+                  <Link href={`/teacher/submissions?course=${encodeURIComponent(data.course_code)}&problem_id=${item.id}`}>
                   <Plus className="size-4" /> Xem {item.submitted_count} bài nộp
+                  </Link>
                 </Button>
               </div>
             </div>

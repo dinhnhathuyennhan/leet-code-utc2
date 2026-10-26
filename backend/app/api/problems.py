@@ -10,7 +10,8 @@ from app.modules.problems.schemas import ProblemDetailResponse, ProblemUpdateReq
 from app.modules.problems import service as problem_service
 from app.modules.testcases.testcase_import import MAX_UPLOAD_BYTES, parse_testcases
 from app.models import User
-
+from app.modules.submissions.judge0.schemas import CodeRequest, RunResponse, SubmitAcceptedResponse
+from app.modules.submissions.judge0 import grading_queue, service as judge_service
 router = APIRouter(tags=["problem"])
 BASE = "/courses/{course_id}/lessons/{lesson_id}/problems/{problem_id}"
 
@@ -79,3 +80,35 @@ def upload_problem_testcases_route(
     raw = file.file.read(MAX_UPLOAD_BYTES + 1)           # đọc có giới hạn
     items = parse_testcases(file.filename or "", raw)
     return problem_service.replace_testcases(session, course_id, lesson_id, problem_id, items, current_user)
+
+@router.post(BASE + "/run", response_model=RunResponse)
+def run_code_route(
+    course_id: str, lesson_id: int, problem_id: int, data: CodeRequest,
+    session: Session = Depends(get_session),
+    current_user: User = Depends(require_role(Role.STUDENT)),
+) -> RunResponse:
+    return judge_service.run(session, course_id, lesson_id, problem_id, data, current_user)
+
+
+@router.post(BASE + "/submissions", response_model=SubmitAcceptedResponse, status_code=status.HTTP_202_ACCEPTED)
+def submit_code_route(
+        course_id: str, lesson_id: int, problem_id: int, data: CodeRequest,
+        session: Session = Depends(get_session),
+        current_user: User = Depends(require_role(Role.STUDENT)),
+) -> SubmitAcceptedResponse:
+    submission = judge_service.submit(session, course_id, lesson_id, problem_id, data, current_user)
+    grading_queue.enqueue(submission.submission_id)
+    return SubmitAcceptedResponse(submission_id=submission.submission_id, status=submission.status)
+
+@router.post(
+    "/{submission_id}/regrade",
+    response_model=SubmitAcceptedResponse,
+    status_code=status.HTTP_202_ACCEPTED,
+)
+def regrade_submission_route(
+    submission_id: int,
+    session: Session = Depends(get_session),
+    current_user: User = Depends(require_role(Role.ADMIN, Role.TEACHER)),
+) -> SubmitAcceptedResponse:
+    submission = judge_service.regrade(session, submission_id, current_user)
+    return SubmitAcceptedResponse(submission_id=submission.submission_id, status=submission.status)

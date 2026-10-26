@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { useSearchParams } from "next/navigation";
 import { useBreadcrumbLabel } from "@/components/shared/breadcrumb-context";
 import { PendingSubmissionsPanel } from "@/components/teacher/pending-submissions-panel";
 import { usePendingSubmissions } from "@/lib/hooks/use-dashboard";
@@ -11,9 +12,10 @@ export default function SubmissionsPage() {
   useBreadcrumbLabel("Bài nộp cần chấm & phúc khảo");
   const [search, setSearch] = useState("");
   const [filter, setFilter] = useState<PendingFilter>("all");
+  const searchParams = useSearchParams();
   const debouncedSearch = useDebouncedValue(search, 300);
 
-  const pending = usePendingSubmissions({ filter, search: debouncedSearch.trim() || undefined });
+  const pending = usePendingSubmissions({ filter, search: debouncedSearch.trim() || undefined, course: searchParams.get("course") ?? undefined, lesson_id: Number(searchParams.get("lesson_id")) || undefined, problem_id: Number(searchParams.get("problem_id")) || undefined });
 
   return (
     <div className="space-y-6">

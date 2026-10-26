@@ -52,7 +52,7 @@ export default function StudentCourseDetailPage() {
       <StudentCourseDetailTabs
         value={tab}
         onValueChange={setTab}
-        info={<StudentCourseInfoPanel courseId={courseId ?? ""} />}
+        info={<StudentCourseInfoPanel course={courseQuery.data} />}
         roster={
           <StudentRosterTable
             students={studentsQuery.data}

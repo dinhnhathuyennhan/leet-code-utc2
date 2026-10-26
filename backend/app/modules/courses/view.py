@@ -71,11 +71,10 @@ def build_course_response(
             ],
             "participant_count": None if is_student_view else participants.get(lesson.lesson_id, 0),
         })
-
     enrollment_stmt = (
-        select(Enrollment, User).join(User, Enrollment.student_id == User.user_id)
-        .where(Enrollment.course_id == course.course_id)
-    )
+            select(Enrollment, User).join(User, Enrollment.student_id == User.user_id)
+            .where(Enrollment.course_id == course.course_id)
+        )
     if only_student_id is not None:
         enrollment_stmt = enrollment_stmt.where(Enrollment.student_id == only_student_id)
     enrollments = session.exec(enrollment_stmt).all()
@@ -85,7 +84,7 @@ def build_course_response(
         for lesson_problems in problems_by_lesson.values()
         for problem in lesson_problems
     ]
-    best = grade_service.best_passed_counts(
+    best = grade_service.best_grade_scores(
         session, grade_problem_ids, [student.user_id for _, student in enrollments]
     )
     response.sessions = [CourseLessonResponse.model_validate(item) for item in lesson_responses]

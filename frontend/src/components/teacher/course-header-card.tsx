@@ -3,6 +3,7 @@ import { CalendarCheck, Pencil, Plus, UserCheck } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { formatDate } from "@/lib/helpers/format";
+import { formatUpdatedAt } from "@/lib/helpers/datetime";
 import type { CourseDetail } from "@/lib/types/course";
 
 function MetaItem({ icon, children }: { icon: ReactNode; children: ReactNode }) {
@@ -41,6 +42,9 @@ export function CourseHeaderCard({ course, onCreateSession, onEditCourse }: Cour
           <MetaItem icon={<UserCheck className="size-4 text-slate-500" />}>
             Sĩ số: <strong>{course.student_count} sinh viên</strong>
           </MetaItem>
+          {course.updated_at && formatUpdatedAt(course.updated_at) && <MetaItem icon={<CalendarCheck className="size-4 text-slate-500" />}>
+            Cập nhật lúc: <strong>{formatUpdatedAt(course.updated_at)}</strong>
+          </MetaItem>}
         </div>
       </div>
 

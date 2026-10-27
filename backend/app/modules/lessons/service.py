@@ -233,6 +233,8 @@ def get_lesson_detail(session: Session, course_id: str, lesson_id: int, current_
                 "total_number_testcase": p.total_number_testcase,
                 "starter_code": p.starter_codes.get("python") or p.start_format_code,
                 "starter_codes": p.starter_codes or {"python": p.start_format_code},
+                "start_datetime": p.start_datetime,
+                "end_datetime": p.end_datetime,
                 "testcases": [
                     {"id": t.testcase_id, **testcase_to_api_values(t), "is_sample": t.is_sample}
                     for t in testcases_by_problem[p.problem_id]

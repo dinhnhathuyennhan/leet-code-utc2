@@ -1,4 +1,4 @@
-from datetime import date
+from datetime import date, datetime
 
 from pydantic import BaseModel, Field, field_validator, model_validator
 
@@ -108,6 +108,8 @@ class LessonExerciseResponse(BaseModel):
     total_number_testcase: int
     starter_code: str
     starter_codes: dict[str, str] = Field(default_factory=dict)
+    start_datetime: datetime
+    end_datetime: datetime
     submitted_count: int | None = None
     testcases: list[ProblemTestcaseResponse]
 

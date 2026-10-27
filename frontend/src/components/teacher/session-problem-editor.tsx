@@ -102,7 +102,8 @@ export function SessionProblemEditor({ courseId, sessionId, exercise, onSaved, o
   async function save() {
     const nextErrors: string[] = [];
     if (!draft.title.trim()) nextErrors.push("Tên bài tập không được để trống.");
-    if (!draft.function_name?.trim()) nextErrors.push("Tên hàm không được để trống.");
+    // Bài cũ chưa từng khai báo tên hàm vẫn phải sửa được nội dung; chỉ chặn việc xoá trắng tên hàm đã có.
+    if (exercise.function_name?.trim() && !draft.function_name?.trim()) nextErrors.push("Tên hàm không được để trống.");
     if (!draft.start_datetime || !draft.end_datetime || new Date(draft.start_datetime) >= new Date(draft.end_datetime)) nextErrors.push("Giờ đóng/nộp phải sau giờ mở.");
     let testcases: ProblemUpdateRequest["testcases"];
     if (!hasSubmissions) {
@@ -114,12 +115,19 @@ export function SessionProblemEditor({ courseId, sessionId, exercise, onSaved, o
     setErrors(nextErrors);
     if (nextErrors.length) return;
     const functionChanged = draft.function_name?.trim() !== (exercise.function_name ?? "");
+    // Backend bắt starter_codes phải đủ 4 ngôn ngữ, nên bù những ngôn ngữ còn thiếu bằng mã đang có.
+    const starterCodes = { python: draft.starter_code, c: draft.starter_code, cpp: draft.starter_code, java: draft.starter_code, ...(draft.starter_codes ?? {}) };
     const payload: ProblemUpdateRequest = {
       title: draft.title.trim(), description: draft.description, constraints: draft.constraints, level: draft.level,
-      hint: draft.hint || null, complexity: draft.complexity || null, time_limit_seconds: Number(draft.time_limit_seconds),
-      ...(functionChanged ? { function_name: draft.function_name?.trim(), starter_codes: draft.starter_codes ?? { python: draft.starter_code, c: draft.starter_code, cpp: draft.starter_code, java: draft.starter_code } } : {}),
-      start_datetime: `${draft.start_datetime}:00+07:00`, end_datetime: `${draft.end_datetime}:00+07:00`, starter_code: draft.starter_code,
-      ...(hasSubmissions ? {} : { testcases }),
+      hint: draft.hint || null, complexity: draft.complexity || null,
+      start_datetime: `${draft.start_datetime}:00+07:00`, end_datetime: `${draft.end_datetime}:00+07:00`,
+      // Các trường ảnh hưởng tới việc chấm chỉ được gửi khi bài chưa có bài nộp.
+      ...(hasSubmissions ? {} : {
+        time_limit_seconds: Number(draft.time_limit_seconds),
+        starter_code: draft.starter_code,
+        testcases,
+        ...(functionChanged ? { function_name: draft.function_name?.trim(), starter_codes: starterCodes } : {}),
+      }),
     };
     setSaving(true);
     try {
@@ -168,7 +176,7 @@ export function SessionProblemEditor({ courseId, sessionId, exercise, onSaved, o
     <div className="flex items-center justify-between"><div><h2 className="font-bold text-[#2f226b]">SOẠN THẢO BÀI {exercise.order}</h2><p className="text-xs text-muted-foreground">Chỉnh nội dung theo dữ liệu bài tập đang chọn.</p></div><div className="flex gap-2"><Button variant="outline" onClick={() => void removeProblem()} className="text-red-600"><Trash2 className="size-4" /> Xóa bài</Button><Button onClick={() => void save()} disabled={saving} className="bg-[#2f226b] text-white"><Save className="size-4" /> {saving ? "Đang lưu..." : "Lưu bài tập"}</Button></div></div>
     {errors.length > 0 && <div role="alert" className="space-y-1 rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700">{errors.map((error) => <p key={error}>{error}</p>)}</div>}
     <label className="block space-y-1 text-xs font-semibold">Tên bài tập<Input value={draft.title} onChange={(event) => setField("title", event.target.value)} className="bg-indigo-50/70" /></label>
-    <label className="block space-y-1 text-xs font-semibold">Tên hàm<Input value={draft.function_name ?? ""} onChange={(event) => setField("function_name", event.target.value)} className="bg-indigo-50/70" /><span className="font-normal text-muted-foreground">Tên hàm được runner dùng để chấm bài.</span></label>
+    <label className="block space-y-1 text-xs font-semibold">Tên hàm<Input disabled={hasSubmissions} value={draft.function_name ?? ""} onChange={(event) => setField("function_name", event.target.value)} className="bg-indigo-50/70" /><span className="font-normal text-muted-foreground">Tên hàm được runner dùng để chấm bài.</span></label>
     <div className="grid gap-3 sm:grid-cols-3"><label className="space-y-1 text-xs font-semibold">Mức độ<select value={draft.level} onChange={(event) => setField("level", event.target.value as Draft["level"])} className="mt-1 h-9 w-full rounded-lg border bg-indigo-50/70 px-2 text-sm"><option value="easy">Dễ</option><option value="medium">Trung bình</option><option value="hard">Khó</option></select></label><label className="space-y-1 text-xs font-semibold">Giới hạn thời gian (giây)<Input disabled={hasSubmissions} type="number" value={draft.time_limit_seconds} onChange={(event) => setField("time_limit_seconds", Number(event.target.value))} className="bg-indigo-50/70" /></label><div className="space-y-1 text-xs font-semibold"><span>Điểm tối đa</span><div className="flex h-9 items-center rounded-lg bg-indigo-50/70 px-3 text-sm text-muted-foreground">Theo testcase</div></div></div>
     <div className="grid gap-3 sm:grid-cols-2"><label className="space-y-1 text-xs font-semibold">Mở bài<Input disabled={hasSubmissions} type="datetime-local" value={draft.start_datetime} onChange={(event) => setField("start_datetime", event.target.value)} className="bg-indigo-50/70" /></label><label className="space-y-1 text-xs font-semibold">Đóng/nộp bài<Input type="datetime-local" value={draft.end_datetime} onChange={(event) => setField("end_datetime", event.target.value)} className="bg-indigo-50/70" /></label></div>
     <label className="block space-y-1 text-xs font-semibold">Mô tả bài<Textarea value={draft.description} onChange={(event) => setField("description", event.target.value)} className="min-h-40 bg-indigo-50/70" /></label>

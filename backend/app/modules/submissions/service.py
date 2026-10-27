@@ -16,6 +16,8 @@ from app.models import Course, Lesson, Problem, Submission, Testcase, User
 _NEW_STATUSES = {"processing", "time_limit_exceeded", "runtime_error", "internal_error"}
 _VISIBLE_STATUSES = {"pending", "wrong_answer", "compile_error"} | _NEW_STATUSES
 _ALLOWED_UPDATE_STATUSES = {"pending", "accepted", "wrong_answer", "compile_error"} | _NEW_STATUSES
+# Các giá trị `filter` lọc theo nhóm judge_kind mà frontend hiển thị thành chip.
+_JUDGE_KIND_FILTERS = {"pending", "wrong_answer", "compile_error", "accepted"}
 
 
 def _teacher_course_ids(session: Session, current_user: User) -> set[str] | None:
@@ -69,6 +71,11 @@ def _judge_label(status: str) -> str:
     }.get(status.lower(), status)
 
 
+def _needs_grading(submission: Submission) -> bool:
+    """Bài còn phải chấm tay: chưa có điểm tay và judge chưa cho đạt."""
+    return submission.manual_score is None and _judge_kind(submission.status) != "accepted"
+
+
 def _issue(submission: Submission, problem: Problem) -> str:
     if submission.status.lower() == "compile_error":
         return submission.compile_output or "Bài nộp bị lỗi biên dịch."
@@ -114,6 +121,10 @@ def list_pending_submissions(
         "all": len(rows),
         "graded": sum(row[0].status.lower() == "accepted" for row in rows),
         "ungraded": sum(row[0].status.lower() != "accepted" for row in rows),
+        "pending": sum(_judge_kind(row[0].status) == "pending" for row in rows),
+        "wrong_answer": sum(_judge_kind(row[0].status) == "wrong_answer" for row in rows),
+        "compile_error": sum(_judge_kind(row[0].status) == "compile_error" for row in rows),
+        "needs_grading": sum(_needs_grading(row[0]) for row in rows),
         "late_appeal": 0,
         "similarity": 0,
         "error": sum(row[0].status.lower() == "compile_error" for row in rows),
@@ -123,6 +134,10 @@ def list_pending_submissions(
         filtered = [row for row in rows if row[0].status.lower() == "accepted"]
     elif filter_name == "error":
         filtered = [row for row in rows if row[0].status.lower() == "compile_error"]
+    elif filter_name in _JUDGE_KIND_FILTERS:
+        filtered = [row for row in rows if _judge_kind(row[0].status) == filter_name]
+    elif filter_name == "needs_grading":
+        filtered = [row for row in rows if _needs_grading(row[0])]
     elif filter_name in {"late_appeal", "similarity"}:
         filtered = []
     else:
@@ -140,9 +155,12 @@ def list_pending_submissions(
             session_label=f"Buổi {lesson.lesson_number}: {lesson.lesson_name}",
             topic=problem.title,
             judge_kind=_judge_kind(submission.status),
-        judge_label=_judge_label(submission.status),
+            judge_label=_judge_label(submission.status),
             issue=_issue(submission, problem),
-        manual_score=submission.manual_score,
+            status=submission.status,
+            manual_score=submission.manual_score,
+            passed_count=submission.passed_count,
+            total_testcases=problem.total_number_testcase,
         )
         for submission, problem, lesson, course, student in filtered[:max(limit, 1)]
     ]

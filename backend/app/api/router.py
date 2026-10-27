@@ -11,6 +11,7 @@ from app.api import (
     submissions,
     testcases,
     users,
+    ai_review,
 )
 
 api_router = APIRouter()
@@ -25,3 +26,4 @@ api_router.include_router(problems.router)
 api_router.include_router(submissions.router)
 api_router.include_router(classrooms.router)
 api_router.include_router(testcases.router)
+api_router.include_router(ai_review.router)

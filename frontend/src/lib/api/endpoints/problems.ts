@@ -8,6 +8,3 @@ export interface ProblemListParams { q?: string; level?: "easy" | "medium" | "ha
 export async function getProblems(params: ProblemListParams = {}): Promise<ProblemListResponse> {
   try { return (await axiosInstance.get<ProblemListResponse>("/problems", { params })).data; } catch (error) { throw wrapAxiosError(error); }
 }
-export async function deleteProblem(courseId: string, lessonId: string | number, problemId: string | number): Promise<void> {
-  try { await axiosInstance.delete(`/courses/${courseId}/lessons/${lessonId}/problems/${problemId}`); } catch (error) { throw wrapAxiosError(error); }
-}

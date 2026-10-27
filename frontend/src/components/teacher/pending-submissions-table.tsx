@@ -23,20 +23,24 @@ const ACTIONS: Record<JudgeKind, { label: string; className: string }> = {
   compile_error: { label: "Chấm ngay", className: "bg-[#2f226b] text-white hover:bg-[#251b56]" },
 };
 
-type SubmissionMeta = { status: string; manualScore: number | null };
-
-function displayStatus(row: PendingSubmission, meta?: SubmissionMeta) {
-  if (meta?.status === "accepted") return { kind: "graded" as const, label: "Đã chấp nhận" };
-  if (meta?.status === "pending") return { kind: "pending" as const, label: "Đang chờ" };
-  if (meta?.status === "compile_error") return { kind: "compile_error" as const, label: "Lỗi biên dịch" };
-  if (meta?.status === "wrong_answer") return { kind: "wrong_answer" as const, label: "Sai kết quả" };
+function displayStatus(row: PendingSubmission) {
+  if (row.status === "accepted") return { kind: "graded" as const, label: "Đã chấp nhận" };
+  if (row.status === "pending") return { kind: "pending" as const, label: "Đang chờ" };
+  if (row.status === "compile_error") return { kind: "compile_error" as const, label: "Lỗi biên dịch" };
+  if (row.status === "wrong_answer") return { kind: "wrong_answer" as const, label: "Sai kết quả" };
   if (row.judge_kind === "graded") return { kind: "graded" as const, label: "Đã chấp nhận" };
   return { kind: row.judge_kind, label: row.judge_label };
 }
 
-export function PendingSubmissionsTable({ rows, scores = {}, metadata = {}, returnTo }: { rows: PendingSubmission[]; scores?: Record<number, number | null>; metadata?: Record<number, SubmissionMeta>; returnTo?: string }) {
-  const hasScores = Object.keys(scores).length > 0;
-  const hasMetadata = Object.keys(metadata).length > 0;
+/** Điểm hiển thị: điểm giáo viên chấm tay, nếu chưa có thì quy đổi từ số testcase đã qua. */
+export function displayScore(row: PendingSubmission): number | null {
+  if (row.manual_score != null) return row.manual_score;
+  return row.total_testcases ? (row.passed_count / row.total_testcases) * 10 : null;
+}
+
+export function PendingSubmissionsTable({ rows, showScore = false, showGraded = false, returnTo }: { rows: PendingSubmission[]; showScore?: boolean; showGraded?: boolean; returnTo?: string }) {
+  const hasScores = showScore;
+  const hasMetadata = showGraded;
   return (
     <div className="overflow-x-auto rounded-lg border">
       <Table className="min-w-[44rem]">
@@ -51,8 +55,8 @@ export function PendingSubmissionsTable({ rows, scores = {}, metadata = {}, retu
         </TableHeader>
         <TableBody>
           {rows.map((row) => {
-            const meta = metadata[row.id];
-            const status = displayStatus(row, meta);
+            const status = displayStatus(row);
+            const score = displayScore(row);
             const action = ACTIONS[status.kind];
             return (
               <TableRow key={row.id}>
@@ -72,8 +76,8 @@ export function PendingSubmissionsTable({ rows, scores = {}, metadata = {}, retu
                   </span>
                 </TableCell>
                 <TableCell className="text-sm text-red-600 dark:text-red-400">{row.issue}</TableCell>
-                {hasScores && <TableCell className="text-center font-semibold">{scores[row.id] == null ? "—" : scores[row.id]!.toFixed(1)}</TableCell>}
-                {hasMetadata && <TableCell className="text-center">{meta?.manualScore != null ? <span className="font-semibold text-emerald-700">Có</span> : <span className="text-muted-foreground">Chưa</span>}</TableCell>}
+                {hasScores && <TableCell className="text-center font-semibold">{score == null ? "—" : score.toFixed(1)}</TableCell>}
+                {hasMetadata && <TableCell className="text-center">{row.manual_score != null ? <span className="font-semibold text-emerald-700">Có</span> : <span className="text-muted-foreground">Chưa</span>}</TableCell>}
                 <TableCell className="text-center">
                   <Button asChild size="sm" className={cn("min-w-24", action.className)}>
                     <Link href={`/teacher/submissions/${row.id}${returnTo ? `?returnTo=${encodeURIComponent(returnTo)}` : ""}`}>{action.label}</Link>

@@ -7,21 +7,14 @@ import type { UserResponse } from "@/lib/api/types";
 export async function getTeacherOverview(): Promise<TeacherOverview> {
   const [courses, pending, user] = await Promise.all([
     getCourses(),
-    getPendingSubmissions({ filter: "all", limit: 500 }),
+    // limit=1: chỉ cần `counts` do backend đếm trên toàn bộ dữ liệu, không kéo về danh sách.
+    getPendingSubmissions({ filter: "all", limit: 1 }),
     getCurrentUser(),
   ]);
-  const pendingForReview = await Promise.all(pending.items.map(async (item) => {
-    try {
-      const detail = await getSubmissionDetail(item.id);
-      return detail.manual_score == null && ["pending", "wrong_answer", "compile_error"].includes(detail.status);
-    } catch {
-      return false;
-    }
-  }));
   return {
     teacher_name: user.full_name,
     term_label: courses.items[0] ? `Học kỳ ${courses.items[0].semester} (${courses.items[0].academic_year})` : "",
-    stats: { active_courses: courses.items.filter((course) => course.status === "ongoing").length, pending_grading: pendingForReview.filter(Boolean).length },
+    stats: { active_courses: courses.items.filter((course) => course.status === "ongoing").length, pending_grading: pending.counts.needs_grading ?? 0 },
     recent_courses: courses.items
       .filter((course) => course.status === "ongoing")
       .sort((a, b) => new Date(b.start_date ?? 0).getTime() - new Date(a.start_date ?? 0).getTime())
@@ -54,6 +47,7 @@ export async function getPendingSubmissions(params: PendingSubmissionParams): Pr
         compile_error: counts.compile_error ?? counts.error ?? 0,
         graded: counts.graded ?? 0,
         ungraded: counts.ungraded ?? 0,
+        needs_grading: counts.needs_grading ?? 0,
         late_appeal: counts.late_appeal ?? 0,
         similarity: counts.similarity ?? 0,
         error: counts.error ?? 0,

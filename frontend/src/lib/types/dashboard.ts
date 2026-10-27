@@ -27,7 +27,11 @@ export interface PendingSubmission {
   judge_kind: JudgeKind;
   judge_label: string;
   issue: string;
+  /** Trạng thái thật trong database, dùng để lọc và hiển thị thay cho judge_kind. */
+  status: string;
   manual_score?: number | null;
+  passed_count: number;
+  total_testcases: number;
 }
 
 export interface PendingSubmissionParams {
@@ -43,7 +47,7 @@ export interface PendingSubmissionParams {
 export interface PendingSubmissionsResponse {
   items: PendingSubmission[];
   total: number;
-  counts: Record<PendingFilter, number> & { graded?: number; ungraded?: number; late_appeal?: number; similarity?: number; error?: number };
+  counts: Record<PendingFilter, number> & { graded?: number; ungraded?: number; needs_grading?: number; late_appeal?: number; similarity?: number; error?: number };
 }
 
 export interface SubmissionTestcase {

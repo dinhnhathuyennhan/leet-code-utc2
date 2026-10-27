@@ -20,6 +20,15 @@ import { Textarea } from "@/components/ui/textarea";
 import { getSubmissionDetail, updateSubmission } from "@/lib/api/endpoints/dashboard";
 import type { SubmissionDetail } from "@/lib/types/dashboard";
 
+/**
+ * Giữ lại `returnTo` khi đó là đường dẫn nội bộ (`/...`), bỏ qua mọi URL tuyệt đối
+ * hoặc `//host` để link "Quay lại" không điều hướng người dùng ra ngoài hệ thống.
+ */
+function safeReturnTo(value: string | null): string | null {
+  if (!value || !value.startsWith("/") || value.startsWith("//")) return null;
+  return value;
+}
+
 export default function SubmissionDetailPage() {
   const { id } = useParams<{ id: string }>();
   const searchParams = useSearchParams();
@@ -27,10 +36,16 @@ export default function SubmissionDetailPage() {
 
   const [data, setData] = useState<SubmissionDetail | null>(null);
   const [error, setError] = useState<unknown>(null);
+  // Lỗi khi chấm điểm hiển thị ngay trong form, không được thay thế cả trang
+  // vì như vậy giáo viên mất hết nhận xét vừa gõ.
+  const [saveError, setSaveError] = useState<string | null>(null);
   const [feedback, setFeedback] = useState("");
   const [manualScore, setManualScore] = useState("");
   const [saved, setSaved] = useState(false);
   const [status, setStatus] = useState("pending");
+
+  /** Chỉ nhận đường dẫn nội bộ, tránh bị lợi dụng để điều hướng ra ngoài hệ thống. */
+  const returnTo = safeReturnTo(searchParams.get("returnTo"));
 
   useBreadcrumbLabels(data?.course_code, data?.session_label, data ? `${data.problem_code ?? "Bài tập"} · Bài nộp #${id}` : `Bài nộp #${id}`);
 
@@ -53,24 +68,23 @@ export default function SubmissionDetailPage() {
   async function saveSubmission() {
     const parsedScore = Number(manualScore);
     if (!Number.isFinite(parsedScore) || parsedScore < 0 || parsedScore > 10) {
-      setError(new Error("Điểm phải nằm trong khoảng 0 đến 10."));
+      setSaveError("Điểm phải nằm trong khoảng 0 đến 10.");
       return;
     }
+    setSaveError(null);
     try {
       const submission = await updateSubmission(id, {
         feedback,
         manual_score: parsedScore,
-
         status,
       });
       setData(submission);
       setStatus(submission.status);
       setSaved(true);
       window.dispatchEvent(new CustomEvent("submission:updated", { detail: submission }));
-      const returnTo = searchParams.get("returnTo");
-      if (returnTo === "/teacher/submissions") router.push(returnTo);
+      if (returnTo) router.push(returnTo);
     } catch (requestError) {
-      setError(requestError);
+      setSaveError(requestError instanceof Error ? requestError.message : "Không thể lưu điểm. Vui lòng thử lại.");
     }
   }
 
@@ -82,7 +96,7 @@ export default function SubmissionDetailPage() {
       <div className="flex flex-wrap items-center justify-between gap-4">
         <div className="flex items-center gap-3">
           <Button asChild variant="outline" size="sm" className="gap-1.5 border-slate-300">
-            <Link href={searchParams.get("returnTo") || "/teacher/submissions"}>
+            <Link href={returnTo ?? "/teacher/submissions"}>
               <ArrowLeft className="size-4" /> Quay lại
             </Link>
           </Button>
@@ -170,6 +184,12 @@ export default function SubmissionDetailPage() {
             <h3 className="text-base font-bold text-slate-900 dark:text-slate-100">
               Đánh giá & Chấm điểm
             </h3>
+
+            {saveError && (
+              <p role="alert" className="rounded-md border border-red-300 bg-red-50 px-3 py-2 text-sm text-red-700 dark:border-red-500/40 dark:bg-red-500/10 dark:text-red-300">
+                {saveError}
+              </p>
+            )}
 
             <div>
               <label className="text-xs font-semibold text-slate-700 dark:text-slate-300">Trạng thái</label>

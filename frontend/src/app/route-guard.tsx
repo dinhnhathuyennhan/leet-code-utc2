@@ -145,11 +145,15 @@ export function RouteGuard({ children }: { children: React.ReactNode }) {
     );
   }
 
-  if (auth.status === "connection-lost") {
+  // Trang công khai (đăng nhập, quên mật khẩu) vẫn phải vào được khi backend lỗi:
+  // chính lúc đó người dùng cần thử đăng nhập lại.
+  const isPublicPage = PUBLIC_ROUTES.includes(pathname);
+
+  if (auth.status === "connection-lost" && !isPublicPage) {
     return <ConnectionLostState retrying={retryingConnection} onRetry={() => { setRetryingConnection(true); void auth.retryConnection().finally(() => setRetryingConnection(false)); }} />;
   }
 
-  if (auth.status === "server-error") {
+  if (auth.status === "server-error" && !isPublicPage) {
     return <ServerErrorState retrying={retryingConnection} onRetry={() => { setRetryingConnection(true); void auth.retryConnection().finally(() => setRetryingConnection(false)); }} />;
   }
 

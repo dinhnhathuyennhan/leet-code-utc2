@@ -10,6 +10,7 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { ErrorState } from "@/components/shared/page-state";
 import { Skeleton } from "@/components/ui/skeleton";
+import { useDebouncedValue } from "@/lib/hooks/use-debounced-value";
 import { parseInputText, parseOutputText } from "@/lib/helpers/testcases";
 
 const LEVELS = [{ value: "", label: "Tất cả mức độ" }, { value: "easy", label: "Dễ" }, { value: "medium", label: "Trung bình" }, { value: "hard", label: "Khó" }] as const;
@@ -26,12 +27,14 @@ export function ProblemBankPage() {
   const [selectedProblem, setSelectedProblem] = useState<ProblemListItem | null>(null);
   const [createOpen, setCreateOpen] = useState(false);
   const pageSize = 12;
+  // Chờ người dùng gõ xong mới gọi API, thay vì bắn một request cho mỗi phím.
+  const debouncedQuery = useDebouncedValue(query, 300);
 
   useEffect(() => {
     let active = true;
-    void getProblems({ q: query.trim() || undefined, level: level || undefined, page, page_size: pageSize }).then((response) => { if (!active) return; setError(null); setItems(response.items); setTotal(response.total); }).catch((requestError) => { if (active) setError(requestError); }).finally(() => { if (active) setLoading(false); });
+    void getProblems({ q: debouncedQuery.trim() || undefined, level: level || undefined, page, page_size: pageSize }).then((response) => { if (!active) return; setError(null); setItems(response.items); setTotal(response.total); }).catch((requestError) => { if (active) setError(requestError); }).finally(() => { if (active) setLoading(false); });
     return () => { active = false; };
-  }, [query, level, page, refreshKey]);
+  }, [debouncedQuery, level, page, refreshKey]);
 
   const totalPages = Math.max(1, Math.ceil(total / pageSize));
   return <section className="min-h-[calc(100dvh-110px)] rounded-xl bg-[#f8f9ff] shadow-sm"><header className="flex flex-wrap items-center justify-between gap-3 border-b bg-card px-4 py-3 sm:px-6"><div><h1 className="text-xl font-bold text-[#2f226b] sm:text-2xl">Ngân hàng bài</h1><p className="text-sm text-muted-foreground">Danh sách bài từ backend, gồm bài dùng chung và bài thuộc các khóa học của bạn.</p></div><Button onClick={() => setCreateOpen(true)} className="bg-[#34227a] text-white"><Plus className="size-4" /> Tạo bài</Button></header>

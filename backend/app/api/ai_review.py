@@ -1,8 +1,6 @@
-import httpx
+from fastapi import APIRouter, Depends
 
-from fastapi import APIRouter, Depends, HTTPException
-
-from app.core.dependencies import get_current_user
+from app.core.dependencies import Role, require_role
 from app.models import User
 from app.modules.ai_review.schemas import (
     AIReviewRequest,
@@ -23,25 +21,10 @@ router = APIRouter(
 )
 async def review_code(
     data: AIReviewRequest,
-    _current_user: User = Depends(get_current_user),
+    # Whitelist rõ 3 vai trò được phép; role lạ/role thêm sau này bị chặn
+    # thay vì mặc định được gọi endpoint tốn tài nguyên này.
+    _current_user: User = Depends(require_role(Role.ADMIN, Role.TEACHER, Role.STUDENT)),
 ) -> AIReviewResponse:
-    try:
-        return await AIReviewService.review(data)
-
-    except httpx.TimeoutException:
-        raise HTTPException(
-            status_code=504,
-            detail="AI xử lý quá thời gian cho phép.",
-        ) from None
-
-    except httpx.HTTPError:
-        raise HTTPException(
-            status_code=502,
-            detail="Không thể kết nối AI Server.",
-        ) from None
-
-    except (KeyError, TypeError, ValueError):
-        raise HTTPException(
-            status_code=502,
-            detail="AI trả về dữ liệu không hợp lệ.",
-        ) from None
+    # Lỗi nghiệp vụ (AIReviewTimeoutError, AIReviewUnavailableError...) kế thừa
+    # AppError và bay lên Global Exception Handler, router không tự bắt.
+    return await AIReviewService.review(data)

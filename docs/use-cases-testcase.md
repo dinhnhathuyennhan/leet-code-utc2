@@ -8,7 +8,7 @@ Testcase ban đầu của Problem bank được khai báo cùng `POST /problems`
 
 | | |
 |---|---|
-| **Description** V| Người dùng có quyền xem Course đọc testcase của Problem trong Lesson |
+| **Description** | Người dùng có quyền xem Course đọc testcase của Problem trong Lesson |
 | **Trigger** | Người dùng mở danh sách testcase hoặc chi tiết Problem |
 | **Pre-condition** | Đã đăng nhập; Course/Lesson/Problem tồn tại; người dùng có quyền xem Course |
 | **Post-condition** | Không thay đổi dữ liệu |

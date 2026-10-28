@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { useParams } from "next/navigation";
+import { useParams, useRouter, useSearchParams } from "next/navigation";
 import {
   ArrowLeft,
   CheckCircle2,
@@ -12,7 +12,7 @@ import {
   XCircle,
 } from "lucide-react";
 
-import { useBreadcrumbLabel } from "@/components/shared/breadcrumb-context";
+import { useBreadcrumbLabels } from "@/components/shared/breadcrumb-context";
 import { ErrorState } from "@/components/shared/page-state";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -20,15 +20,34 @@ import { Textarea } from "@/components/ui/textarea";
 import { getSubmissionDetail, updateSubmission } from "@/lib/api/endpoints/dashboard";
 import type { SubmissionDetail } from "@/lib/types/dashboard";
 
+/**
+ * Giữ lại `returnTo` khi đó là đường dẫn nội bộ (`/...`), bỏ qua mọi URL tuyệt đối
+ * hoặc `//host` để link "Quay lại" không điều hướng người dùng ra ngoài hệ thống.
+ */
+function safeReturnTo(value: string | null): string | null {
+  if (!value || !value.startsWith("/") || value.startsWith("//")) return null;
+  return value;
+}
+
 export default function SubmissionDetailPage() {
   const { id } = useParams<{ id: string }>();
-  useBreadcrumbLabel(`Chấm bài #${id}`);
+  const searchParams = useSearchParams();
+  const router = useRouter();
 
   const [data, setData] = useState<SubmissionDetail | null>(null);
   const [error, setError] = useState<unknown>(null);
+  // Lỗi khi chấm điểm hiển thị ngay trong form, không được thay thế cả trang
+  // vì như vậy giáo viên mất hết nhận xét vừa gõ.
+  const [saveError, setSaveError] = useState<string | null>(null);
   const [feedback, setFeedback] = useState("");
   const [manualScore, setManualScore] = useState("");
   const [saved, setSaved] = useState(false);
+  const [status, setStatus] = useState("pending");
+
+  /** Chỉ nhận đường dẫn nội bộ, tránh bị lợi dụng để điều hướng ra ngoài hệ thống. */
+  const returnTo = safeReturnTo(searchParams.get("returnTo"));
+
+  useBreadcrumbLabels(data?.course_code, data?.session_label, data ? `${data.problem_code ?? "Bài tập"} · Bài nộp #${id}` : `Bài nộp #${id}`);
 
   useEffect(() => {
     getSubmissionDetail(id)
@@ -38,6 +57,7 @@ export default function SubmissionDetailPage() {
         setManualScore(submission.manual_score == null
           ? (submission.total_testcases ? ((submission.passed_count / submission.total_testcases) * 10).toFixed(1) : "0.0")
           : String(submission.manual_score));
+        setStatus(submission.status);
       })
       .catch(setError);
   }, [id]);
@@ -45,27 +65,30 @@ export default function SubmissionDetailPage() {
   if (error) return <ErrorState error={error} />;
   if (!data) return <div className="rounded-xl border bg-card p-6 text-sm text-muted-foreground">Đang tải bài nộp...</div>;
 
-  async function saveSubmission(accept: boolean) {
+  async function saveSubmission() {
     const parsedScore = Number(manualScore);
     if (!Number.isFinite(parsedScore) || parsedScore < 0 || parsedScore > 10) {
-      setError(new Error("Điểm phải nằm trong khoảng 0 đến 10."));
+      setSaveError("Điểm phải nằm trong khoảng 0 đến 10.");
       return;
     }
+    setSaveError(null);
     try {
       const submission = await updateSubmission(id, {
         feedback,
         manual_score: parsedScore,
-
-        ...(accept ? { status: "accepted" } : {}),
+        status,
       });
       setData(submission);
+      setStatus(submission.status);
       setSaved(true);
+      window.dispatchEvent(new CustomEvent("submission:updated", { detail: submission }));
+      if (returnTo) router.push(returnTo);
     } catch (requestError) {
-      setError(requestError);
+      setSaveError(requestError instanceof Error ? requestError.message : "Không thể lưu điểm. Vui lòng thử lại.");
     }
   }
 
-  const statusLabel = data.status === "compile_error" ? "Lỗi biên dịch" : data.status === "accepted" ? "Đã chấp nhận" : "Sai kết quả";
+  const statusLabel = data.status === "compile_error" ? "Lỗi biên dịch" : data.status === "accepted" ? "Đã chấp nhận" : data.status === "pending" ? "Đang chờ" : "Sai kết quả";
 
   return (
     <div className="space-y-6">
@@ -73,7 +96,7 @@ export default function SubmissionDetailPage() {
       <div className="flex flex-wrap items-center justify-between gap-4">
         <div className="flex items-center gap-3">
           <Button asChild variant="outline" size="sm" className="gap-1.5 border-slate-300">
-            <Link href="/teacher">
+            <Link href={returnTo ?? "/teacher/submissions"}>
               <ArrowLeft className="size-4" /> Quay lại
             </Link>
           </Button>
@@ -89,7 +112,7 @@ export default function SubmissionDetailPage() {
 
         <div className="flex items-center gap-3">
           <Button
-            onClick={() => void saveSubmission(false)}
+            onClick={() => void saveSubmission()}
             className="h-10 bg-[#2f226b] gap-2 font-semibold text-white shadow-sm hover:bg-[#251b56]"
           >
             <Save className="size-4" /> {saved ? "Đã lưu kết quả" : "Lưu điểm & Gửi phản hồi"}
@@ -131,7 +154,7 @@ export default function SubmissionDetailPage() {
               </div>
               <span className="text-xs text-slate-400">{new Date(data.submitted_datetime).toLocaleString("vi-VN", { timeZone: "Asia/Ho_Chi_Minh" })}</span>
             </div>
-            <pre className="overflow-x-auto p-4 font-mono text-xs leading-relaxed text-slate-200">
+            <pre className="max-h-[720px] min-h-[420px] overflow-auto whitespace-pre-wrap p-5 font-mono text-sm leading-6 text-slate-200">
               <code>{data.submitted_code}</code>
             </pre>
           </div>
@@ -161,6 +184,22 @@ export default function SubmissionDetailPage() {
             <h3 className="text-base font-bold text-slate-900 dark:text-slate-100">
               Đánh giá & Chấm điểm
             </h3>
+
+            {saveError && (
+              <p role="alert" className="rounded-md border border-red-300 bg-red-50 px-3 py-2 text-sm text-red-700 dark:border-red-500/40 dark:bg-red-500/10 dark:text-red-300">
+                {saveError}
+              </p>
+            )}
+
+            <div>
+              <label className="text-xs font-semibold text-slate-700 dark:text-slate-300">Trạng thái</label>
+              <select value={status} onChange={(event) => setStatus(event.target.value)} className="mt-1 h-11 w-full rounded-md border bg-background px-3 text-sm">
+                <option value="pending">Đang chờ</option>
+                <option value="accepted">Đã chấp nhận</option>
+                <option value="wrong_answer">Sai kết quả</option>
+                <option value="compile_error">Lỗi biên dịch</option>
+              </select>
+            </div>
 
             <div>
               <label className="text-xs font-semibold text-slate-700 dark:text-slate-300">
@@ -201,7 +240,7 @@ export default function SubmissionDetailPage() {
             </div>
 
             <Button
-              onClick={() => void saveSubmission(true)}
+              onClick={() => void saveSubmission()}
               className="w-full h-11 bg-[#2f226b] font-semibold text-white shadow-sm hover:bg-[#251b56]"
             >
               <Save className="size-4 mr-2" /> {saved ? "Đã lưu nhận xét" : "Lưu nhận xét"}

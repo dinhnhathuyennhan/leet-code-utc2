@@ -326,3 +326,32 @@ class TestGetLessonDetail:
         assert detail.stats.completed_students == 0
         assert detail.stats.avg_score == 0
         assert detail.exercises[0].submitted_count == 0
+
+
+class TestLessonDetailProblemSchedule:
+    def test_exercises_expose_their_own_schedule(
+        self,
+        session,
+        lesson_teacher,
+        lesson_course,
+        lesson_record,
+        lesson_problem_factory,
+    ):
+        """Thiếu 2 mốc này thì form soạn bài rơi về mốc của buổi học và ghi đè lịch thật."""
+        from datetime import datetime
+
+        from app.core.utils.datetime_utils import VN_TZ
+
+        lesson_problem_factory(
+            lesson_record,
+            start_datetime=datetime(2026, 10, 5, 9, 0, tzinfo=VN_TZ),
+            end_datetime=datetime(2026, 10, 6, 11, 30, tzinfo=VN_TZ),
+        )
+
+        detail = lesson_service.get_lesson_detail(
+            session, lesson_course.course_id, lesson_record.lesson_id, lesson_teacher
+        )
+
+        exercise = detail.exercises[0]
+        assert exercise.start_datetime == datetime(2026, 10, 5, 9, 0, tzinfo=VN_TZ)
+        assert exercise.end_datetime == datetime(2026, 10, 6, 11, 30, tzinfo=VN_TZ)

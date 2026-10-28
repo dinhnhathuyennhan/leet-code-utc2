@@ -198,6 +198,11 @@ def _build_problem_detail_response(
     if is_student:
         testcases = [t for t in testcases if t.is_sample]
 
+    submitted_count = None if is_student else session.exec(
+        select(func.count(Submission.submission_id))
+        .where(Submission.problem_id == problem.problem_id)
+    ).one()
+
     return ProblemDetailResponse(
         id=problem.problem_id, lesson_id=problem.lesson_id, course_id=course_id,
         code=problem.report, title=problem.title, function_name=problem.function_name,
@@ -208,6 +213,7 @@ def _build_problem_detail_response(
         start_datetime=problem.start_datetime, end_datetime=problem.end_datetime,
         starter_code=problem.starter_codes.get("python") or problem.start_format_code,
         starter_codes=problem.starter_codes or {"python": problem.start_format_code},
+        submitted_count=submitted_count,
         testcases=[
             {"id": t.testcase_id, **testcase_to_api_values(t), "is_sample": t.is_sample}
             for t in testcases
@@ -245,6 +251,28 @@ def _replace_testcases(session: Session, problem: Problem, items: list[dict]) ->
     session.add(problem)
 
 
+def _testcases_changed(session: Session, problem: Problem, items: list) -> bool:
+    """So khớp bộ testcase gửi lên với bộ đang lưu, theo đúng thứ tự."""
+    current = session.exec(
+        select(Testcase)
+        .where(Testcase.problem_id == problem.problem_id)
+        .order_by(Testcase.testcase_id)
+    ).all()
+    if len(current) != len(items):
+        return True
+    for stored, incoming in zip(current, items, strict=True):
+        new = testcase_to_storage(incoming.model_dump())
+        if (
+            stored.input != new["input"]
+            or stored.expected_output != new["expected_output"]
+            or stored.is_sample != new["is_sample"]
+            or stored.input_type != new["input_type"]
+            or stored.expected_output_type != new["expected_output_type"]
+        ):
+            return True
+    return False
+
+
 def update_problem(
     session: Session, course_id: str, lesson_id: int, problem_id: int,
     data: ProblemUpdateRequest, current_user: User,
@@ -254,11 +282,24 @@ def update_problem(
     problem = get_problem_in_lesson(session, lesson, problem_id)
 
     updates = data.model_dump(exclude_unset=True, exclude={"testcases", "starter_code", "starter_codes"})
+    # Chỉ chặn khi giá trị gửi lên KHÁC giá trị đang lưu: client gửi lại nguyên trạng
+    # các trường này trong mọi lần lưu, nên so sánh theo giá trị mới biết có sửa thật hay không.
+    current_starter_codes = problem.starter_codes or {}
+    testcases_changed = data.testcases is not None and _testcases_changed(
+        session, problem, data.testcases
+    )
     has_grading_changes = (
-        any(updates.get(field) is not None for field in ("function_name", "time_limit_seconds"))
-        or data.starter_code is not None
-        or data.starter_codes is not None
-        or data.testcases is not None
+        any(
+            updates.get(field) is not None and updates[field] != getattr(problem, field)
+            for field in ("function_name", "time_limit_seconds")
+        )
+        or (data.starter_codes is not None and data.starter_codes != current_starter_codes)
+        or (
+            data.starter_codes is None
+            and data.starter_code is not None
+            and data.starter_code != (current_starter_codes.get("python") or problem.start_format_code)
+        )
+        or testcases_changed
     )
     if has_grading_changes and _has_submissions(session, problem.problem_id):
         raise ConflictError("Bài đã có bài nộp, không thể sửa thông tin ảnh hưởng đến chấm")
@@ -278,7 +319,8 @@ def update_problem(
     elif data.starter_code is not None:
         problem.start_format_code = data.starter_code
         problem.starter_codes = {**(problem.starter_codes or {}), "python": data.starter_code}
-    if data.testcases is not None:
+    # Gửi lại đúng bộ testcase đang có thì không cần ghi lại (và không bị chặn vì đã có bài nộp).
+    if data.testcases is not None and testcases_changed:
         _replace_testcases(
             session,
             problem,

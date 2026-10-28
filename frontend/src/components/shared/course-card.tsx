@@ -25,7 +25,7 @@ export function CourseCard({ course, href, view }: CourseCardProps) {
       href={href}
       className={cn(
         "group overflow-hidden rounded-lg border-0 bg-card shadow-none outline-none transition duration-200 hover:-translate-y-0.5 hover:shadow-lg focus-visible:ring-2 focus-visible:ring-indigo-500",
-        isList ? "flex items-stretch" : "block",
+        isList ? "flex min-w-0 items-stretch" : "block",
       )}
     >
       <div className={cn("relative shrink-0 overflow-hidden bg-slate-900", isList ? "w-40 sm:w-56" : "aspect-[13/5] w-full")}>
@@ -38,9 +38,9 @@ export function CourseCard({ course, href, view }: CourseCardProps) {
         />
       </div>
 
-      <div className={cn("min-h-[142px] space-y-3 p-4", isList && "flex flex-1 flex-col justify-center")}>
+      <div className={cn("min-h-[142px] min-w-0 space-y-3 p-4", isList && "flex flex-1 flex-col justify-center")}>
         <StatusBadge label={status.label} tone={status.tone} className="w-fit" />
-        <h3 className="text-[15px] font-semibold leading-snug">{course.name}</h3>
+        <h3 className="truncate text-[15px] font-semibold leading-snug" title={course.name}>{course.name}</h3>
         <p className="flex items-center gap-2 text-sm font-medium">
           <CircleUser className="size-4 shrink-0 text-muted-foreground" />
           <span className="truncate">{course.teacher_name}</span>

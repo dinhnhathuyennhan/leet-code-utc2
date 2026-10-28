@@ -1,8 +1,8 @@
 import type { CourseSummary } from "@/lib/types/course";
 
-export type JudgeKind = "pending" | "wrong_answer" | "similarity" | "compile_error" | "graded";
+export type JudgeKind = "pending" | "accepted" | "wrong_answer" | "similarity" | "compile_error" | "graded";
 
-export type PendingFilter = "all" | "graded" | "late_appeal" | "similarity" | "error";
+export type PendingFilter = "all" | "pending" | "wrong_answer" | "compile_error";
 
 export interface TeacherOverview {
   teacher_name: string;
@@ -10,7 +10,6 @@ export interface TeacherOverview {
   stats: {
     active_courses: number;
     pending_grading: number;
-    plagiarism_cases: number;
   };
   recent_courses: CourseSummary[];
 }
@@ -28,6 +27,11 @@ export interface PendingSubmission {
   judge_kind: JudgeKind;
   judge_label: string;
   issue: string;
+  /** Trạng thái thật trong database, dùng để lọc và hiển thị thay cho judge_kind. */
+  status: string;
+  manual_score?: number | null;
+  passed_count: number;
+  total_testcases: number;
 }
 
 export interface PendingSubmissionParams {
@@ -43,7 +47,7 @@ export interface PendingSubmissionParams {
 export interface PendingSubmissionsResponse {
   items: PendingSubmission[];
   total: number;
-  counts: Record<PendingFilter, number> & { ungraded?: number };
+  counts: Record<PendingFilter, number> & { graded?: number; ungraded?: number; needs_grading?: number; late_appeal?: number; similarity?: number; error?: number };
 }
 
 export interface SubmissionTestcase {
@@ -73,14 +77,6 @@ export interface SubmissionDetail {
   total_testcases: number;
   submitted_datetime: string;
   testcases: SubmissionTestcase[];
-}
-
-export interface PlagiarismAlert {
-  id: number;
-  problem_code: string;
-  student_names: string[];
-  reason: string;
-  similarity: number;
 }
 
 // ─── Student Dashboard ──────────────────────────────────────────────

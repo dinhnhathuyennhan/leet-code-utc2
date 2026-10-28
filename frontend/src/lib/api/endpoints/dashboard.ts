@@ -1,20 +1,20 @@
-import { ApiError } from "@/lib/api/error";
 import { getCourses } from "@/lib/api/endpoints/courses";
 import axiosInstance from "@/lib/axios";
 import { wrapAxiosError } from "@/lib/api/client";
-import type { PendingFilter, PendingSubmissionParams, PendingSubmissionsResponse, PlagiarismAlert, StudentOverview, SubmissionDetail, TeacherOverview } from "@/lib/types/dashboard";
+import type { PendingFilter, PendingSubmissionParams, PendingSubmissionsResponse, StudentOverview, SubmissionDetail, TeacherOverview } from "@/lib/types/dashboard";
 import type { UserResponse } from "@/lib/api/types";
 
 export async function getTeacherOverview(): Promise<TeacherOverview> {
   const [courses, pending, user] = await Promise.all([
     getCourses(),
+    // limit=1: chỉ cần `counts` do backend đếm trên toàn bộ dữ liệu, không kéo về danh sách.
     getPendingSubmissions({ filter: "all", limit: 1 }),
     getCurrentUser(),
   ]);
   return {
     teacher_name: user.full_name,
     term_label: courses.items[0] ? `Học kỳ ${courses.items[0].semester} (${courses.items[0].academic_year})` : "",
-    stats: { active_courses: courses.items.filter((course) => course.status === "ongoing").length, pending_grading: pending.total, plagiarism_cases: pending.counts.similarity },
+    stats: { active_courses: courses.items.filter((course) => course.status === "ongoing").length, pending_grading: pending.counts.needs_grading ?? 0 },
     recent_courses: courses.items
       .filter((course) => course.status === "ongoing")
       .sort((a, b) => new Date(b.start_date ?? 0).getTime() - new Date(a.start_date ?? 0).getTime())
@@ -42,8 +42,12 @@ export async function getPendingSubmissions(params: PendingSubmissionParams): Pr
       ...response.data,
       counts: {
         all: counts.all ?? response.data.total ?? 0,
+        pending: counts.pending ?? 0,
+        wrong_answer: counts.wrong_answer ?? 0,
+        compile_error: counts.compile_error ?? counts.error ?? 0,
         graded: counts.graded ?? 0,
         ungraded: counts.ungraded ?? 0,
+        needs_grading: counts.needs_grading ?? 0,
         late_appeal: counts.late_appeal ?? 0,
         similarity: counts.similarity ?? 0,
         error: counts.error ?? 0,
@@ -72,11 +76,7 @@ export async function updateSubmission(id: string | number, data: { feedback?: s
   }
 }
 
-export async function getPlagiarismAlerts(): Promise<PlagiarismAlert[]> {
-  throw new ApiError({ status: 501, detail: "API cảnh báo đạo văn chưa được backend cung cấp." });
-}
-
-export const EMPTY_PENDING_COUNTS: Record<PendingFilter, number> = { all: 0, graded: 0, late_appeal: 0, similarity: 0, error: 0 };
+export const EMPTY_PENDING_COUNTS: Record<PendingFilter, number> = { all: 0, pending: 0, wrong_answer: 0, compile_error: 0 };
 export async function getStudentOverview(studentId: string): Promise<StudentOverview> {
   try {
     const response = await axiosInstance.get<StudentOverview>(

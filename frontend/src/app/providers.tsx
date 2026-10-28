@@ -17,7 +17,7 @@ export function Providers({ children }: { children: ReactNode }) {
   const [queryClient] = useState(() => makeQueryClient());
 
   return (
-    <ThemeProvider attribute="class" defaultTheme="system" enableSystem disableTransitionOnChange>
+    <ThemeProvider attribute="class" storageKey="utc2-local-theme" defaultTheme="light" enableSystem={false} disableTransitionOnChange>
       <QueryClientProvider client={queryClient}>
         <AuthProvider>
           <Suspense

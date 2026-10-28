@@ -26,8 +26,8 @@ export function CourseHeaderCard({ course, onCreateSession, onEditCourse }: Cour
     <section className="relative flex flex-wrap items-start justify-between gap-6 overflow-hidden rounded-2xl border bg-card p-6 pl-8 shadow-sm">
       <span aria-hidden className="absolute inset-y-6 left-0 w-1.5 rounded-r-full bg-[#2f226b]" />
 
-      <div className="space-y-4">
-        <h1 className="text-2xl font-bold tracking-tight text-slate-900 dark:text-slate-100 sm:text-3xl">
+      <div className="min-w-0 space-y-4">
+        <h1 className="max-w-full truncate text-2xl font-bold tracking-tight text-slate-900 dark:text-slate-100 sm:text-3xl" title={`${course.name} — ${course.code}`}>
           {course.name} — {course.code}
         </h1>
         <div>
@@ -36,6 +36,9 @@ export function CourseHeaderCard({ course, onCreateSession, onEditCourse }: Cour
           </span>
         </div>
         <div className="flex flex-wrap items-center gap-x-8 gap-y-2 text-[15px]">
+          <MetaItem icon={<CalendarCheck className="size-4 text-slate-500" />}>
+            Ngày bắt đầu: <strong>{formatDate(course.start_date)}</strong>
+          </MetaItem>
           <MetaItem icon={<CalendarCheck className="size-4 text-slate-500" />}>
             Ngày kết thúc: <strong>{formatDate(course.end_date)}</strong>
           </MetaItem>
@@ -48,7 +51,7 @@ export function CourseHeaderCard({ course, onCreateSession, onEditCourse }: Cour
         </div>
       </div>
 
-      <div className="flex w-full flex-col gap-3 sm:w-auto">
+      <div className="flex w-full flex-col gap-3 sm:w-auto sm:shrink-0">
         <Button
           onClick={onCreateSession}
           className="h-11 bg-[#2f226b] px-6 text-[15px] font-semibold text-white shadow-sm hover:bg-[#251b56]"

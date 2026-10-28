@@ -1,5 +1,9 @@
-import type { ReactNode } from "react";
-import { Inbox, RefreshCw, TriangleAlert, type LucideIcon } from "lucide-react";
+"use client";
+
+import { useState, type ReactNode } from "react";
+import Link from "next/link";
+import { Inbox, Loader2, RefreshCw, WifiOff, TriangleAlert, type LucideIcon } from "lucide-react";
+import { ApiError } from "@/lib/api/error";
 
 import { Button } from "@/components/ui/button";
 import { getErrorMessage } from "@/lib/helpers/error-message";
@@ -12,6 +16,22 @@ interface ErrorStateProps {
 
 /** Lỗi tải dữ liệu — hiện message từ ApiError + nút thử lại. */
 export function ErrorState({ error, onRetry, className }: ErrorStateProps) {
+  const [retrying, setRetrying] = useState(false);
+  const retry = async () => {
+    if (!onRetry || retrying) return;
+    setRetrying(true);
+    try { await onRetry(); } finally { setRetrying(false); }
+  };
+  if (error instanceof ApiError && error.isNetworkError) {
+    return (
+      <div role="alert" className={`flex min-h-56 flex-col items-center justify-center gap-3 rounded-xl border bg-card px-6 py-10 text-center ${className ?? ""}`}>
+        <WifiOff className="size-9 text-amber-500" />
+        <h2 className="text-lg font-semibold">Mất kết nối máy chủ</h2>
+        <p className="max-w-md text-sm text-muted-foreground">Kiểm tra kết nối mạng rồi thử lại. Dữ liệu đang nhập trên biểu mẫu sẽ được giữ nguyên.</p>
+        {onRetry && <Button onClick={() => void retry()} disabled={retrying} variant="outline" size="sm">{retrying ? <Loader2 className="size-4 animate-spin" /> : <RefreshCw className="size-4" />} Thử kết nối lại</Button>}
+      </div>
+    );
+  }
   return (
     <div role="alert" className={`flex flex-col items-center gap-3 rounded-xl border border-red-200 bg-red-50 px-6 py-10 text-center dark:border-red-500/30 dark:bg-red-500/10 ${className ?? ""}`}>
       <TriangleAlert className="size-8 text-red-500" />
@@ -23,6 +43,22 @@ export function ErrorState({ error, onRetry, className }: ErrorStateProps) {
       )}
     </div>
   );
+}
+
+export function ConnectionLostState({ onRetry, retrying = false }: { onRetry: () => void; retrying?: boolean }) {
+  return <div role="alert" className="flex min-h-[100dvh] flex-col items-center justify-center gap-4 bg-slate-50 px-6 text-center dark:bg-slate-950"><WifiOff className="size-12 text-amber-500" /><h1 className="text-2xl font-bold">Không thể kết nối máy chủ</h1><p className="max-w-md text-sm text-muted-foreground">Bạn vẫn đang ở trang hiện tại. Khi máy chủ hoạt động trở lại, hãy thử kết nối lại để tiếp tục.</p><Button onClick={onRetry} disabled={retrying}>{retrying ? <Loader2 className="size-4 animate-spin" /> : <RefreshCw className="size-4" />} Thử lại</Button></div>;
+}
+
+export function ServerErrorState({ onRetry, retrying = false }: { onRetry: () => void; retrying?: boolean }) {
+  return <div role="alert" className="fixed inset-0 z-[100] flex min-h-[100dvh] flex-col items-center justify-center gap-4 bg-slate-50 px-6 text-center dark:bg-slate-950"><TriangleAlert className="size-12 text-red-500" /><h1 className="text-2xl font-bold">Máy chủ đang gặp sự cố</h1><p className="max-w-md text-sm text-muted-foreground">Không thể tải dữ liệu lúc này. Vui lòng thử lại sau.</p><Button onClick={onRetry} disabled={retrying}>{retrying ? <Loader2 className="size-4 animate-spin" /> : <RefreshCw className="size-4" />} Thử lại</Button></div>;
+}
+
+export function ForbiddenState() {
+  return <div role="alert" className="fixed inset-0 z-[100] flex min-h-[100dvh] flex-col items-center justify-center gap-4 bg-slate-50 px-6 text-center dark:bg-slate-950"><TriangleAlert className="size-12 text-amber-500" /><h1 className="text-3xl font-bold">403</h1><p className="max-w-md text-sm text-muted-foreground">Bạn không có quyền truy cập trang này.</p><Link href="/" className="inline-flex h-9 items-center rounded-md bg-[#34227a] px-4 text-sm font-medium text-white">Quay về trang chủ</Link></div>;
+}
+
+export function NotFoundState({ description = "Trang bạn yêu cầu không tồn tại hoặc đã được thay đổi." }: { description?: string }) {
+  return <div role="alert" className="fixed inset-0 z-[100] flex min-h-[100dvh] flex-col items-center justify-center gap-4 bg-slate-50 px-6 text-center dark:bg-slate-950"><Inbox className="size-12 text-indigo-500" /><h1 className="text-3xl font-bold">404</h1><p className="max-w-md text-sm text-muted-foreground">{description}</p><Link href="/" className="inline-flex h-9 items-center rounded-md bg-[#34227a] px-4 text-sm font-medium text-white">Quay về trang chủ</Link></div>;
 }
 
 interface EmptyStateProps {

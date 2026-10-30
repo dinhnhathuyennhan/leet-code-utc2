@@ -1,3 +1,5 @@
+"use client";
+
 import { Construction } from "lucide-react";
 
 import { EmptyState } from "@/components/shared/page-state";

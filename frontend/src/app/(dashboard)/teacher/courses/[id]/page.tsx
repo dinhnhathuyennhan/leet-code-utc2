@@ -1,11 +1,9 @@
 "use client";
 
 import { useState } from "react";
-import { useParams } from "next/navigation";
-import { SearchX } from "lucide-react";
-
+import { useParams, usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useBreadcrumbLabel } from "@/components/shared/breadcrumb-context";
-import { EmptyState, ErrorState } from "@/components/shared/page-state";
+import { ErrorState, ForbiddenState, NotFoundState } from "@/components/shared/page-state";
 import { CourseDetailSkeleton } from "@/components/teacher/course-detail-skeleton";
 import { CourseDetailTabs, type CourseTab } from "@/components/teacher/course-detail-tabs";
 import { ApiError } from "@/lib/api/error";
@@ -19,9 +17,13 @@ import { SessionList } from "@/components/teacher/session-list";
 
 export default function TeacherCourseDetailPage() {
   const { id } = useParams<{ id: string }>();
+  const pathname = usePathname();
+  const router = useRouter();
+  const searchParams = useSearchParams();
+  const initialTab = searchParams.get("tab");
   const { data: course, dataUpdatedAt, isPending, error, refetch } = useCourse(id);
-  const enrollments = useCourseEnrollments(course?.code);
-  const [tab, setTab] = useState<CourseTab>("sessions");
+  const [tab, setTab] = useState<CourseTab>(initialTab === "students" || initialTab === "grades" ? initialTab : "sessions");
+  const enrollments = useCourseEnrollments(course?.code, tab === "students");
   const [editorOpen, setEditorOpen] = useState(false);
   const [courseEditorOpen, setCourseEditorOpen] = useState(false);
 
@@ -31,8 +33,9 @@ export default function TeacherCourseDetailPage() {
 
   if (error || !course) {
     if (error instanceof ApiError && error.status === 404) {
-      return <EmptyState icon={SearchX} title="Không tìm thấy lớp học phần" description="Lớp này không tồn tại hoặc bạn không có quyền xem." />;
+      return <NotFoundState description="Lớp học phần không tồn tại hoặc đã được thay đổi." />;
     }
+    if (error instanceof ApiError && error.status === 403) return <ForbiddenState />;
     return <ErrorState error={error} onRetry={() => void refetch()} />;
   }
 
@@ -41,9 +44,9 @@ export default function TeacherCourseDetailPage() {
       <CourseHeaderCard course={{ ...course, updated_at: course.updated_at || (dataUpdatedAt ? new Date(dataUpdatedAt).toISOString() : null) }} onCreateSession={() => setEditorOpen(true)} onEditCourse={() => setCourseEditorOpen(true)} />
       <CourseDetailTabs
         value={tab}
-        onValueChange={setTab}
+        onValueChange={(next) => { setTab(next); router.replace(`${pathname}?tab=${next}`, { scroll: false }); }}
         sessions={
-          <SessionList sessions={course.sessions} studentCount={course.student_count} courseId={course.code || id} />
+          <SessionList key={course.sessions.map((session) => `${session.id}:${session.order}`).join(",")} sessions={course.sessions} studentCount={course.student_count} courseId={course.code || id} onChanged={() => void refetch()} />
         }
         students={enrollments.isPending ? <CourseDetailSkeleton /> : enrollments.error ? <ErrorState error={enrollments.error} onRetry={() => void enrollments.refetch()} /> : <CourseStudentsTable students={enrollments.data ?? []} courseId={course.code} onChanged={() => void enrollments.refetch()} />}
         grades={<CourseGradesTable onUpdated={() => void refetch()} sessions={course.sessions.map((session) => ({ id: session.id, order: session.order, title: session.title, status: session.status, problems: session.problems.map((problem) => ({ id: problem.id, code: problem.report ?? problem.title, title: problem.title })) }))} rows={course.grades ?? []} />}

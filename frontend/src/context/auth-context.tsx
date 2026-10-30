@@ -9,8 +9,10 @@ import {
   useState,
   type ReactNode,
 } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 
 import { setSessionExpiredHandler } from "@/lib/api/client";
+import { getLastRefreshStatus, wasLastRefreshNetworkError } from "@/lib/axios";
 import {
   changePassword as changePasswordRequest,
   login as loginRequest,
@@ -29,12 +31,15 @@ import { setAccessToken } from "@/lib/auth/token-store";
 type AuthState =
   | { status: "loading"; user?: undefined }
   | { status: "unauthenticated"; user?: undefined }
+  | { status: "connection-lost"; user?: undefined }
+  | { status: "server-error"; user?: undefined }
   | { status: "authenticated"; user: UserResponse };
 
 type AuthContextValue = AuthState & {
   login: (data: LoginRequest) => Promise<UserResponse>;
   changePassword: (data: ChangePasswordRequest) => Promise<UserResponse>;
   logout: () => Promise<void>;
+  retryConnection: () => Promise<void>;
 };
 
 export const AuthContext = createContext<AuthContextValue | null>(null);
@@ -106,6 +111,7 @@ function buildUserFromAccessToken(accessToken: string): UserResponse | null {
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [state, setState] = useState<AuthState>({ status: "loading" });
+  const queryClient = useQueryClient();
 
   const handleSessionExpired = useCallback(() => {
     clearCachedProfile();
@@ -119,30 +125,39 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   // Silent session hydration: runs once on mount so a hard reload can
   // re-establish the session from the HttpOnly refresh cookie alone.
+  const bootstrap = useCallback(async () => {
+    setState({ status: "loading" });
+    const token = await refreshRequest();
+    const user = token ? buildUserFromAccessToken(token) : null;
+    setState(user ? { status: "authenticated", user } : getLastRefreshStatus() !== null && getLastRefreshStatus()! >= 500 ? { status: "server-error" } : wasLastRefreshNetworkError() ? { status: "connection-lost" } : { status: "unauthenticated" });
+  }, []);
+
   useEffect(() => {
     let cancelled = false;
 
-    async function bootstrap() {
+    async function hydrate() {
       const token = await refreshRequest();
       if (cancelled) return;
 
       const user = token ? buildUserFromAccessToken(token) : null;
-      setState(user ? { status: "authenticated", user } : { status: "unauthenticated" });
+      setState(user ? { status: "authenticated", user } : getLastRefreshStatus() !== null && getLastRefreshStatus()! >= 500 ? { status: "server-error" } : wasLastRefreshNetworkError() ? { status: "connection-lost" } : { status: "unauthenticated" });
     }
 
-    void bootstrap();
+    void hydrate();
     return () => {
       cancelled = true;
     };
   }, []);
 
   const login = useCallback(async (data: LoginRequest) => {
+    // Không cho phép dữ liệu của tài khoản trước tồn tại trong màn hình mới.
+    queryClient.clear();
     const result: LoginResponse = await loginRequest(data);
     setAccessToken(result.access_token);
     cacheProfile(result.user);
     setState({ status: "authenticated", user: result.user });
     return result.user;
-  }, []);
+  }, [queryClient]);
 
   const changePassword = useCallback(async (data: ChangePasswordRequest) => {
     const result: LoginResponse = await changePasswordRequest(data);
@@ -159,15 +174,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       // Best-effort: local session must clear even if the backend call fails
       // (e.g. the endpoint isn't implemented yet — see docs/api-design.md).
     } finally {
+      queryClient.clear();
       setAccessToken(null);
       clearCachedProfile();
       setState({ status: "unauthenticated" });
     }
-  }, []);
+  }, [queryClient]);
 
   const value = useMemo<AuthContextValue>(
-    () => ({ ...state, login, changePassword, logout }),
-    [state, login, changePassword, logout],
+    () => ({ ...state, login, changePassword, logout, retryConnection: bootstrap }),
+    [state, login, changePassword, logout, bootstrap],
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

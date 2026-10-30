@@ -15,7 +15,9 @@ export default function SubmissionsPage() {
   const searchParams = useSearchParams();
   const debouncedSearch = useDebouncedValue(search, 300);
 
-  const pending = usePendingSubmissions({ filter, search: debouncedSearch.trim() || undefined, course: searchParams.get("course") ?? undefined, lesson_id: Number(searchParams.get("lesson_id")) || undefined, problem_id: Number(searchParams.get("problem_id")) || undefined });
+  // Chip lọc chỉ lọc trên dữ liệu đã tải: giữ filter "all" để đổi chip không phải gọi lại API,
+  // và để số đếm trên từng chip luôn tính trên toàn bộ danh sách.
+  const pending = usePendingSubmissions({ filter: "all", search: debouncedSearch.trim() || undefined, limit: 500, course: searchParams.get("course") ?? undefined, lesson_id: Number(searchParams.get("lesson_id")) || undefined, problem_id: Number(searchParams.get("problem_id")) || undefined });
 
   return (
     <div className="space-y-6">

@@ -161,6 +161,7 @@ def get_submission_detail(
     ).all()
     return SubmissionDetailResponse(
         id=submission.submission_id,
+        problem_id=problem.problem_id,
         student_name=student.full_name,
         student_code=student.user_id,
         class_id=student.class_id,
@@ -169,6 +170,10 @@ def get_submission_detail(
         session_label=f"Buổi {lesson.lesson_number}: {lesson.lesson_name}",
         problem_code=problem.report,
         problem_title=problem.title,
+        problem_description=problem.description,
+        problem_constraints=problem.constraints,
+        problem_level=problem.level,
+        problem_function_name=problem.function_name,
         language=submission.language,
         submitted_code=submission.submitted_code,
         status=submission.status,
@@ -206,7 +211,8 @@ def update_submission(
         submission.feedback = data.feedback.strip() or None
     if data.status is not None:
         submission.status = data.status
-    if data.manual_score is not None:
+    # An explicit null clears the override; an omitted field leaves it unchanged.
+    if "manual_score" in data.model_fields_set:
         submission.manual_score = data.manual_score
     session.add(submission)
     session.commit()

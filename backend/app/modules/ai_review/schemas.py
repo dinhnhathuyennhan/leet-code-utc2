@@ -1,11 +1,31 @@
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, Field, field_validator
 
 
 class AIReviewRequest(BaseModel):
-    model_config = ConfigDict(str_strip_whitespace=True)
-
     code: str = Field(min_length=1, max_length=15000)
     language: str = Field(default="python", min_length=1, max_length=30)
+
+    @field_validator("code")
+    @classmethod
+    def validate_code(cls, value: str) -> str:
+        if not value.strip():
+            raise ValueError("Mã nguồn không được để trống")
+        return value
+
+    @field_validator("language")
+    @classmethod
+    def normalize_language(cls, value: str) -> str:
+        return value.strip()
+
+
+class AdminPreviewReviewRequest(AIReviewRequest):
+    preview_token: str = Field(min_length=1)
+
+
+class AIConnectionResponse(BaseModel):
+    connected: bool
+    model: str
+    model_available: bool
 
 
 class OptimizationResult(BaseModel):

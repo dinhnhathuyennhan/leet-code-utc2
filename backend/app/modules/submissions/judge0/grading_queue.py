@@ -1,5 +1,7 @@
 import logging
+import os
 import threading
+import time
 from concurrent.futures import ThreadPoolExecutor
 
 from sqlmodel import Session, select
@@ -12,6 +14,7 @@ logger = logging.getLogger(__name__)
 
 _executor: ThreadPoolExecutor | None = None
 _lock = threading.Lock()
+STARTUP_QUERY_TIMEOUT_SECONDS = float(os.getenv("GRADING_STARTUP_TIMEOUT_SECONDS", "10"))
 
 
 def _get_executor() -> ThreadPoolExecutor:
@@ -45,6 +48,8 @@ def enqueue(submission_id: int, delay_seconds: float = 0) -> None:
 def start() -> None:
     """Gọi lúc backend khởi động: chấm lại các bài đang dở dang do backend từng dừng."""
     _get_executor()
+    started_at = time.monotonic()
+    logger.info("Grading queue startup: checking for pending submissions")
     try:
         with Session(engine) as session:
             submission_ids = session.exec(
@@ -52,13 +57,25 @@ def start() -> None:
                     Submission.status.in_(("pending", "processing"))
                 )
             ).all()
+        elapsed = time.monotonic() - started_at
+        if elapsed > STARTUP_QUERY_TIMEOUT_SECONDS:
+            logger.warning(
+                "Grading queue startup query took %.2fs (target <= %.2fs)",
+                elapsed,
+                STARTUP_QUERY_TIMEOUT_SECONDS,
+            )
     except Exception:
-        logger.exception("Không đọc được các bài nộp cần chấm lại khi khởi động")
+        logger.exception("Could not load pending submissions for grading queue recovery")
         return
     for submission_id in submission_ids:
         enqueue(submission_id)
     if submission_ids:
         logger.info("Đã đưa %d bài nộp dở dang vào hàng đợi chấm", len(submission_ids))
+    logger.info(
+        "Grading queue startup complete in %.2fs; recovered %d submissions",
+        time.monotonic() - started_at,
+        len(submission_ids),
+    )
 
 
 def stop() -> None:

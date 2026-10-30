@@ -10,7 +10,11 @@ DATABASE_URL = (
     f"@{os.getenv('DB_SERVER')}:{os.getenv('DB_PORT')}/{os.getenv('DB_NAME')}"
 )
 
-engine = create_engine(DATABASE_URL)
+DB_CONNECT_TIMEOUT_SECONDS = int(os.getenv("DB_CONNECT_TIMEOUT_SECONDS", "5"))
+engine = create_engine(
+    DATABASE_URL,
+    connect_args={"connect_timeout": DB_CONNECT_TIMEOUT_SECONDS},
+)
 
 
 def get_session():

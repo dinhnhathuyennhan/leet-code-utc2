@@ -1,0 +1,58 @@
+{
+  "results": [
+    {
+      "name": "Create teacher account through Admin UI and verify persisted role",
+      "status": "PASS"
+    },
+    {
+      "name": "Admin resets test teacher password and invalidates old session",
+      "status": "PASS"
+    },
+    {
+      "name": "Import valid XLSX creates two students and administrative class",
+      "status": "PASS"
+    },
+    {
+      "name": "Reimport same valid XLSX skips duplicate students",
+      "status": "PASS"
+    },
+    {
+      "name": "Imported student can sign in with temporary password and is forced to change it",
+      "status": "PASS"
+    },
+    {
+      "name": "Create source problem with four starter languages and JSON testcase",
+      "status": "PASS"
+    },
+    {
+      "name": "Edit problem title and description then reload to verify persistence",
+      "status": "PASS"
+    },
+    {
+      "name": "Add testcase and verify JSON values persisted",
+      "status": "PASS"
+    },
+    {
+      "name": "Edit testcase input output and sample flag then reload",
+      "status": "PASS"
+    },
+    {
+      "name": "Delete extra testcase and prevent deletion of last testcase",
+      "status": "PASS"
+    },
+    {
+      "name": "Save manual score status feedback and verify after reload; restore original values",
+      "status": "FAIL",
+      "error": "Expected values to be strictly equal:\n\n7.5 !== null\n"
+    },
+    {
+      "name": "Delete temporary source problem and verify removal",
+      "status": "PASS"
+    },
+    {
+      "name": "New teacher logs in and changes temporary password successfully",
+      "status": "PASS"
+    }
+  ],
+  "errors": []
+}

@@ -27,7 +27,6 @@ _DEFAULT_LANGUAGES: dict[str, dict] = {
     "java": {
         "judge0_id": 62,
         "cpu_time_factor": 2,
-        "memory_limit_kb": 6_144_000,
         "compiler_options": "-J-XX:CompressedClassSpaceSize=64m -J-XX:ReservedCodeCacheSize=64m -J-Xmx256m",
     },
 }
@@ -60,8 +59,8 @@ def parse_languages(raw: str | None) -> dict[str, LanguageConfig]:
 
 
 # ===== Kết nối Judge0 =====
-JUDGE0_URL = os.getenv("JUDGE0_URL", "http://localhost:2358").rstrip("/")
-JUDGE0_AUTH_TOKEN = os.getenv("JUDGE0_AUTH_TOKEN", "")
+JUDGE0_URL = (os.getenv("JUDGE0_API_URL") or os.getenv("JUDGE0_URL") or "http://localhost:2358").strip().rstrip("/")
+JUDGE0_AUTH_TOKEN = os.getenv("JUDGE0_API_TOKEN") or os.getenv("JUDGE0_AUTH_TOKEN") or ""
 JUDGE0_HTTP_TIMEOUT_SECONDS = _env_float("JUDGE0_HTTP_TIMEOUT_SECONDS", 10)
 # Phải <= MAX_SUBMISSION_BATCH_SIZE của Judge0 (mặc định 20)
 JUDGE0_BATCH_SIZE = _env_int("JUDGE0_BATCH_SIZE", 20)

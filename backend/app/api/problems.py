@@ -5,7 +5,7 @@ from starlette import status
 from app.core.database import get_session
 from app.core.dependencies import Role, get_current_user, require_role
 from app.core.exceptions import InvalidFormatError
-from app.modules.problems.schemas import ProblemDetailResponse, ProblemUpdateRequest, ProblemCreateRequest, \
+from app.modules.problems.schemas import AdminTestcaseMutation, ProblemDetailResponse, ProblemUpdateRequest, ProblemCreateRequest, \
     ProblemListResponse
 from app.modules.problems import service as problem_service
 from app.modules.testcases.testcase_import import MAX_UPLOAD_BYTES, parse_testcases
@@ -41,6 +41,66 @@ def list_problems_route(
         session, current_user, q=q, level=level, course_id=course_id,
         page=page, page_size=page_size,
     )
+
+@router.get("/problems/{problem_id}", response_model=ProblemDetailResponse)
+def get_bank_problem_route(
+    problem_id: int,
+    session: Session = Depends(get_session),
+    current_user: User = Depends(require_role(Role.ADMIN, Role.TEACHER)),
+) -> ProblemDetailResponse:
+    return problem_service.get_bank_problem(session, problem_id, current_user)
+
+@router.patch("/problems/{problem_id}", response_model=ProblemDetailResponse)
+def update_bank_problem_route(
+    problem_id: int, data: ProblemUpdateRequest,
+    session: Session = Depends(get_session),
+    current_user: User = Depends(require_role(Role.ADMIN, Role.TEACHER)),
+) -> ProblemDetailResponse:
+    return problem_service.update_bank_problem(session, problem_id, data)
+
+@router.delete("/problems/{problem_id}", status_code=status.HTTP_204_NO_CONTENT)
+def delete_bank_problem_route(
+    problem_id: int,
+    session: Session = Depends(get_session),
+    current_user: User = Depends(require_role(Role.ADMIN, Role.TEACHER)),
+):
+    problem_service.delete_bank_problem(session, problem_id)
+
+
+@router.post("/problems/{problem_id}/testcases", response_model=ProblemDetailResponse)
+def add_admin_testcase_route(
+    problem_id: int, data: AdminTestcaseMutation,
+    session: Session = Depends(get_session),
+    current_user: User = Depends(require_role(Role.ADMIN)),
+) -> ProblemDetailResponse:
+    return problem_service.add_admin_testcase(session, problem_id, data, current_user)
+
+
+@router.put("/problems/{problem_id}/testcases/{testcase_id}", response_model=ProblemDetailResponse)
+def update_admin_testcase_route(
+    problem_id: int, testcase_id: int, data: AdminTestcaseMutation,
+    session: Session = Depends(get_session),
+    current_user: User = Depends(require_role(Role.ADMIN)),
+) -> ProblemDetailResponse:
+    return problem_service.update_admin_testcase(session, problem_id, testcase_id, data, current_user)
+
+
+@router.delete("/problems/{problem_id}/testcases/{testcase_id}", status_code=status.HTTP_204_NO_CONTENT)
+def delete_admin_testcase_route(
+    problem_id: int, testcase_id: int,
+    session: Session = Depends(get_session),
+    current_user: User = Depends(require_role(Role.ADMIN)),
+):
+    problem_service.delete_admin_testcase(session, problem_id, testcase_id)
+
+
+@router.post("/problems/{problem_id}/run-preview", response_model=RunResponse)
+def run_admin_problem_preview_route(
+    problem_id: int, data: CodeRequest,
+    session: Session = Depends(get_session),
+    current_user: User = Depends(require_role(Role.ADMIN)),
+) -> RunResponse:
+    return judge_service.run_admin_preview(session, problem_id, data, current_user)
 
 
 @router.get(BASE, response_model=ProblemDetailResponse)

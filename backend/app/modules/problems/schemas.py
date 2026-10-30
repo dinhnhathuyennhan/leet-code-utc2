@@ -61,6 +61,8 @@ class ProblemTestcaseResponse(BaseModel):
     input: Any
     expected_output: Any
     is_sample: bool
+    input_type: str
+    expected_output_type: str
 
 
 # Contract chi tiết bài tập để nút "Xem chi tiết" mở được dữ liệu thật.
@@ -101,6 +103,28 @@ class ProblemTestcaseUpdate(BaseModel):
     @classmethod
     def validate_output_json(cls, value: Any) -> Any:
         return validate_json_value(value)
+
+
+class AdminTestcaseMutation(BaseModel):
+    input: Any
+    expected_output: Any
+    is_sample: bool = False
+    input_type: Literal["json_args", "stdin"] = "json_args"
+    expected_output_type: Literal["json", "stdout"] = "json"
+
+    @model_validator(mode="after")
+    def validate_format(self) -> "AdminTestcaseMutation":
+        if (self.input_type, self.expected_output_type) == ("stdin", "stdout"):
+            if not isinstance(self.input, str) or not isinstance(self.expected_output, str):
+                raise ValueError("Testcase stdin/stdout cần input và output dạng chuỗi")
+        elif (self.input_type, self.expected_output_type) == ("json_args", "json"):
+            if not isinstance(self.input, list):
+                raise ValueError("Input testcase JSON phải là mảng tham số")
+            validate_json_value(self.input)
+            validate_json_value(self.expected_output)
+        else:
+            raise ValueError("Định dạng input và output testcase không khớp")
+        return self
 
 
 class ProblemCreateRequest(BaseModel):
@@ -171,6 +195,7 @@ class ProblemListResponse(BaseModel):
     page_size: int
 
 
+
 class ProblemUpdateRequest(BaseModel):
     title: str | None = Field(default=None, min_length=1, max_length=255)
     function_name: str | None = Field(default=None, min_length=1, max_length=100)
@@ -230,3 +255,7 @@ class ProblemUpdateRequest(BaseModel):
         if self.function_name is not None and self.starter_codes is None:
             raise InvalidFormatError("Khi đổi function_name, cần gửi starter_codes cho mọi ngôn ngữ")
         return self
+
+class ProblemBankUpdateRequest(ProblemUpdateRequest):
+    """Update contract for a source problem that is not attached to a lesson."""
+    pass

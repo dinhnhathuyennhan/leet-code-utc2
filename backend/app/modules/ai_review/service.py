@@ -4,6 +4,7 @@ import httpx
 
 from app.modules.ai_review.prompts import SYSTEM_PROMPT
 from app.modules.ai_review.schemas import (
+    AIConnectionResponse,
     AIReviewRequest,
     AIReviewResponse,
 )
@@ -11,7 +12,19 @@ from app.modules.ai_review.schemas import (
 
 class AIReviewService:
     @staticmethod
-    async def review(data: AIReviewRequest) -> AIReviewResponse:
+    async def test_connection() -> AIConnectionResponse:
+        base_url = os.getenv("OLLAMA_BASE_URL", "http://localhost:11434").rstrip("/")
+        model = os.getenv("OLLAMA_MODEL", "qwen2.5-coder:7b")
+        async with httpx.AsyncClient(proxy=os.getenv("TS_PROXY_URL") or None,
+                                     timeout=httpx.Timeout(10.0, connect=5.0)) as client:
+            response = await client.get(f"{base_url}/api/tags")
+            response.raise_for_status()
+            models = response.json()["models"]
+        return AIConnectionResponse(connected=True, model=model,
+                                    model_available=any(item.get("name") == model for item in models))
+
+    @staticmethod
+    async def review(data: AIReviewRequest, judge_summary: str | None = None) -> AIReviewResponse:
         base_url = os.getenv("OLLAMA_BASE_URL", "http://localhost:11434").rstrip("/")
         model = os.getenv("OLLAMA_MODEL", "qwen2.5-coder:7b")
         proxy = os.getenv("TS_PROXY_URL")
@@ -19,11 +32,9 @@ class AIReviewService:
         payload = {
             "model": model,
             "system": SYSTEM_PROMPT,
-            "prompt": (
-                f"Language: {data.language}\n"
-                f"Analyze the following code:\n"
-                f"<code>\n{data.code}\n</code>"
-            ),
+            "prompt": (f"Language: {data.language}\n"
+                       + (f"Judge0 result: {judge_summary}\n" if judge_summary else "")
+                       + f"Analyze the following code:\n<code>\n{data.code}\n</code>"),
             "stream": False,
             "format": AIReviewResponse.model_json_schema(),
             "options": {

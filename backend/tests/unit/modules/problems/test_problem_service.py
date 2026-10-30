@@ -11,11 +11,15 @@ from app.core.exceptions import (
 )
 from app.core.utils.datetime_utils import VN_TZ
 from app.modules.problems.schemas import (
+    AdminTestcaseMutation,
     ProblemTestcaseUpdate,
     ProblemUpdateRequest,
 )
 from app.modules.problems import service as problem_service
-from app.models.entities import Problem, Testcase as CaseModel
+from app.modules.submissions.judge0 import service as judge_service
+from app.modules.submissions.judge0.judge0_client import Judge0Result
+from app.modules.submissions.judge0.schemas import CodeRequest
+from app.models.entities import Problem, Submission, Testcase as CaseModel
 
 pytest_plugins = ("tests.support.fixtures.problem_fixtures",)
 
@@ -105,6 +109,118 @@ class TestListProblems:
         )
         assert result.total == 1
         assert result.items[0].id == in_course.problem_id
+
+
+class TestBankProblemDetail:
+    def test_listed_attached_problem_opens_by_id_for_admin_and_owner(
+        self, session, problem_factory, problem_lesson, problem_course,
+        problem_admin, problem_teacher, problem_other_teacher,
+    ):
+        attached = problem_factory(problem_lesson)
+        for viewer in (problem_admin, problem_teacher):
+            detail = problem_service.get_bank_problem(session, attached.problem_id, viewer)
+            assert detail.id == attached.problem_id
+            assert detail.lesson_id == problem_lesson.lesson_id
+            assert detail.course_id == problem_course.course_id
+            assert detail.description == attached.description
+
+        with pytest.raises(ForbiddenError):
+            problem_service.get_bank_problem(session, attached.problem_id, problem_other_teacher)
+
+    def test_source_problem_opens_by_id_and_missing_id_returns_404(
+        self, session, problem_bank_problem, problem_admin,
+    ):
+        detail = problem_service.get_bank_problem(session, problem_bank_problem.problem_id, problem_admin)
+        assert detail.lesson_id is None and detail.course_id is None
+
+        with pytest.raises(NotFoundError):
+            problem_service.get_bank_problem(session, 999999, problem_admin)
+
+
+class TestAdminProblemTestcasesAndPreview:
+    def test_source_and_attached_case_crud_preserve_format_and_count(
+        self, session, problem_bank_problem, problem_record, problem_admin,
+        problem_testcase_factory,
+    ):
+        for problem in (problem_bank_problem, problem_record):
+            problem.function_name = None
+            session.add(problem)
+            session.flush()
+            first = problem_testcase_factory(
+                problem, input_type="stdin", expected_output_type="stdout",
+                input_value="1 2\n", expected_output="3\n",
+            )
+            added = problem_service.add_admin_testcase(
+                session, problem.problem_id,
+                AdminTestcaseMutation(input="2 3\n", expected_output="5\n", input_type="stdin", expected_output_type="stdout"),
+                problem_admin,
+            )
+            assert added.total_number_testcase == 2
+            legacy = next(case for case in added.testcases if case.id != first.testcase_id)
+            assert legacy.input == "2 3\n" and legacy.expected_output == "5\n"
+
+            updated = problem_service.update_admin_testcase(
+                session, problem.problem_id, legacy.id,
+                AdminTestcaseMutation(input="3 4\n", expected_output="7\n", is_sample=True, input_type="stdin", expected_output_type="stdout"),
+                problem_admin,
+            )
+            assert next(case for case in updated.testcases if case.id == legacy.id).is_sample
+            assert next(case for case in updated.testcases if case.id == legacy.id).input == "3 4\n"
+
+            problem_service.delete_admin_testcase(session, problem.problem_id, first.testcase_id)
+            assert problem_service.get_bank_problem(session, problem.problem_id, problem_admin).total_number_testcase == 1
+            with pytest.raises(ConflictError):
+                problem_service.delete_admin_testcase(session, problem.problem_id, legacy.id)
+
+    def test_function_problem_accepts_json_only(self, session, problem_bank_problem, problem_admin):
+        with pytest.raises(InvalidFormatError):
+            problem_service.add_admin_testcase(
+                session, problem_bank_problem.problem_id,
+                AdminTestcaseMutation(input="1\n", expected_output="2\n", input_type="stdin", expected_output_type="stdout"),
+                problem_admin,
+            )
+        detail = problem_service.add_admin_testcase(
+            session, problem_bank_problem.problem_id,
+            AdminTestcaseMutation(input=[1], expected_output=2), problem_admin,
+        )
+        assert detail.testcases[0].input == [1]
+        assert detail.testcases[0].input_type == "json_args"
+
+    def test_case_changes_reject_existing_submission(
+        self, session, problem_record, problem_admin, problem_student,
+        problem_testcase_factory, problem_submission_factory,
+    ):
+        problem_testcase_factory(problem_record)
+        problem_submission_factory(problem_record, problem_student)
+        with pytest.raises(ConflictError):
+            problem_service.add_admin_testcase(
+                session, problem_record.problem_id,
+                AdminTestcaseMutation(input=[1], expected_output=2), problem_admin,
+            )
+
+    def test_preview_runs_all_cases_without_creating_submission(
+        self, session, problem_record, problem_admin, problem_testcase_factory, monkeypatch,
+    ):
+        problem_testcase_factory(problem_record, is_sample=True)
+        problem_testcase_factory(problem_record, input_value="[3,4]", expected_output="7", is_sample=False)
+        seen = {}
+
+        def fake_judge(problem, data, testcases, timeout):
+            seen["ids"] = [case.testcase_id for case in testcases]
+            return [
+                (Judge0Result(str(index), 3, str(index), None, None, None, 0.1, None), "accepted", index)
+                for index, _case in enumerate(testcases, start=1)
+            ]
+
+        monkeypatch.setattr(judge_service, "_run_judge", fake_judge)
+        response = judge_service.run_admin_preview(
+            session, problem_record.problem_id, CodeRequest(language="python", code="def two_sum(): pass"), problem_admin,
+        )
+        assert response.status == "accepted"
+        assert [case.index for case in response.cases] == [1, 2]
+        assert len(seen["ids"]) == 2
+        assert response.cases[1].input == [3, 4]
+        assert session.exec(select(Submission).where(Submission.problem_id == problem_record.problem_id)).all() == []
 
 
 class TestCopyProblemsToLesson:

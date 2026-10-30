@@ -120,6 +120,16 @@ class Judge0Client:
                 )
                 if not retryable or attempt == attempts:
                     logger.error("Judge0 lỗi: %s (url=%s)", error, config.JUDGE0_URL)
+                    if isinstance(error, httpx.HTTPStatusError):
+                        logger.error(
+                            "Judge0 response body (status=%s): %s",
+                            error.response.status_code,
+                            error.response.text[:2000],
+                        )
+                    if isinstance(error, httpx.ConnectError):
+                        raise Judge0Error(
+                            "Không thể kết nối tới Judge0. Kiểm tra JUDGE0_URL và trạng thái dịch vụ Judge0."
+                        ) from None
                     raise Judge0Error(_BUSY_MESSAGE) from None
                 time.sleep(config.JUDGE0_RETRY_BACKOFF_SECONDS * 2 ** (attempt - 1))
         raise Judge0Error(_BUSY_MESSAGE)

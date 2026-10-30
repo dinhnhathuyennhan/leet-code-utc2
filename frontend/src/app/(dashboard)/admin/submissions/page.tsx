@@ -1,5 +1,5 @@
-import { AdminPlaceholder } from "@/components/admin/admin-placeholder";
+import { AdminSubmissions } from "@/components/admin/admin-submissions";
 
 export default function AdminSubmissionsPage() {
-  return <AdminPlaceholder title="Bài nộp" />;
+  return <AdminSubmissions />;
 }

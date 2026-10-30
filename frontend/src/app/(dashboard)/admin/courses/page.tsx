@@ -1,5 +1,5 @@
-import { AdminPlaceholder } from "@/components/admin/admin-placeholder";
+import { AdminCourses } from "@/components/admin/admin-courses";
 
 export default function AdminCoursesPage() {
-  return <AdminPlaceholder title="Lớp học phần" />;
+  return <AdminCourses />;
 }

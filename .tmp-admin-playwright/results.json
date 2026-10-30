@@ -1,0 +1,85 @@
+{
+  "results": [
+    {
+      "name": "Account search",
+      "status": "PASS"
+    },
+    {
+      "name": "Account creation form required validation",
+      "status": "PASS"
+    },
+    {
+      "name": "Excel upload rejects invalid extension",
+      "status": "PASS"
+    },
+    {
+      "name": "Course search and list view",
+      "status": "PASS"
+    },
+    {
+      "name": "Class roster and prevent deleting populated class",
+      "status": "PASS"
+    },
+    {
+      "name": "Account role filter and pagination",
+      "status": "PASS"
+    },
+    {
+      "name": "Theme setting",
+      "status": "PASS"
+    },
+    {
+      "name": "Judge0 connection",
+      "status": "PASS"
+    },
+    {
+      "name": "AI connection",
+      "status": "PASS"
+    },
+    {
+      "name": "Mobile main pages no horizontal overflow",
+      "status": "PASS"
+    },
+    {
+      "name": "Unauthenticated admin route guard",
+      "status": "PASS"
+    },
+    {
+      "name": "Course detail students grades and lesson",
+      "status": "PASS"
+    },
+    {
+      "name": "Create search and delete temporary administrative class",
+      "status": "PASS"
+    },
+    {
+      "name": "Problem bank search difficulty and detail",
+      "status": "PASS"
+    },
+    {
+      "name": "Submission search filter export and detail",
+      "status": "PASS"
+    },
+    {
+      "name": "Judge0 custom Python stdin and stdout",
+      "status": "PASS"
+    },
+    {
+      "name": "Password form rejects weak password without changing account",
+      "status": "PASS"
+    },
+    {
+      "name": "Course form rejects end date before start date",
+      "status": "PASS"
+    },
+    {
+      "name": "No temporary administrative classes remain",
+      "status": "PASS"
+    },
+    {
+      "name": "Logout and protected route after logout",
+      "status": "PASS"
+    }
+  ],
+  "errors": []
+}

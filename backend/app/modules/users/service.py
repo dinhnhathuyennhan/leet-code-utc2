@@ -183,7 +183,7 @@ def reset_password(
     try:
         target_uuid = uuid.UUID(str(target_user_id))
     except ValueError:
-        raise UserNotFoundError("Không tìm thấy tài khoản")
+        raise UserNotFoundError("Không tìm thấy tài khoản") from None
 
     target = session.get(User, target_uuid)
     if target is None:

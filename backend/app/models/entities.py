@@ -1,3 +1,4 @@
+import uuid
 from datetime import date, datetime
 
 from sqlalchemy import JSON, UniqueConstraint
@@ -18,10 +19,11 @@ class Class(SQLModel, table=True):
 
 # ==================== USER ====================
 class User(SQLModel, table=True):
-    user_id: str = Field(primary_key=True, max_length=50)
+    user_id: uuid.UUID = Field(default_factory=uuid.uuid4, primary_key=True)
+    # MSSV (nếu có)
+    student_code: str | None = Field(default=None, unique=True, index=True, max_length=20)
     full_name: str
     avt_link: str | None = Field(default=None, max_length=2048)
-    date_of_birth: date | None = None
     email: str = Field(unique=True, index=True, max_length=255)
     hashed_password: str
     must_change_password: bool = Field(default=False)
@@ -45,7 +47,7 @@ class Course(SQLModel, table=True):
     course_id: str = Field(primary_key=True, max_length=50)
     course_name: str
     avt_link: str | None = Field(default=None, max_length=2048)
-    created_by: str = Field(foreign_key="user.user_id", max_length=50)
+    created_by: uuid.UUID = Field(foreign_key="user.user_id")
     term: str
     start_date: datetime = Field(sa_type=UTCDateTime)
     end_date: datetime = Field(sa_type=UTCDateTime)
@@ -67,7 +69,7 @@ class Enrollment(SQLModel, table=True):
     )
     enrollment_id: int | None = Field(default=None, primary_key=True)
     course_id: str = Field(foreign_key="course.course_id", max_length=50)
-    student_id: str = Field(foreign_key="user.user_id", max_length=50)
+    student_id: uuid.UUID = Field(foreign_key="user.user_id")
 
     course: Course | None = Relationship(back_populates="enrollments")
     student: User | None = Relationship(back_populates="enrollments")
@@ -132,8 +134,7 @@ class Testcase(SQLModel, table=True):
 class Submission(SQLModel, table=True):
     submission_id: int | None = Field(default=None, primary_key=True)
     problem_id: int = Field(foreign_key="problem.problem_id")
-    # varchar để khớp kiểu với user.user_id
-    student_id: str = Field(foreign_key="user.user_id", max_length=50)
+    student_id: uuid.UUID = Field(foreign_key="user.user_id")
     language: str
     submitted_code: str
     status: str  # pending / accepted / wrong_answer / compile_error...

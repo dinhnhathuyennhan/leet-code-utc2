@@ -3,7 +3,7 @@ import logging
 import os
 from datetime import date, datetime
 
-from sqlmodel import Session, func, or_, select
+from sqlmodel import Session, func, select
 
 from app.core.utils.datetime_utils import VN_TZ, vn_day_end, vn_day_start
 from app.core.security.passwords import hash_password
@@ -23,8 +23,6 @@ from app.models import (
 )
 
 logger = logging.getLogger("uvicorn.error")
-SEED_TEACHER_ID = "6451071003"
-
 # ---- Giá trị tự quy ước (models.py không ràng buộc), sửa tại đây nếu cần ----
 IO_TYPE = "string"
 STARTER_CODE = "def solve():\n    # TODO: viết lời giải\n    pass\n\n\nsolve()\n"
@@ -48,32 +46,42 @@ def vn_datetime(*args: int) -> datetime:
 # ---- Dữ liệu ----
 CLASS_COURSE_NUMBERS = [62, 63, 64, 65, 66]
 
-# (alias, user_id, full_name, date_of_birth, email_name)
+# (alias, full_name, email_name, role_id)
 STAFF = [
-    ("AD01", "1111111111", "Quản Trị Viên", date(1980, 1, 1), "QuanTri", Role.ADMIN),
-    ("GV01", "1111111112", "Nguyễn Văn An", date(1985, 3, 12), "NguyenVanAn", Role.TEACHER),
-    ("GV02", "1111111113", "Trần Thị Bình", date(1988, 7, 25), "TranThiBinh", Role.TEACHER),
-    ("GV03", "1111111114", "Lê Hoàng Cường", date(1990, 11, 2), "LeHoangCuong", Role.TEACHER),
-    ("GV04", "1111111115", "Phạm Minh Dũng", date(1982, 1, 30), "PhamMinhDung", Role.TEACHER),
-    ("GV05", "1111111116", "Võ Thị Em", date(1992, 9, 18), "VoThiEm", Role.TEACHER),
+    ("AD01", "Quản Trị Viên", "QuanTri", Role.ADMIN),
+    ("GV01", "Nguyễn Văn An", "NguyenVanAn", Role.TEACHER),
+    ("GV02", "Trần Thị Bình", "TranThiBinh", Role.TEACHER),
+    ("GV03", "Lê Hoàng Cường", "LeHoangCuong", Role.TEACHER),
+    ("GV04", "Phạm Minh Dũng", "PhamMinhDung", Role.TEACHER),
+    ("GV05", "Võ Thị Em", "VoThiEm", Role.TEACHER),
 ]
 
-# (alias, MSSV, full_name, date_of_birth, course_number) — email = <MSSV>@st.utc2.edu.vn
+# (alias, MSSV, full_name, course_number) — email = <MSSV>@st.utc2.edu.vn
 STUDENTS = [
-    ("SV01", "6251071001", "Đặng Quốc Huy", date(2005, 5, 15), 62),
-    ("SV02", "6251071002", "Bùi Thanh Hà", date(2005, 8, 20), 62),
-    ("SV03", "6351071001", "Ngô Minh Khang", date(2004, 12, 3), 63),
-    ("SV04", "6351071002", "Hoàng Gia Linh", date(2005, 2, 14), 63),
-    ("SV05", "6451071001", "Phan Đức Mạnh", date(2006, 1, 9), 64),
-    ("SV06", "6451071002", "Trương Ngọc Nhi", date(2005, 6, 30), 64),
-    ("SV07", "6551071001", "Lý Anh Phúc", date(2004, 10, 11), 65),
-    ("SV08", "6551071002", "Đỗ Khánh Quyên", date(2005, 3, 27), 65),
-    ("SV09", "6651071001", "Vũ Thành Sơn", date(2005, 9, 5), 66),
-    ("SV10", "6651071002", "Mai Bảo Trân", date(2006, 4, 22), 66),
+    ("SV01", "6251071001", "Đặng Quốc Huy", 62),
+    ("SV02", "6251071002", "Bùi Thanh Hà", 62),
+    ("SV03", "6351071001", "Ngô Minh Khang", 63),
+    ("SV04", "6351071002", "Hoàng Gia Linh", 63),
+    ("SV05", "6451071001", "Phan Đức Mạnh", 64),
+    ("SV06", "6451071002", "Trương Ngọc Nhi", 64),
+    ("SV07", "6551071001", "Lý Anh Phúc", 65),
+    ("SV08", "6551071002", "Đỗ Khánh Quyên", 65),
+    ("SV09", "6651071001", "Vũ Thành Sơn", 66),
+    ("SV10", "6651071002", "Mai Bảo Trân", 66),
 ]
 
-# alias -> user_id thật
-UID = {row[0]: row[1] for row in STAFF + STUDENTS}
+# alias -> stable email used to resolve the generated UUID in each seed session
+UID = {
+    **{alias: f"{email_name}@{EMAIL_DOMAIN}" for alias, _, email_name, _ in STAFF},
+    **{alias: f"{student_code}@{EMAIL_DOMAIN}" for alias, student_code, _, _ in STUDENTS},
+}
+
+
+def _user_uuid(session: Session, alias: str):
+    user_id = session.exec(select(User.user_id).where(User.email == UID[alias])).first()
+    if user_id is None:
+        raise SeedStepError(f"Không tìm thấy user seed {alias}")
+    return user_id
 
 # GV04, GV05 không tạo course; SV09, SV10 không học course nào
 # (để test case Teacher bị 403 khi reset mật khẩu / xem lớp)
@@ -408,22 +416,6 @@ SEED_SUBMISSIONS = [
 ]
 
 
-def _upsert_user(session: Session, data: dict, hashed_password: str) -> bool:
-    """Insert user nếu chưa tồn tại. Return True nếu tạo mới."""
-    exists = session.exec(
-        select(User).where(
-            or_(User.user_id == data["user_id"], User.email == data["email"])
-        )
-    ).first()
-    if exists:
-        if data.get("class_id") and exists.class_id != data["class_id"]:
-            exists.class_id = data["class_id"]
-            session.add(exists)
-        return False
-    session.add(User(**data, hashed_password=hashed_password))
-    return True
-
-
 def _upsert_course(session: Session, data: dict) -> Course | None:
     """Insert course nếu chưa tồn tại. Return Course object."""
     existing = session.get(Course, data["course_id"])
@@ -471,44 +463,40 @@ def _seed_classes(session: Session) -> None:
 def _user_rows() -> list[dict]:
     rows = [
         {
-            "user_id": user_id,
+            "alias": alias,
             "full_name": name,
             "email": f"{email_name}@{EMAIL_DOMAIN}",
-            "date_of_birth": dob,
             "role_id": role_id,
             "must_change_password": True,
         }
-        for _, user_id, name, dob, email_name, role_id in STAFF
+        for alias, name, email_name, role_id in STAFF
     ]
     rows += [
         {
-            "user_id": mssv,
+            "alias": alias,
+            "student_code": student_code,
             "full_name": name,
-            "email": f"{mssv}@{EMAIL_DOMAIN}",
-            "date_of_birth": dob,
+            "email": f"{student_code}@{EMAIL_DOMAIN}",
             "role_id": Role.STUDENT,
             "class_id": class_id_of(course_number),
             "must_change_password": True,
         }
-        for _, mssv, name, dob, course_number in STUDENTS
+        for alias, student_code, name, course_number in STUDENTS
     ]
     return rows
 
 
-def _seed_users(session: Session, password: str) -> None:
+def _seed_users(session: Session) -> None:
     rows = _user_rows()
-    hashed_password = hash_password(password)  # cùng mật khẩu nên băm 1 lần
     created: list[str] = []
     for data in rows:
-        exists = session.exec(
-            select(User).where(
-                or_(User.user_id == data["user_id"], User.email == data["email"])
-            )
-        ).first()
+        exists = session.exec(select(User).where(User.email == data["email"])).first()
         if exists:
             continue
-        session.add(User(**data, hashed_password=hashed_password))
-        created.append(f"{data['user_id']} ({data['email']})")
+        password = data.get("student_code", data["email"])
+        user_fields = {key: value for key, value in data.items() if key != "alias"}
+        session.add(User(**user_fields, hashed_password=hash_password(password)))
+        created.append(f"{data['alias']} ({data['email']})")
     session.commit()
     _report("user", created, len(rows))
 
@@ -524,10 +512,10 @@ def _seed_courses_and_enrollments(session: Session) -> None:
                     term=term,
                     start_date=start,
                     end_date=end,
-                    created_by=UID[created_by],
+                    created_by=_user_uuid(session, created_by),
                 )
             )
-            created_courses.append(f"{course_id} (GV {UID[created_by]})")
+            created_courses.append(f"{course_id} (GV {created_by})")
     session.commit()
     _report("course", created_courses, len(COURSES))
 
@@ -536,7 +524,7 @@ def _seed_courses_and_enrollments(session: Session) -> None:
     for course_id, aliases in ENROLLMENTS.items():
         for alias in aliases:
             total += 1
-            student_id = UID[alias]
+            student_id = _user_uuid(session, alias)
             exists = session.exec(
                 select(Enrollment).where(
                     Enrollment.course_id == course_id,
@@ -639,7 +627,7 @@ def _seed_submissions(session: Session) -> None:
         ).first()
         if problem is None:
             raise SeedStepError(f"Không tìm thấy problem của {course_id} / bài {number}")
-        student_id = UID[alias]
+        student_id = _user_uuid(session, alias)
         exists = session.exec(
             select(Submission).where(
                 Submission.problem_id == problem.problem_id,
@@ -730,7 +718,7 @@ def seed_data() -> None:
 
     steps = (
         ("class", _seed_classes, ()),
-        ("user", _seed_users, (password,)),
+        ("user", _seed_users, ()),
         ("course + enrollment", _seed_courses_and_enrollments, ()),
         ("lesson + problem + testcase", _seed_lessons_problems_testcases, ()),
         ("submission", _seed_submissions, ()),

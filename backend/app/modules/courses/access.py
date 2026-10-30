@@ -1,3 +1,4 @@
+from uuid import UUID
 from sqlmodel import Session, select
 
 from app.core.exceptions import ForbiddenError, NotFoundError
@@ -5,7 +6,7 @@ from app.core.dependencies import Role
 from app.models import Course, Enrollment, Lesson, Problem, User
 
 
-def find_enrollment(session: Session, course_id: str, student_id: str) -> Enrollment | None:
+def find_enrollment(session: Session, course_id: str, student_id: UUID) -> Enrollment | None:
     return session.exec(
         select(Enrollment).where(
             Enrollment.course_id == course_id, Enrollment.student_id == student_id

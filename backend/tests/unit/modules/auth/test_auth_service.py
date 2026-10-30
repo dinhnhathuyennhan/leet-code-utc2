@@ -48,7 +48,6 @@ def session(engine):
 
 def _make_user(session: Session, **overrides) -> User:
     fields = {
-        "user_id": "U001",
         "full_name": "Nguyen Van A",
         "email": "a@example.com",
         "hashed_password": hash_password(PASSWORD),
@@ -99,7 +98,7 @@ class TestLogin:
 
         assert response.access_token
         assert refresh_token
-        assert response.user.user_id == user.user_id
+        assert response.user.user_id == str(user.user_id)
         assert response.user.email == user.email
         assert response.user.role_id == user.role_id
 
@@ -263,17 +262,17 @@ class TestChangePassword:
         request cùng đọc 0 rồi cùng ghi 1 -> mất một lần tăng. Nay dùng UPDATE nguyên tử.
         """
         with Session(engine) as s:
-            _make_user(s)
+            user_id = _make_user(s).user_id
 
         with Session(engine) as s1, Session(engine) as s2:
-            u1 = s1.get(User, "U001")
-            u2 = s2.get(User, "U001")  # cả hai cùng thấy token_version = 0
+            u1 = s1.get(User, user_id)
+            u2 = s2.get(User, user_id)  # cả hai cùng thấy token_version = 0
 
             svc.change_password(s1, u1, _change_req(PASSWORD, "Aaaa-1111-bbbb"))
             svc.change_password(s2, u2, _change_req(PASSWORD, "Cccc-2222-dddd"))
 
         with Session(engine) as s:
-            assert s.get(User, "U001").token_version == 2
+            assert s.get(User, user_id).token_version == 2
 
 
 # ---------------------------------------------------- refresh_access_token
@@ -317,7 +316,7 @@ class TestRefreshAccessToken:
     def test_expired_token_returns_session_expired(self, session, user):
         """Regression: token hết hạn từng lọt ExpiredSignatureError ra ngoài -> 500."""
         expired = _forge(
-            {"sub": user.user_id, "tv": 0, "type": "refresh",
+            {"sub": str(user.user_id), "tv": 0, "type": "refresh",
              "exp": datetime.now(UTC) - timedelta(hours=1)}
         )
         with pytest.raises(svc.SessionExpiredError):
@@ -326,7 +325,7 @@ class TestRefreshAccessToken:
     def test_token_signed_with_wrong_secret_rejected(self, session, user):
         """Regression: token sai chữ ký từng lọt InvalidSignatureError ra ngoài -> 500."""
         forged = jwt.encode(
-            {"sub": user.user_id, "tv": 0, "type": "refresh",
+            {"sub": str(user.user_id), "tv": 0, "type": "refresh",
              "exp": datetime.now(UTC) + timedelta(days=1)},
             "another-secret-another-secret-123456",
             algorithm="HS256",
@@ -338,7 +337,7 @@ class TestRefreshAccessToken:
     def test_alg_none_token_rejected(self, session, user):
         """Regression: alg=none luôn bị từ chối (decode_token pin HS256), và phải ra 401 chứ không 500."""
         unsigned = jwt.encode(
-            {"sub": user.user_id, "tv": 0, "type": "refresh",
+            {"sub": str(user.user_id), "tv": 0, "type": "refresh",
              "exp": datetime.now(UTC) + timedelta(days=1)},
             None,
             algorithm="none",
@@ -349,7 +348,7 @@ class TestRefreshAccessToken:
 
     def test_token_without_exp_is_rejected(self, session, user):
         """Regression: token không có exp từng sống vĩnh viễn (jwt.decode chỉ kiểm exp nếu có claim)."""
-        no_exp = _forge({"sub": user.user_id, "tv": 0, "type": "refresh"})
+        no_exp = _forge({"sub": str(user.user_id), "tv": 0, "type": "refresh"})
         with pytest.raises(AppError) as exc:
             svc.refresh_access_token(session, no_exp)
         assert exc.value.status_code == 401
@@ -374,7 +373,7 @@ class TestRefreshAccessToken:
 
         def spy(token, expected_type):
             seen["expected_type"] = expected_type
-            return {"sub": user.user_id, "tv": user.token_version, "type": expected_type}
+            return {"sub": str(user.user_id), "tv": user.token_version, "type": expected_type}
 
         monkeypatch.setattr(svc, "decode_token", spy)
 
@@ -392,7 +391,7 @@ class TestRefreshAccessToken:
         assert exc.value.status_code == 401
 
     def test_string_sub_claim_is_resolved_to_user(self, session, user, monkeypatch):
-        """Regression: sub luôn là str (PyJWT >= 2.10 bắt buộc) và khớp PK str của User."""
+        """Regression: sub luôn là str (PyJWT >= 2.10 bắt buộc) và được parse lại thành UUID của User."""
         monkeypatch.setattr(
             svc,
             "decode_token",

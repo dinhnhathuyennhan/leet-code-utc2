@@ -7,6 +7,7 @@ Handler hay không). Dùng ``app`` thật, thay ``get_current_user`` bằng user
 """
 
 from collections.abc import Iterator
+import uuid
 
 import pytest
 from fastapi.testclient import TestClient
@@ -44,7 +45,7 @@ def client(session) -> Iterator[TestClient]:
 
 def _login_as(role_id: int) -> None:
     user = User(
-        user_id=f"caller{role_id}",
+        user_id=uuid.uuid4(),
         full_name="Người Gọi",
         email=f"caller{role_id}@st.utc2.edu.vn",
         hashed_password="x",

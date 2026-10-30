@@ -5,6 +5,7 @@ SQLite in-memory và ``get_current_user`` bằng user cố định để không 
 """
 
 from collections.abc import Iterator
+import uuid
 
 import pytest
 from fastapi.testclient import TestClient
@@ -27,7 +28,7 @@ def client(session) -> Iterator[TestClient]:
 
 def _login_as(role_id: int) -> None:
     user = User(
-        user_id=f"caller{role_id}",
+        user_id=uuid.uuid4(),
         full_name="Người gọi",
         email=f"caller{role_id}@example.com",
         hashed_password="placeholder",
@@ -49,18 +50,19 @@ def _add_class(session, class_id: str = "CQ.67.CNTT") -> None:
     session.commit()
 
 
-def _add_student(session, user_id: str, class_id: str) -> None:
-    session.add(
-        User(
-            user_id=user_id,
-            full_name="Sinh viên",
-            email=f"{user_id}@example.com",
-            hashed_password="placeholder",
-            role_id=Role.STUDENT,
-            class_id=class_id,
-        )
+def _add_student(session, user_id: str, class_id: str) -> User:
+    student = User(
+        user_id=uuid.uuid4(),
+        student_code=user_id if user_id.isascii() and user_id.isdigit() and len(user_id) == 10 else None,
+        full_name="Sinh viên",
+        email=f"{user_id}@example.com",
+        hashed_password="placeholder",
+        role_id=Role.STUDENT,
+        class_id=class_id,
     )
+    session.add(student)
     session.commit()
+    return student
 
 
 # ---------- POST /classes ----------
@@ -293,7 +295,7 @@ def test_delete_class_requires_login(client, session):
 def test_delete_class_with_students_returns_409(client, session):
     _login_as(Role.ADMIN)
     _add_class(session)
-    _add_student(session, "sv1", "CQ.67.CNTT")
+    student = _add_student(session, "sv1", "CQ.67.CNTT")
 
     response = client.delete("/classes/CQ.67.CNTT")
 
@@ -302,7 +304,7 @@ def test_delete_class_with_students_returns_409(client, session):
         "error_code": "CONFLICT",
         "message": "Lớp CQ.67.CNTT đang có 1 sinh viên, không thể xóa",
     }
-    assert session.get(User, "sv1").class_id == "CQ.67.CNTT"
+    assert session.get(User, student.user_id).class_id == "CQ.67.CNTT"
 
 
 def test_delete_class_not_found_returns_404(client):

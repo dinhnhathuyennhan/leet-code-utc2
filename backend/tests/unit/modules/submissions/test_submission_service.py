@@ -11,13 +11,14 @@ class TestListPendingSubmissions:
         self,
         session: Session,
         submission_teacher: User,
+        submission_student: User,
         pending_error_submission,
     ):
         result = list_pending_submissions(
-            session, submission_teacher, search="SV001"
+            session, submission_teacher, search=submission_student.student_code
         )
 
         assert result.total == 1
         assert result.counts["all"] == 1
         assert result.counts["error"] == 1
-        assert result.items[0].student_code == "SV001"
+        assert result.items[0].student_code == submission_student.student_code

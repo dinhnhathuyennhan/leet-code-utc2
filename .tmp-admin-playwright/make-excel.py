@@ -1,5 +1,7 @@
-import json, time
+import json
+import time
 from pathlib import Path
+
 from openpyxl import Workbook
 
 root = Path(__file__).parent

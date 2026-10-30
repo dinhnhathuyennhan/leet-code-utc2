@@ -4,9 +4,9 @@ from pathlib import Path
 
 root = Path(__file__).resolve().parent
 sys.path.insert(0, str(root.parent / "backend"))
-from sqlmodel import Session, select
 from app.core.database import engine
-from app.models import User, Class, Course, Enrollment, Submission, Problem
+from app.models import Class, Course, Enrollment, Problem, Submission, User
+from sqlmodel import Session, select
 
 m = json.loads((root / "mutation-manifest.json").read_text(encoding="utf-8"))
 ids = [m["teacher_id"], *m["student_ids"]]

@@ -78,7 +78,7 @@ def create_bank_problem(
 def get_bank_problem(session: Session, problem_id: int, current_user: User) -> ProblemDetailResponse:
     problem = session.get(Problem, problem_id)
     if problem is None:
-        raise NotFoundError("KhÃ´ng tÃ¬m tháº¥y bÃ i táº­p nguá»“n")
+        raise NotFoundError("Không tìm thấy bài tập nguồn")
     if problem.lesson_id is not None:
         lesson = session.get(Lesson, problem.lesson_id)
         if lesson is None:
@@ -89,7 +89,7 @@ def get_bank_problem(session: Session, problem_id: int, current_user: User) -> P
 def update_bank_problem(session: Session, problem_id: int, data: ProblemUpdateRequest) -> ProblemDetailResponse:
     problem = session.get(Problem, problem_id)
     if problem is None or problem.lesson_id is not None:
-        raise NotFoundError("KhÃ´ng tÃ¬m tháº¥y bÃ i táº­p nguá»“n")
+        raise NotFoundError("Không tìm thấy bài tập nguồn")
     updates = data.model_dump(exclude_unset=True, exclude={"testcases", "starter_code", "starter_codes"})
     if updates.get("start_datetime") is not None or updates.get("end_datetime") is not None:
         validate_problem_schedule(updates.get("start_datetime") or problem.start_datetime, updates.get("end_datetime") or problem.end_datetime)
@@ -112,9 +112,9 @@ def update_bank_problem(session: Session, problem_id: int, data: ProblemUpdateRe
 def delete_bank_problem(session: Session, problem_id: int) -> None:
     problem = session.get(Problem, problem_id)
     if problem is None or problem.lesson_id is not None:
-        raise NotFoundError("KhÃ´ng tÃ¬m tháº¥y bÃ i táº­p nguá»“n")
+        raise NotFoundError("Không tìm thấy bài tập nguồn")
     if _has_submissions(session, problem_id):
-        raise ConflictError("BÃ i Ä‘Ã£ cÃ³ bÃ i ná»™p, khÃ´ng thá»ƒ xoÃ¡")
+        raise ConflictError("Bài đã có bài nộp, không thể xoá")
     for testcase in session.exec(select(Testcase).where(Testcase.problem_id == problem_id)).all():
         session.delete(testcase)
     session.delete(problem)

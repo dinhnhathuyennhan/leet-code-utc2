@@ -20,6 +20,30 @@ export function buildBreadcrumbs(pathname: string, dynamicLabels?: { course: str
   if (segments.length === 0) return [{ label: "Lớp học phần" }]; // trang chủ sinh viên
   if (pathname === "/teacher") return [{ label: "Tổng quan" }];
 
+  if (segments[0] === "admin") {
+    const labels: Record<string, string> = {
+      dashboard: "Tổng quan", courses: "Lớp học phần", classes: "Lớp hành chính",
+      accounts: "Quản lý tài khoản", submissions: "Bài nộp", settings: "Cấu hình",
+      "problem-bank": "Ngân hàng đề", import: "Nhập từ Excel",
+    };
+    if (segments[1] === "courses" && segments[2]) {
+      const coursePath = `/admin/courses/${segments[2]}`;
+      const result: Crumb[] = [
+        { label: "Lớp học phần", href: "/admin/courses" },
+        { label: dynamicLabels?.course ?? decodeURIComponent(segments[2]), href: segments[4] ? coursePath : undefined },
+      ];
+      if (segments[3] === "sessions" && segments[4]) {
+        result.push({ label: dynamicLabels?.session ?? `Buổi #${segments[4]}`, href: segments[6] ? `${coursePath}/sessions/${segments[4]}` : undefined });
+        if (segments[5] === "problems" && segments[6]) result.push({ label: dynamicLabels?.page ?? "Nội dung bài tập" });
+      }
+      return result;
+    }
+    return segments.slice(1).map((segment, index) => ({
+      label: labels[segment] ?? dynamicLabels?.page ?? `#${decodeURIComponent(segment)}`,
+      href: index === segments.length - 2 ? undefined : `/admin/${segments.slice(1, index + 2).join("/")}`,
+    }));
+  }
+
   if (segments[0] === "teacher" && segments[1] === "courses" && segments[2]) {
     const coursePath = `/teacher/courses/${segments[2]}`;
     const crumbs: Crumb[] = [

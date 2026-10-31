@@ -147,7 +147,19 @@ def test_create_batch_splits_into_chunks_of_20():
     assert len(tokens) == 45
 
 
-def test_create_batch_sends_per_language_memory_and_compiler_options():
+@pytest.mark.parametrize("memory_limit_kb", [None, 262_144])
+@pytest.mark.parametrize("compiler_options", [None, "-J-Xmx256m"])
+def test_create_batch_sends_configured_memory_and_compiler_options(
+    monkeypatch, memory_limit_kb, compiler_options,
+):
+    monkeypatch.setattr(config, "LANGUAGES", {
+        "java": config.LanguageConfig(
+            judge0_id=62,
+            memory_limit_kb=memory_limit_kb,
+            compiler_options=compiler_options,
+        ),
+        "python": config.LanguageConfig(judge0_id=71),
+    })
     seen = {}
 
     def handler(request: httpx.Request) -> httpx.Response:
@@ -156,11 +168,19 @@ def test_create_batch_sends_per_language_memory_and_compiler_options():
 
     client = Judge0Client(transport=httpx.MockTransport(handler))
     client.create_batch("x", "java", [""], 1)
-    assert seen["body"]["memory_limit"] == config.LANGUAGES["java"].memory_limit_kb
-    assert "compiler_options" in seen["body"]
+    assert seen["body"]["language_id"] == 62
+    if memory_limit_kb is None:
+        assert "memory_limit" not in seen["body"]
+    else:
+        assert seen["body"]["memory_limit"] == memory_limit_kb
+    if compiler_options is None:
+        assert "compiler_options" not in seen["body"]
+    else:
+        assert seen["body"]["compiler_options"] == compiler_options
     client.create_batch("x", "python", [""], 1)
     assert "memory_limit" not in seen["body"]
     assert "compiler_options" not in seen["body"]
+    client.close()
 
 
 def test_limits_follow_config(monkeypatch):

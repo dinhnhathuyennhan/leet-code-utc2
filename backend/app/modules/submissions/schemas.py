@@ -38,6 +38,7 @@ class SubmissionTestcaseResponse(BaseModel):
 
 class SubmissionDetailResponse(BaseModel):
     id: int
+    problem_id: int
     student_name: str
     student_code: str
     class_id: str | None
@@ -46,6 +47,10 @@ class SubmissionDetailResponse(BaseModel):
     session_label: str
     problem_code: str | None
     problem_title: str
+    problem_description: str
+    problem_constraints: str
+    problem_level: str
+    problem_function_name: str | None
     language: str
     submitted_code: str
     status: str

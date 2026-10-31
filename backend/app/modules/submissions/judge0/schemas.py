@@ -46,6 +46,7 @@ class RunResponse(BaseModel):
     status: str
     compile_output: str | None
     cases: list[RunCaseResponse]
+    review_token: str | None = None
 
 
 class SubmitAcceptedResponse(BaseModel):

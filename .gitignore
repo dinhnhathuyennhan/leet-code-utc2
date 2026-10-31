@@ -5,3 +5,4 @@ CLAUDE.md
 .playwright-mcp/
 .chamcode-api.bruno_collection.json
 judge0.conf
+/backend/bruno

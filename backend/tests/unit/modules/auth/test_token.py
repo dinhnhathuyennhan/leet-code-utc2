@@ -3,6 +3,7 @@ decode_token(token, expected_type) là nơi DUY NHẤT chạm vào thư viện J
 phải được bọc thành TokenError (AppError, 401), và loại token (access/refresh) phải khớp.
 """
 
+import uuid
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
@@ -13,6 +14,7 @@ from app.core.exceptions import AppError, TokenError
 from app.core.security.tokens import create_access_token, create_refresh_token, decode_token
 
 SECRET = "test-secret-key-at-least-32-bytes-long!!"
+USER_ID = uuid.uuid4()
 
 
 def _future() -> datetime:
@@ -29,47 +31,47 @@ def _forge(payload: dict, key=SECRET, alg="HS256") -> str:
 
 
 def _full_payload(**overrides) -> dict:
-    payload = {"sub": "U001", "tv": 0, "type": "access", "exp": _future()}
+    payload = {"sub": str(USER_ID), "tv": 0, "type": "access", "exp": _future()}
     payload.update(overrides)
     return payload
 
 
 # ------------------------------------------------------------ claim / lifetime
 def test_access_token_claims():
-    payload = decode_token(create_access_token("U001", 2, 5), "access")
-    assert payload["sub"] == "U001"
+    payload = decode_token(create_access_token(USER_ID, 2, 5), "access")
+    assert payload["sub"] == str(USER_ID)
     assert payload["role"] == 2
     assert payload["tv"] == 5
     assert payload["type"] == "access"
 
 
 def test_refresh_token_claims_and_no_role():
-    payload = decode_token(create_refresh_token("U001", 5), "refresh")
-    assert payload["sub"] == "U001"
+    payload = decode_token(create_refresh_token(USER_ID, 5), "refresh")
+    assert payload["sub"] == str(USER_ID)
     assert payload["tv"] == 5
     assert payload["type"] == "refresh"
     assert "role" not in payload
 
 
 def test_access_token_lifetime_is_15_minutes():
-    p = decode_token(create_access_token("U001", 1, 0), "access")
+    p = decode_token(create_access_token(USER_ID, 1, 0), "access")
     assert p["exp"] - p["iat"] == 15 * 60
 
 
 def test_refresh_token_lifetime_is_7_days():
-    p = decode_token(create_refresh_token("U001", 0), "refresh")
+    p = decode_token(create_refresh_token(USER_ID, 0), "refresh")
     assert p["exp"] - p["iat"] == 7 * 24 * 3600
 
 
 # ------------------------------------------------- loại token (expected_type)
 def test_access_token_rejected_when_refresh_expected():
     with pytest.raises(TokenError):
-        decode_token(create_access_token("U001", 1, 0), "refresh")
+        decode_token(create_access_token(USER_ID, 1, 0), "refresh")
 
 
 def test_refresh_token_rejected_when_access_expected():
     with pytest.raises(TokenError):
-        decode_token(create_refresh_token("U001", 0), "access")
+        decode_token(create_refresh_token(USER_ID, 0), "access")
 
 
 # ------------------------------------------ mọi lỗi PyJWT -> TokenError (401)
@@ -95,7 +97,7 @@ def test_expired_token_raises_token_error():
 
 
 def test_tampered_token_raises_token_error():
-    token = create_access_token("U001", 1, 0)
+    token = create_access_token(USER_ID, 1, 0)
     head, body, sig = token.split(".")
     tampered = ".".join([head, body[:-2] + ("AA" if body[-2:] != "AA" else "BB"), sig])
     with pytest.raises(TokenError):
@@ -128,10 +130,9 @@ def test_token_missing_required_claim_is_rejected(missing):
 def test_signing_without_secret_fails(monkeypatch):
     monkeypatch.setattr(token_mod, "JWT_SECRET_KEY", None)
     with pytest.raises((TypeError, jwt.InvalidKeyError)):  # PyJWT: key=None không ký được
-        create_access_token("U001", 1, 0)
+        create_access_token(USER_ID, 1, 0)
 
 
 # app/core/security/tokens.py -> parents[0]=security, [1]=core, [2]=app, [3]=thư mục gốc chứa package `app`.
 # Tính từ vị trí file thật của module để KHÔNG phụ thuộc vào thư mục chạy pytest.
 PROJECT_ROOT = Path(token_mod.__file__).resolve().parents[3]
-

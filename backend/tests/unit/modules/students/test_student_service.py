@@ -6,6 +6,7 @@ hàng 12, chân trang ở cuối. Vì vậy sinh viên thứ ``n`` nằm ở dò
 """
 
 import logging
+import uuid
 from io import BytesIO
 from pathlib import Path
 
@@ -49,8 +50,10 @@ def _add_class(session, class_id: str = "CQ.67.CNTT") -> Class:
 
 
 def _add_user(session, user_id: str, email: str, role_id: int = Role.STUDENT) -> User:
+    student_code = user_id if role_id == Role.STUDENT and user_id.isascii() and user_id.isdigit() and len(user_id) == 10 else None
     user = User(
-        user_id=user_id,
+        user_id=uuid.uuid4(),
+        student_code=student_code,
         full_name=f"Có sẵn {user_id}",
         email=email,
         hashed_password="placeholder",
@@ -62,7 +65,7 @@ def _add_user(session, user_id: str, email: str, role_id: int = Role.STUDENT) ->
 
 
 def _users(session) -> dict[str, User]:
-    return {user.user_id: user for user in session.exec(select(User)).all()}
+    return {user.student_code or user.email: user for user in session.exec(select(User)).all()}
 
 
 def _fail_commit_at(session, monkeypatch, failing_call: int, error: Exception) -> None:
@@ -96,14 +99,14 @@ def test_import_creates_student_accounts(session, class_list_xlsx):
 
     assert [row.model_dump() for row in response.created] == [
         {
-            "user_id": "6751071001",
+            "student_code": "6751071001",
             "full_name": "Nguyễn Văn An",
             "email": "6751071001@st.utc2.edu.vn",
             "class_id": "CQ.67.CNTT",
             "temporary_password": "6751071001",
         },
         {
-            "user_id": "6751071002",
+            "student_code": "6751071002",
             "full_name": "Trần Thị Bình",
             "email": "6751071002@st.utc2.edu.vn",
             "class_id": "CQ.67.CNTT",
@@ -119,7 +122,7 @@ def test_import_creates_student_accounts(session, class_list_xlsx):
     assert user.role_id == Role.STUDENT
     assert user.class_id == "CQ.67.CNTT"
     assert user.must_change_password is True
-    assert user.date_of_birth is None
+    assert user.student_code == "6751071001"
     assert user.token_version == 0
     # Mật khẩu tạm = MSSV, lưu dạng bcrypt chứ không lưu nguyên văn
     assert user.hashed_password != "6751071001"
@@ -130,16 +133,13 @@ def test_import_reads_xls_fixture(session):
     response = import_students(session, XLS_FIXTURE.read_bytes(), "ds_lop_mau.xls")
 
     # Sheet "Ghi chu" không có hàng tiêu đề nên bị bỏ qua, không báo lỗi
-    assert [row.user_id for row in response.created] == [
-        "6751071001",  # ô số trong .xls (6751071001.0) không bị dính ".0"
-        "675107A002",
-        "A6751071003",
-    ]
-    assert response.errors == []
-    assert set(_users(session)) == {"6751071001", "675107A002", "A6751071003"}
+    # MSSV hợp lệ vẫn được import; các mã chữ trong workbook cũ bị báo lỗi.
+    assert [row.student_code for row in response.created] == ["6751071001"]
+    assert len(response.errors) == 2
+    assert set(_users(session)) == {"6751071001"}
 
 
-def test_import_accepts_student_ids_with_letters(session, class_list_xlsx):
+def test_import_rejects_student_codes_with_letters(session, class_list_xlsx):
     contents = class_list_xlsx(
         {
             SHEET: [
@@ -151,11 +151,9 @@ def test_import_accepts_student_ids_with_letters(session, class_list_xlsx):
 
     response = import_students(session, contents, "ds.xlsx")
 
-    assert [row.email for row in response.created] == [
-        "675107A095@st.utc2.edu.vn",
-        "A6751071096@st.utc2.edu.vn",
-    ]
-    assert verify_password("675107A095", _users(session)["675107A095"].hashed_password)
+    assert response.created == []
+    assert len(response.errors) == 2
+    assert all("chữ số" in error.reason for error in response.errors)
 
 
 def test_import_stops_at_footer_and_ignores_extra_columns(session, class_list_xlsx):
@@ -182,7 +180,7 @@ def test_import_skips_rows_that_only_have_stt(session, class_list_xlsx):
 
     response = import_students(session, contents, "ds.xlsx")
 
-    assert [row.user_id for row in response.created] == ["6751071001", "6751071003"]
+    assert [row.student_code for row in response.created] == ["6751071001", "6751071003"]
     assert response.errors == []
 
 
@@ -201,7 +199,7 @@ def test_import_continues_after_blank_rows_inside_table(session, class_list_xlsx
 
     response = import_students(session, contents, "ds.xlsx")
 
-    assert [row.user_id for row in response.created] == ["6751071001", "6751071002"]
+    assert [row.student_code for row in response.created] == ["6751071001", "6751071002"]
     assert response.errors == []
     assert set(_users(session)) == {"6751071001", "6751071002"}
 
@@ -225,7 +223,7 @@ def test_import_reads_row_with_missing_stt(session, class_list_xlsx):
 
     response = import_students(session, buffer.getvalue(), "ds.xlsx")
 
-    assert [row.user_id for row in response.created] == [
+    assert [row.student_code for row in response.created] == [
         "6751071001",
         "6751071002",
         "6751071003",
@@ -346,10 +344,10 @@ def test_import_rejects_invalid_class_id(session, class_list_xlsx, class_id):
     [
         ((None, "Nguyễn Văn", "An", "CQ.67.CNTT"), "Mã sinh viên không được trống"),
         (("   ", "Nguyễn Văn", "An", "CQ.67.CNTT"), "Mã sinh viên không được trống"),
-        (("6" * 51, "Nguyễn Văn", "An", "CQ.67.CNTT"), "Mã sinh viên không được dài quá 50 ký tự"),
-        (("67Đ1", "Nguyễn Văn", "An", "CQ.67.CNTT"), "Mã sinh viên chỉ được gồm chữ không dấu và số"),
-        (("6751 071", "Nguyễn Văn", "An", "CQ.67.CNTT"), "Mã sinh viên chỉ được gồm chữ không dấu và số"),
-        (("6751@071", "Nguyễn Văn", "An", "CQ.67.CNTT"), "Mã sinh viên chỉ được gồm chữ không dấu và số"),
+        (("6" * 11, "Nguyễn Văn", "An", "CQ.67.CNTT"), "Mã sinh viên phải gồm đúng 10 chữ số"),
+        (("67Đ1", "Nguyễn Văn", "An", "CQ.67.CNTT"), "Mã sinh viên phải gồm đúng 10 chữ số"),
+        (("6751 071", "Nguyễn Văn", "An", "CQ.67.CNTT"), "Mã sinh viên phải gồm đúng 10 chữ số"),
+        (("6751@071", "Nguyễn Văn", "An", "CQ.67.CNTT"), "Mã sinh viên phải gồm đúng 10 chữ số"),
         (("6751071001", None, None, "CQ.67.CNTT"), "Họ tên không được trống"),
         (("6751071001", "Nguyễn Văn", "An", None), "Mã lớp không được trống"),
     ],
@@ -367,7 +365,7 @@ def test_import_reports_invalid_row(session, class_list_xlsx, student, reason):
     response = import_students(session, contents, "ds.xlsx")
 
     # Dòng sai không chặn dòng hợp lệ
-    assert [row.user_id for row in response.created] == ["6751071099"]
+    assert [row.student_code for row in response.created] == ["6751071099"]
     assert len(response.errors) == 1
     error = response.errors[0]
     assert error.sheet == SHEET
@@ -380,7 +378,7 @@ def test_import_reports_empty_student_id_as_none(session, class_list_xlsx):
 
     response = import_students(session, contents, "ds.xlsx")
 
-    assert response.errors[0].user_id is None
+    assert response.errors[0].student_code is None
 
 
 def test_import_with_only_invalid_rows_returns_errors_without_creating(session, class_list_xlsx):
@@ -443,12 +441,12 @@ def test_import_skips_students_that_already_have_accounts(session, class_list_xl
 
     response = import_students(session, contents, "ds.xlsx")
 
-    assert [row.user_id for row in response.created] == ["6751071002"]
+    assert [row.student_code for row in response.created] == ["6751071002"]
     assert [row.model_dump() for row in response.skipped] == [
         {
             "sheet": SHEET,
             "row": _row(1),
-            "user_id": "6751071001",
+            "student_code": "6751071001",
             "reason": "Sinh viên đã có tài khoản",
         }
     ]
@@ -471,29 +469,26 @@ def test_import_twice_skips_everyone_the_second_time(session, class_list_xlsx):
     response = import_students(session, contents, "ds.xlsx")
 
     assert response.created == []
-    assert [row.user_id for row in response.skipped] == ["6751071001", "6751071002"]
+    assert [row.student_code for row in response.skipped] == ["6751071001", "6751071002"]
     assert response.errors == []
 
 
-def test_import_matches_existing_student_id_exactly(session, class_list_xlsx):
-    """MSSV có chữ hoa đã có trong DB phải vào skipped, không lọt xuống commit lỗi SQL.
-
-    Và vì so khớp phân biệt hoa/thường, "sv001" khác "SV001" nên được tạo mới.
-    """
-    _add_user(session, "SV001", "sv-cu@example.com")
+def test_import_matches_existing_student_code_exactly(session, class_list_xlsx):
+    """MSSV đã có theo student_code được bỏ qua; mã khác được tạo mới."""
+    _add_user(session, "6751071001", "sv-cu@example.com")
     contents = class_list_xlsx(
         {
             SHEET: [
-                ("SV001", "Nguyễn Văn", "An", "CQ.67.CNTT"),
-                ("sv001", "Trần Thị", "Bình", "CQ.67.CNTT"),
+                ("6751071001", "Nguyễn Văn", "An", "CQ.67.CNTT"),
+                ("6751071002", "Trần Thị", "Bình", "CQ.67.CNTT"),
             ]
         }
     )
 
     response = import_students(session, contents, "ds.xlsx")
 
-    assert [row.user_id for row in response.skipped] == ["SV001"]
-    assert [row.user_id for row in response.created] == ["sv001"]
+    assert [row.student_code for row in response.skipped] == ["6751071001"]
+    assert [row.student_code for row in response.created] == ["6751071002"]
     assert response.errors == []
 
 
@@ -505,11 +500,11 @@ def test_import_reports_email_already_used_by_another_account(session, class_lis
 
     assert response.created == []
     assert response.skipped == []
-    assert response.errors[0].user_id == "6751071001"
+    assert response.errors[0].student_code == "6751071001"
     assert response.errors[0].reason == (
         "Email 6751071001@st.utc2.edu.vn đã được dùng cho tài khoản khác"
     )
-    assert set(_users(session)) == {"gv01"}
+    assert set(_users(session)) == {"6751071001@st.utc2.edu.vn"}
 
 
 def test_import_merges_same_student_across_sheets(session, class_list_xlsx):
@@ -524,7 +519,7 @@ def test_import_merges_same_student_across_sheets(session, class_list_xlsx):
 
     response = import_students(session, contents, "ds.xlsx")
 
-    assert [row.user_id for row in response.created] == ["6751071001", "6751071002"]
+    assert [row.student_code for row in response.created] == ["6751071001", "6751071002"]
     assert response.errors == []
     assert len(_users(session)) == 2
 
@@ -543,7 +538,7 @@ def test_import_reports_same_student_id_with_different_info(session, class_list_
     assert [row.full_name for row in response.created] == ["Nguyễn Văn An"]
     assert len(response.errors) == 1
     error = response.errors[0]
-    assert (error.sheet, error.row, error.user_id) == ("Lop2", _row(1), "6751071001")
+    assert (error.sheet, error.row, error.student_code) == ("Lop2", _row(1), "6751071001")
     assert error.reason == (
         f"Mã sinh viên trùng với dòng {_row(1)} (sheet Lop1) nhưng khác họ tên hoặc lớp"
     )
@@ -670,10 +665,10 @@ def test_import_keeps_other_students_when_one_commit_hits_integrity_error(
 
     response = import_students(session, contents, "ds.xlsx")
 
-    assert [row.user_id for row in response.created] == ["6751071001", "6751071003"]
+    assert [row.student_code for row in response.created] == ["6751071001", "6751071003"]
     assert len(response.errors) == 1
     error = response.errors[0]
-    assert (error.row, error.user_id) == (_row(2), "6751071002")
+    assert (error.row, error.student_code) == (_row(2), "6751071002")
     assert error.reason == "Mã sinh viên hoặc email đã tồn tại"
     assert "INSERT" not in error.reason
     assert "$2b$" not in error.reason
@@ -700,7 +695,7 @@ def test_import_logs_and_hides_unexpected_db_error(
     with caplog.at_level(logging.ERROR, logger=student_service.__name__):
         response = import_students(session, contents, "ds.xlsx")
 
-    assert [row.user_id for row in response.created] == ["6751071002"]
+    assert [row.student_code for row in response.created] == ["6751071002"]
     assert response.errors[0].reason == "Không lưu được dòng này, vui lòng thử lại"
     assert "$2b$" not in response.errors[0].reason
     # Chi tiết lỗi chỉ nằm trong log phía server

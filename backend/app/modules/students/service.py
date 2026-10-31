@@ -14,7 +14,7 @@ Mẫu file (mỗi sheet là một lớp học phần):
       không có STT lẫn MSSV (phần chân trang "Người lập biểu"...) thì dừng.
 
 Quy tắc:
-    - Email tự sinh ``{MSSV}@st.utc2.edu.vn``, mật khẩu tạm = MSSV.
+    - Email tự sinh ``{student_code}@st.utc2.edu.vn``, mật khẩu tạm = student_code (MSSV).
     - Lớp hành chính chưa có thì tự tạo từ mã lớp (vd ``CQ.67.CNTT``).
     - MSSV đã có tài khoản → ``skipped``; dòng sai → ``errors``.
     - Commit theo từng sinh viên: lỗi DB ở một dòng không làm mất các
@@ -47,7 +47,6 @@ from app.modules.students.schemas import (
     StudentImportRow,
     StudentImportSkippedRow,
 )
-from app.modules.users.schemas import student_temp_password
 from app.models import Class, User
 
 logger = logging.getLogger(__name__)
@@ -61,7 +60,7 @@ HEADER_SEARCH_ROWS = 20
 # Tên cột chuẩn → các cách viết tiêu đề được chấp nhận (đã strip + lower)
 HEADER_ALIASES = {
     "stt": ("stt",),
-    "user_id": ("mã sinh viên", "ma sinh vien", "mssv"),
+    "student_code": ("mã sinh viên", "ma sinh vien", "mssv"),
     "full_name": ("họ và tên", "ho va ten", "họ tên", "ho ten"),
     "class_id": ("lớp", "lop"),
 }
@@ -114,8 +113,8 @@ def _extract_rows(
 
         for index in range(header_index + 1, len(sheet.rows)):
             row = sheet.rows[index]
-            user_id = _cell(row, columns["user_id"])
-            if not _cell(row, columns["stt"]).isdigit() and not user_id:
+            student_code = _cell(row, columns["student_code"])
+            if not _cell(row, columns["stt"]).isdigit() and not student_code:
                 if any(row):
                     break  # hết bảng, tới phần chân trang
                 continue  # dòng trống giữa bảng: bỏ qua, đọc tiếp
@@ -125,7 +124,7 @@ def _extract_rows(
                 name_parts.append(_cell(row, name_col + 1))
             full_name = " ".join(part for part in name_parts if part)
             class_id = _cell(row, columns["class_id"])
-            if not (user_id or full_name or class_id):
+            if not (student_code or full_name or class_id):
                 continue  # dòng chỉ có STT, chưa điền gì
 
             try:
@@ -133,7 +132,7 @@ def _extract_rows(
                     StudentImportRow(
                         sheet=sheet.name,
                         row=index + 1,
-                        user_id=user_id,
+                        student_code=student_code,
                         full_name=full_name,
                         class_id=class_id,
                     )
@@ -143,7 +142,7 @@ def _extract_rows(
                     StudentImportErrorRow(
                         sheet=sheet.name,
                         row=index + 1,
-                        user_id=user_id or None,
+                        student_code=student_code or None,
                         reason=err.message,
                     )
                 )
@@ -184,15 +183,15 @@ def _dedupe_students(
     """
     unique: dict[str, StudentImportRow] = {}
     for row in rows:
-        first = unique.get(row.user_id)
+        first = unique.get(row.student_code)
         if first is None:
-            unique[row.user_id] = row
+            unique[row.student_code] = row
         elif (first.full_name, first.class_id) != (row.full_name, row.class_id):
             errors.append(
                 StudentImportErrorRow(
                     sheet=row.sheet,
                     row=row.row,
-                    user_id=row.user_id,
+                    student_code=row.student_code,
                     reason=(
                         f"Mã sinh viên trùng với dòng {first.row} (sheet {first.sheet}) "
                         "nhưng khác họ tên hoặc lớp"
@@ -205,8 +204,8 @@ def _dedupe_students(
 # ---------- Đối chiếu với DB và lưu ----------
 
 
-def _student_email(user_id: str) -> str:
-    return f"{user_id}@{STUDENT_EMAIL_DOMAIN}"
+def _student_email(student_code: str) -> str:
+    return f"{student_code}@{STUDENT_EMAIL_DOMAIN}"
 
 
 def _split_existing(
@@ -218,10 +217,14 @@ def _split_existing(
     if not students:
         return [], []
 
-    user_ids = [student.user_id for student in students]
-    emails = [_student_email(user_id) for user_id in user_ids]
-    existing_user_ids = set(
-        session.exec(select(User.user_id).where(User.user_id.in_(user_ids))).all()
+    student_codes = [student.student_code for student in students]
+    emails = [_student_email(code) for code in student_codes]
+
+    # Tìm MSSV đã tồn tại trong DB (theo student_code, không phải user_id)
+    existing_codes = set(
+        session.exec(
+            select(User.student_code).where(User.student_code.in_(student_codes))
+        ).all()
     )
     taken_emails = set(
         session.exec(select(User.email).where(User.email.in_(emails))).all()
@@ -230,23 +233,23 @@ def _split_existing(
     to_create: list[StudentImportRow] = []
     skipped: list[StudentImportSkippedRow] = []
     for student in students:
-        if student.user_id in existing_user_ids:
+        if student.student_code in existing_codes:
             skipped.append(
                 StudentImportSkippedRow(
                     sheet=student.sheet,
                     row=student.row,
-                    user_id=student.user_id,
+                    student_code=student.student_code,
                     reason="Sinh viên đã có tài khoản",
                 )
             )
-        elif _student_email(student.user_id) in taken_emails:
+        elif _student_email(student.student_code) in taken_emails:
             errors.append(
                 StudentImportErrorRow(
                     sheet=student.sheet,
                     row=student.row,
-                    user_id=student.user_id,
+                    student_code=student.student_code,
                     reason=(
-                        f"Email {_student_email(student.user_id)} "
+                        f"Email {_student_email(student.student_code)} "
                         "đã được dùng cho tài khoản khác"
                     ),
                 )
@@ -288,7 +291,8 @@ def _save_students(
     errors: list[StudentImportErrorRow],
 ) -> list[StudentImportCreatedRow]:
     """Băm mật khẩu song song rồi lưu từng sinh viên."""
-    passwords = [student_temp_password(student.user_id) for student in students]
+    # Mật khẩu tạm = student_code (MSSV)
+    passwords = [student.student_code for student in students]
     # bcrypt nhả GIL khi băm nên các thread chạy song song thật sự
     with ThreadPoolExecutor(max_workers=HASH_WORKERS) as pool:
         hashed_passwords = list(pool.map(hash_password, passwords))
@@ -297,16 +301,17 @@ def _save_students(
     for student, password, hashed in zip(
         students, passwords, hashed_passwords, strict=True
     ):
-        email = _student_email(student.user_id)
+        email = _student_email(student.student_code)
         session.add(
             User(
-                user_id=student.user_id,
+                student_code=student.student_code,
                 full_name=student.full_name,
                 email=email,
                 hashed_password=hashed,
                 must_change_password=True,
                 role_id=Role.STUDENT,
                 class_id=student.class_id,
+                # user_id: auto-generated UUID, không set thủ công
             )
         )
         try:
@@ -317,7 +322,9 @@ def _save_students(
             continue
         except SQLAlchemyError:
             session.rollback()
-            logger.exception("Không lưu được sinh viên %s khi import", student.user_id)
+            logger.exception(
+                "Không lưu được sinh viên %s khi import", student.student_code
+            )
             errors.append(
                 _save_error(student, "Không lưu được dòng này, vui lòng thử lại")
             )
@@ -325,7 +332,7 @@ def _save_students(
 
         created.append(
             StudentImportCreatedRow(
-                user_id=student.user_id,
+                student_code=student.student_code,
                 full_name=student.full_name,
                 email=email,
                 class_id=student.class_id,
@@ -337,5 +344,5 @@ def _save_students(
 
 def _save_error(student: StudentImportRow, reason: str) -> StudentImportErrorRow:
     return StudentImportErrorRow(
-        sheet=student.sheet, row=student.row, user_id=student.user_id, reason=reason
+        sheet=student.sheet, row=student.row, student_code=student.student_code, reason=reason
     )

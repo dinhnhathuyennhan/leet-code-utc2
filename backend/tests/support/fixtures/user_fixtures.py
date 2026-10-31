@@ -6,6 +6,7 @@ from sqlmodel import Session
 from app.core.dependencies import Role
 from app.core.utils.datetime_utils import VN_TZ
 from app.models import User
+from tests.support.fixtures.builders import make_user as build_user
 
 
 def vn(*args: int) -> datetime:
@@ -14,14 +15,7 @@ def vn(*args: int) -> datetime:
 
 
 def make_user(session: Session, user_id: str, role_id: int) -> User:
-    user = User(
-        user_id=user_id,
-        full_name=f"User {user_id}",
-        email=f"{user_id.lower()}@example.com",
-        hashed_password="not-a-real-hash",
-        role_id=role_id,
-    )
-    session.add(user)
+    user = build_user(session, user_id, role_id)
     session.commit()
     session.refresh(user)
     return user

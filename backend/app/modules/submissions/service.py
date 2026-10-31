@@ -109,7 +109,7 @@ def list_pending_submissions(
         query = search.strip().lower()
         rows = [
             row for row in rows
-            if query in row[4].user_id.lower()
+            if query in (row[4].student_code or "").lower()
             or query in row[4].full_name.lower()
             or query in row[2].course_id.lower()
             or query in row[3].course_name.lower()
@@ -150,7 +150,7 @@ def list_pending_submissions(
             lesson_id=lesson.lesson_id,
             problem_id=problem.problem_id,
             student_name=student.full_name,
-            student_code=student.user_id,
+            student_code=student.student_code,
             course_code=course.course_id,
             session_label=f"Buổi {lesson.lesson_number}: {lesson.lesson_name}",
             topic=problem.title,
@@ -183,7 +183,7 @@ def get_submission_detail(
     return SubmissionDetailResponse(
         id=submission.submission_id,
         student_name=student.full_name,
-        student_code=student.user_id,
+        student_code=student.student_code,
         class_id=student.class_id,
         course_code=course.course_id,
         course_name=course.course_name,

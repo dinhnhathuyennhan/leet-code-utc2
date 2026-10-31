@@ -15,6 +15,7 @@ Edge case tests — kiểm thử các tình huống đặc biệt có thể gây
 
 import os
 import sys
+import uuid
 from datetime import datetime
 from pathlib import Path
 
@@ -41,6 +42,12 @@ from app.main import app  # noqa: E402
 from app.models import Class, Course, User  # noqa: E402
 
 
+ADMIN_ID = uuid.uuid4()
+STUD_ID = uuid.uuid4()
+TEACH_ID = uuid.uuid4()
+BAD_ID = uuid.uuid4()
+
+
 def setup_edge_db() -> Session:
     engine = create_engine(
         "sqlite://",
@@ -52,7 +59,7 @@ def setup_edge_db() -> Session:
     session.add(Class(class_id="C01", type="CĐ", course_number=1, department="CNTT"))
     session.add(
         User(
-            user_id="ADMIN",
+            user_id=ADMIN_ID,
             full_name="Admin",
             email="a@utc2.edu.vn",
             hashed_password=hash_password("x"),
@@ -61,7 +68,7 @@ def setup_edge_db() -> Session:
     )
     session.add(
         User(
-            user_id="STUD",
+            user_id=STUD_ID,
             full_name="Student",
             email="s@st.utc2.edu.vn",
             hashed_password=hash_password("x"),
@@ -71,7 +78,7 @@ def setup_edge_db() -> Session:
     )
     session.add(
         User(
-            user_id="TEACH",
+            user_id=TEACH_ID,
             full_name="Teacher",
             email="t@utc2.edu.vn",
             hashed_password=hash_password("x"),
@@ -86,7 +93,7 @@ def setup_edge_db() -> Session:
                 course_id="CS_100%",
                 course_name="100% Java",
                 term="HK1 2026-2027",
-                created_by="TEACH",
+                created_by=TEACH_ID,
                 start_date=datetime(2026, 9, 7, tzinfo=VN_TZ),
                 end_date=datetime(2026, 12, 27, tzinfo=VN_TZ),
             ),
@@ -94,7 +101,7 @@ def setup_edge_db() -> Session:
                 course_id="CS_50%",
                 course_name="50% Off Python",
                 term="HK1 2026-2027",
-                created_by="TEACH",
+                created_by=TEACH_ID,
                 start_date=datetime(2026, 9, 7, tzinfo=VN_TZ),
                 end_date=datetime(2026, 12, 27, tzinfo=VN_TZ),
             ),
@@ -102,7 +109,7 @@ def setup_edge_db() -> Session:
                 course_id="CS_un_der",
                 course_name="underscore_test",
                 term="HK1 2026-2027",
-                created_by="TEACH",
+                created_by=TEACH_ID,
                 start_date=datetime(2026, 9, 7, tzinfo=VN_TZ),
                 end_date=datetime(2026, 12, 27, tzinfo=VN_TZ),
             ),
@@ -112,7 +119,7 @@ def setup_edge_db() -> Session:
     return session
 
 
-def hdr(user_id: str, role: int) -> dict:
+def hdr(user_id: uuid.UUID, role: int) -> dict:
     return {"Authorization": f"Bearer {create_access_token(user_id, role, 0)}"}
 
 
@@ -120,8 +127,8 @@ def main():
     session = setup_edge_db()
     app.dependency_overrides[get_session] = lambda: (yield session)
     with TestClient(app) as client:
-        h_admin = hdr("ADMIN", Role.ADMIN)
-        h_stud = hdr("STUD", Role.STUDENT)
+        h_admin = hdr(ADMIN_ID, Role.ADMIN)
+        h_stud = hdr(STUD_ID, Role.STUDENT)
 
         print("=" * 70)
         print("  EDGE CASE TESTS")
@@ -192,7 +199,7 @@ def main():
         print("\n[8] Token thiếu field bắt buộc")
         import jwt
         bad_token = jwt.encode(
-            {"sub": "ADMIN", "role": Role.ADMIN, "type": "access"},
+            {"sub": str(ADMIN_ID), "role": Role.ADMIN, "type": "access"},
             "test-secret-key-for-pytest",
             algorithm="HS256",
         )
@@ -205,7 +212,7 @@ def main():
         print("\n[9] User với role_id không hợp lệ (giả lập trong DB)")
         # Tạo user với role_id=99
         bad_user = User(
-            user_id="BAD",
+            user_id=BAD_ID,
             full_name="Bad",
             email="bad@utc2.edu.vn",
             hashed_password=hash_password("x"),
@@ -213,7 +220,7 @@ def main():
         )
         session.add(bad_user)
         session.commit()
-        h_bad = hdr("BAD", 99)
+        h_bad = hdr(BAD_ID, 99)
         r = client.get("/courses", headers=h_bad)
         # Role 99 không nằm trong logic → có thể 403 hoặc empty
         print(f"  Status: {r.status_code} (BE handle unknown role)")

@@ -2,17 +2,27 @@
 
 from datetime import date, datetime
 from typing import Any
+import uuid
 
 from sqlmodel import Session
 
 from app.core.utils.datetime_utils import VN_TZ
+from app.core.dependencies import Role
 from app.models.entities import Course, Enrollment, Lesson, Problem, Submission, Testcase, User
 from app.modules.problems.schemas import ProblemCreateRequest
 
 
 def make_user(session: Session, user_id: str, role_id: int) -> User:
+    student_code = None
+    if role_id == Role.STUDENT:
+        student_code = (
+            user_id
+            if user_id.isascii() and user_id.isdigit() and len(user_id) == 10
+            else f"{uuid.uuid5(uuid.NAMESPACE_DNS, user_id).int % 10**10:010d}"
+        )
     user = User(
-        user_id=user_id,
+        user_id=uuid.UUID(user_id) if _is_uuid(user_id) else uuid.uuid4(),
+        student_code=student_code,
         full_name=f"User {user_id}",
         email=f"{user_id.lower()}@example.com",
         hashed_password="test-hash",
@@ -21,6 +31,14 @@ def make_user(session: Session, user_id: str, role_id: int) -> User:
     session.add(user)
     session.flush()
     return user
+
+
+def _is_uuid(value: str) -> bool:
+    try:
+        uuid.UUID(value)
+    except (TypeError, ValueError, AttributeError):
+        return False
+    return True
 
 
 def make_course(session: Session, owner: User, course_id: str) -> Course:

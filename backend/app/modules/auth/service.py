@@ -1,3 +1,5 @@
+import uuid
+
 from sqlalchemy import update
 from sqlmodel import Session, select
 
@@ -49,7 +51,7 @@ def _build_login_response(user: User) -> tuple[LoginResponse, str]:
     response = LoginResponse(
         access_token=access_token,
         user=UserResponse(
-            user_id=user.user_id,
+            user_id=str(user.user_id),
             full_name=user.full_name,
             email=user.email,
             role_id=user.role_id,
@@ -113,7 +115,12 @@ def refresh_access_token(session: Session, refresh_token: str | None) -> str:
     if payload.get("type") != "refresh" or sub is None or tv is None:
         raise SessionExpiredError("Phiên đăng nhập đã hết hạn")
 
-    user = session.get(User, sub)
+    try:
+        user_id = uuid.UUID(sub)
+    except (TypeError, ValueError, AttributeError):
+        raise SessionExpiredError("Phiên đăng nhập đã hết hạn") from None
+
+    user = session.get(User, user_id)
     if user is None or user.token_version != tv:
         raise SessionRevokedError("Phiên đăng nhập không còn hợp lệ")
 

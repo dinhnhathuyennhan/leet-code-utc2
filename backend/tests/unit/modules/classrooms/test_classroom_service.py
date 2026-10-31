@@ -6,6 +6,7 @@ giống Postgres thật.
 """
 
 import re
+import uuid
 
 import pytest
 from sqlalchemy import event
@@ -62,7 +63,12 @@ def _add_class(session, class_type="CQ", course_number=67, department="CNTT") ->
 
 def _add_user(session, user_id: str, class_id: str | None, role_id: int = Role.STUDENT) -> User:
     user = User(
-        user_id=user_id,
+        user_id=uuid.uuid4(),
+        student_code=(
+            f"{uuid.uuid5(uuid.NAMESPACE_DNS, user_id).int % 10**10:010d}"
+            if role_id == Role.STUDENT
+            else None
+        ),
         full_name=f"Người dùng {user_id}",
         email=f"{user_id}@example.com",
         hashed_password="placeholder",
@@ -210,7 +216,7 @@ def test_delete_class_not_found(fk_session):
 
 def test_delete_class_with_students_raises_conflict(fk_session):
     _add_class(fk_session)
-    _add_user(fk_session, "sv1", "CQ.67.CNTT")
+    student = _add_user(fk_session, "sv1", "CQ.67.CNTT")
     _add_user(fk_session, "sv2", "CQ.67.CNTT")
 
     with pytest.raises(
@@ -219,7 +225,7 @@ def test_delete_class_with_students_raises_conflict(fk_session):
         delete_class(fk_session, "CQ.67.CNTT")
 
     assert fk_session.get(Class, "CQ.67.CNTT") is not None
-    assert fk_session.get(User, "sv1").class_id == "CQ.67.CNTT"
+    assert fk_session.get(User, student.user_id).class_id == "CQ.67.CNTT"
 
 
 def test_delete_class_student_added_after_count_raises_conflict(fk_session, monkeypatch):
@@ -235,7 +241,8 @@ def test_delete_class_student_added_after_count_raises_conflict(fk_session, monk
         # Mô phỏng request khác vừa gán sinh viên vào lớp, sau bước đếm, trước câu DELETE
         fk_session.add(
             User(
-                user_id="sv1",
+                user_id=uuid.uuid4(),
+                student_code="6751070001",
                 full_name="Sinh viên mới",
                 email="sv1@example.com",
                 hashed_password="placeholder",
@@ -258,9 +265,9 @@ def test_delete_class_student_added_after_count_raises_conflict(fk_session, monk
 def test_delete_class_never_touches_students_of_other_classes(fk_session):
     _add_class(fk_session)
     _add_class(fk_session, "CQ", 68, "CNTT")
-    _add_user(fk_session, "sv1", "CQ.68.CNTT")
+    student = _add_user(fk_session, "sv1", "CQ.68.CNTT")
 
     delete_class(fk_session, "CQ.67.CNTT")
 
-    assert fk_session.get(User, "sv1").class_id == "CQ.68.CNTT"
+    assert fk_session.get(User, student.user_id).class_id == "CQ.68.CNTT"
     assert [c.class_id for c in list_classes(fk_session)] == ["CQ.68.CNTT"]

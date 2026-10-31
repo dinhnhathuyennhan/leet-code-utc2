@@ -13,12 +13,12 @@ export interface StatItem {
 
 export function CourseStatsBar({ items }: { items: StatItem[] }) {
   return (
-    <div className="inline-grid grid-cols-3 gap-2 rounded-xl bg-indigo-50/70 p-2 dark:bg-slate-800/50">
+    <div className="grid w-full grid-cols-1 gap-2 rounded-xl bg-indigo-50/70 p-2 dark:bg-slate-800/50 sm:inline-grid sm:grid-cols-3 sm:w-auto">
       {items.map(({ icon: Icon, value, label, highlight }) => (
         <div
           key={label}
           className={cn(
-            "flex min-h-[76px] min-w-[145px] items-center gap-3 rounded-lg px-4 py-4",
+            "flex min-h-[76px] min-w-0 items-center gap-3 rounded-lg px-4 py-4 sm:min-w-[145px]",
             highlight ? "bg-amber-100 dark:bg-amber-500/20" : "bg-card",
           )}
         >

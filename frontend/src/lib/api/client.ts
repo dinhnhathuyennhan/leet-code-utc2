@@ -7,6 +7,8 @@ export { setSessionExpiredHandler, refreshAccessToken };
 // ─── Helper parse body lỗi từ FastAPI ────────────────────────────────────────
 
 function extractErrorDetail(data: unknown, status: number): string {
+  // Không đưa stack trace/chi tiết kỹ thuật của lỗi máy chủ lên UI.
+  if (status >= 500) return "Hệ thống đang gặp sự cố. Vui lòng thử lại sau.";
   if (typeof data === "object" && data !== null) {
     const record = data as Record<string, unknown>;
 
@@ -61,10 +63,6 @@ function extractErrorDetail(data: unknown, status: number): string {
   if (status === 403) {
     return "Bạn không có quyền thực hiện thao tác này.";
   }
-  if (status === 500) {
-    return "Lỗi hệ thống máy chủ. Vui lòng thử lại sau.";
-  }
-
   return `Yêu cầu thất bại (mã lỗi ${status}).`;
 }
 

@@ -11,6 +11,7 @@ import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useAuth } from "@/context/auth-context";
 import { getHomePath } from "@/lib/auth/redirect";
 import { Loader2 } from "lucide-react";
+import { ConnectionLostState, ForbiddenState, ServerErrorState } from "@/components/shared/page-state";
 
 const PUBLIC_ROUTES = ["/login", "/forgot-password"];
 const LOGIN_ROUTE = "/login";
@@ -80,6 +81,7 @@ function getRedirectTarget(
 
 export function RouteGuard({ children }: { children: React.ReactNode }) {
   const auth = useAuth();
+  const [retryingConnection, setRetryingConnection] = useState(false);
   const isHydrated = useSyncExternalStore(
     subscribeToHydration,
     getClientHydrationSnapshot,
@@ -143,23 +145,24 @@ export function RouteGuard({ children }: { children: React.ReactNode }) {
     );
   }
 
+  // Trang công khai (đăng nhập, quên mật khẩu) vẫn phải vào được khi backend lỗi:
+  // chính lúc đó người dùng cần thử đăng nhập lại.
+  const isPublicPage = PUBLIC_ROUTES.includes(pathname);
+
+  if (auth.status === "connection-lost" && !isPublicPage) {
+    return <ConnectionLostState retrying={retryingConnection} onRetry={() => { setRetryingConnection(true); void auth.retryConnection().finally(() => setRetryingConnection(false)); }} />;
+  }
+
+  if (auth.status === "server-error" && !isPublicPage) {
+    return <ServerErrorState retrying={retryingConnection} onRetry={() => { setRetryingConnection(true); void auth.retryConnection().finally(() => setRetryingConnection(false)); }} />;
+  }
+
   // --- LUỒNG 2: Xử lý hiển thị màn hình 403 (Sai quyền) ---
   if (
     auth.status === "authenticated" &&
     !hasRouteAccess(pathname, auth.user.role_id)
   ) {
-    return (
-      <div className="flex h-[100dvh] w-full flex-col items-center justify-center bg-slate-900 text-slate-200">
-        <h1 className="text-4xl font-bold mb-4">403</h1>
-        <p className="mb-6">Bạn không có quyền truy cập vào trang này.</p>
-        <button
-          onClick={() => router.replace(getHomePath(auth.user))}
-          className="rounded-md bg-blue-600 px-4 py-2 hover:bg-blue-700 transition"
-        >
-          Quay lại trang chủ
-        </button>
-      </div>
-    );
+    return <ForbiddenState />;
   }
 
   // --- LUỒNG 1: Xử lý che màn hình khi đang Redirect ---
@@ -182,5 +185,6 @@ export function RouteGuard({ children }: { children: React.ReactNode }) {
     );
   }
 
-  return <Fragment key={pathname}>{children}</Fragment>;
+  // Đổi tài khoản phải remount toàn bộ dashboard để không giữ state/tab của user cũ.
+  return <Fragment key={`${pathname}:${auth.status === "authenticated" ? auth.user.user_id : "guest"}`}>{children}</Fragment>;
 }

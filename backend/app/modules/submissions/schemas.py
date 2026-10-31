@@ -17,6 +17,10 @@ class PendingSubmissionResponse(BaseModel):
     judge_kind: str
     judge_label: str
     issue: str
+    status: str
+    manual_score: float | None = None
+    passed_count: int = 0
+    total_testcases: int = 0
 
 
 class PendingSubmissionListResponse(BaseModel):

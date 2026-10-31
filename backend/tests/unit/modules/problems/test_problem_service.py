@@ -576,3 +576,133 @@ class TestDeleteProblem:
                 problem_record.problem_id,
                 problem_teacher,
             )
+
+
+class TestUpdateProblemWithSubmissions:
+    """Bài đã có bài nộp vẫn phải sửa được phần nội dung; chỉ chặn khi đổi thứ ảnh hưởng chấm."""
+
+    @pytest.fixture
+    def graded_problem(
+        self,
+        problem_record,
+        problem_student,
+        problem_submission_factory,
+        problem_testcase_factory,
+    ):
+        problem_testcase_factory(problem_record)
+        problem_submission_factory(problem_record, problem_student)
+        return problem_record
+
+    def test_resending_unchanged_grading_fields_is_not_a_conflict(
+        self, session, problem_teacher, problem_course, problem_lesson, graded_problem
+    ):
+        # Form gửi lại nguyên trạng mọi trường trong mỗi lần lưu, kể cả khi chỉ sửa mô tả.
+        result = problem_service.update_problem(
+            session,
+            problem_course.course_id,
+            problem_lesson.lesson_id,
+            graded_problem.problem_id,
+            ProblemUpdateRequest(
+                description="Mô tả đã sửa",
+                function_name=graded_problem.function_name,
+                time_limit_seconds=graded_problem.time_limit_seconds,
+                starter_codes=dict(graded_problem.starter_codes),
+                testcases=[ProblemTestcaseUpdate(input=[[2, 7, 11, 15], 9], expected_output=[0, 1])],
+            ),
+            problem_teacher,
+        )
+
+        assert result.description == "Mô tả đã sửa"
+
+    def test_changing_time_limit_still_conflicts(
+        self, session, problem_teacher, problem_course, problem_lesson, graded_problem
+    ):
+        with pytest.raises(ConflictError, match="ảnh hưởng đến chấm"):
+            problem_service.update_problem(
+                session,
+                problem_course.course_id,
+                problem_lesson.lesson_id,
+                graded_problem.problem_id,
+                ProblemUpdateRequest(time_limit_seconds=graded_problem.time_limit_seconds + 1),
+                problem_teacher,
+            )
+
+    def test_changing_testcase_content_still_conflicts(
+        self, session, problem_teacher, problem_course, problem_lesson, graded_problem
+    ):
+        with pytest.raises(ConflictError, match="ảnh hưởng đến chấm"):
+            problem_service.update_problem(
+                session,
+                problem_course.course_id,
+                problem_lesson.lesson_id,
+                graded_problem.problem_id,
+                ProblemUpdateRequest(
+                    testcases=[ProblemTestcaseUpdate(input=[[1, 2], 3], expected_output=[0, 1])]
+                ),
+                problem_teacher,
+            )
+
+    def test_adding_a_testcase_still_conflicts(
+        self, session, problem_teacher, problem_course, problem_lesson, graded_problem
+    ):
+        with pytest.raises(ConflictError, match="ảnh hưởng đến chấm"):
+            problem_service.update_problem(
+                session,
+                problem_course.course_id,
+                problem_lesson.lesson_id,
+                graded_problem.problem_id,
+                ProblemUpdateRequest(
+                    testcases=[
+                        ProblemTestcaseUpdate(input=[[2, 7, 11, 15], 9], expected_output=[0, 1]),
+                        ProblemTestcaseUpdate(input=[[1, 2], 3], expected_output=[0, 1]),
+                    ]
+                ),
+                problem_teacher,
+            )
+
+
+class TestProblemDetailSubmittedCount:
+    def test_teacher_sees_submission_count(
+        self,
+        session,
+        problem_teacher,
+        problem_student,
+        problem_course,
+        problem_lesson,
+        problem_record,
+        problem_submission_factory,
+    ):
+        problem_submission_factory(problem_record, problem_student)
+
+        result = problem_service.get_problem_detail(
+            session,
+            problem_course.course_id,
+            problem_lesson.lesson_id,
+            problem_record.problem_id,
+            problem_teacher,
+        )
+
+        assert result.submitted_count == 1
+
+    def test_student_never_sees_submission_count(
+        self,
+        session,
+        problem_student,
+        problem_course,
+        problem_lesson,
+        problem_record,
+        problem_enrollment_factory,
+        problem_submission_factory,
+    ):
+        problem_enrollment_factory(problem_course, problem_student)
+        problem_submission_factory(problem_record, problem_student)
+
+        result = problem_service.get_problem_detail(
+            session,
+            problem_course.course_id,
+            problem_lesson.lesson_id,
+            problem_record.problem_id,
+            problem_student,
+        )
+
+        assert result.submitted_count is None

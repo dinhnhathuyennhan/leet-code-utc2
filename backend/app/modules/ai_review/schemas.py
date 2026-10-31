@@ -3,7 +3,14 @@ from pydantic import BaseModel, Field, field_validator
 
 class AIReviewRequest(BaseModel):
     code: str = Field(min_length=1, max_length=15000)
-    language: str = Field(default="python", min_length=1, max_length=30)
+    # language được nhúng thẳng vào prompt: chỉ cho tên ngôn ngữ (chữ, số, + # . _ -
+    # và khoảng trắng) để không chèn được dòng chỉ thị mới vào prompt.
+    language: str = Field(
+        default="python",
+        min_length=1,
+        max_length=30,
+        pattern=r"^[A-Za-z0-9+#._ -]+$",
+    )
 
     @field_validator("code")
     @classmethod

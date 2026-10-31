@@ -84,6 +84,8 @@ class ProblemDetailResponse(BaseModel):
     end_datetime: datetime
     starter_code: str
     starter_codes: dict[str, str] = Field(default_factory=dict)
+    # None với Sinh viên: số bài nộp chỉ dành cho Giáo viên/Admin.
+    submitted_count: int | None = None
     testcases: list[ProblemTestcaseResponse]
 
 

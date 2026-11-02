@@ -1,3 +1,4 @@
+from uuid import UUID
 from sqlmodel import Session, func, select
 
 from app.models import Problem, Submission
@@ -6,8 +7,8 @@ MAX_SCORE_PER_PROBLEM = 10
 
 
 def best_passed_counts(
-    session: Session, problem_ids: list[int], student_ids: list[str] | None = None
-) -> dict[tuple[str, int], int]:
+    session: Session, problem_ids: list[int], student_ids: list[UUID] | None = None
+) -> dict[tuple[UUID, int], int]:
     """1 truy vấn: passed_count cao nhất của mỗi (sinh viên, bài)."""
     if not problem_ids:
         return {}
@@ -30,15 +31,15 @@ def problem_score(problem: Problem, passed: int | None) -> float | None:
 
 
 def best_grade_scores(
-    session: Session, problem_ids: list[int], student_ids: list[str] | None = None
-) -> dict[tuple[str, int], Submission]:
+    session: Session, problem_ids: list[int], student_ids: list[UUID] | None = None
+) -> dict[tuple[UUID, int], Submission]:
     if not problem_ids:
         return {}
     statement = select(Submission).where(Submission.problem_id.in_(problem_ids))
     if student_ids is not None:
         statement = statement.where(Submission.student_id.in_(student_ids))
     submissions = list(session.exec(statement).all())
-    selected: dict[tuple[str, int], Submission] = {}
+    selected: dict[tuple[UUID, int], Submission] = {}
     for submission in submissions:
         key = (submission.student_id, submission.problem_id)
         current = selected.get(key)
@@ -88,7 +89,7 @@ def build_grade_rows(lessons, problems_by_lesson, enrollments, best) -> list[dic
                 })
             session_scores[str(lesson.lesson_id)] = cells
         rows.append({
-            "student_id": student.user_id,
+            "student_id": str(student.user_id),
             "full_name": student.full_name,
             "class_id": student.class_id,
             "overall_score": round(total, 1) if has_any else None,

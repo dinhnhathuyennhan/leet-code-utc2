@@ -10,6 +10,7 @@ Test cả 2 layer:
 """
 
 import os
+import uuid
 from collections.abc import Iterator
 from datetime import datetime
 from pathlib import Path
@@ -84,7 +85,12 @@ def make_user(
     email: str | None = None,
 ) -> User:
     user = User(
-        user_id=user_id,
+        user_id=uuid.uuid4(),
+        student_code=(
+            f"{uuid.uuid5(uuid.NAMESPACE_DNS, user_id).int % 10**10:010d}"
+            if role_id == Role.STUDENT
+            else None
+        ),
         full_name=f"User {user_id}",
         email=email or f"{user_id.lower()}@utc2.edu.vn",
         hashed_password=hash_password("dummy"),
@@ -119,7 +125,7 @@ def make_course(
     return course
 
 
-def enroll(session: Session, course_id: str, student_id: str) -> None:
+def enroll(session: Session, course_id: str, student_id: uuid.UUID) -> None:
     """Insert enrollment trực tiếp (bypass service đang test)."""
     session.add(Enrollment(course_id=course_id, student_id=student_id))
     course = session.get(Course, course_id)
@@ -362,7 +368,7 @@ class TestGetStudentCourses:
 
     def test_raises_not_found_for_nonexistent_student(self, session, admin):
         with pytest.raises(NotFoundError, match="Không tìm thấy sinh viên"):
-            get_student_courses(session, "SV_NOT_EXIST", admin)
+            get_student_courses(session, uuid.uuid4(), admin)
 
     def test_raises_not_found_when_target_is_not_student(
         self, session, admin, teacher_a
@@ -564,7 +570,7 @@ class TestStudentCoursesHttpEndpoint:
         self, client: TestClient, admin
     ):
         response = client.get(
-            "/students/SV_KHONG_CO/courses",
+            f"/students/{uuid.uuid4()}/courses",
             headers=auth_header(admin),
         )
         assert response.status_code == 404

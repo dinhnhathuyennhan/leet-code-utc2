@@ -1,5 +1,7 @@
 """Unit tests for enrollment service behavior."""
 
+import uuid
+
 import pytest
 
 from app.core.exceptions import ConflictError, ForbiddenError, NotFoundError
@@ -32,7 +34,7 @@ class TestAddStudentToCourse:
         )
 
         assert result.course_id == course.course_id
-        assert result.student_id == student.user_id
+        assert result.student_id == str(student.user_id)
         assert result.enrollment_id is not None
         assert len(enrollments_of(session, course.course_id)) == 1
         assert counter_of(session, course) == 1
@@ -65,7 +67,9 @@ class TestAddStudentToCourse:
         self, session, course, owner_teacher
     ):
         with pytest.raises(NotFoundError, match="Không tìm thấy sinh viên"):
-            add_student_to_course("KHONG_CO", course.course_id, session, owner_teacher)
+            add_student_to_course(
+                uuid.uuid4(), course.course_id, session, owner_teacher
+            )
 
         assert counter_of(session, course) == 0
 
@@ -148,7 +152,7 @@ class TestGetCourseEnrollments:
         result = get_course_enrollments(session, course.course_id, admin)
 
         assert len(result) == 1
-        assert result[0].student_id == student.user_id
+        assert result[0].student_id == str(student.user_id)
         assert result[0].full_name == student.full_name
         assert result[0].email == student.email
 
@@ -161,7 +165,7 @@ class TestGetCourseEnrollments:
         result = get_course_enrollments(session, course.course_id, owner_teacher)
 
         assert len(result) == 1
-        assert result[0].student_id == student.user_id
+        assert result[0].student_id == str(student.user_id)
 
     # teacher không phải chủ lớp nhận 403
     def test_raises_forbidden_when_teacher_does_not_own_course(
@@ -177,7 +181,7 @@ class TestGetCourseEnrollments:
         result = get_course_enrollments(session, course.course_id, student)
 
         assert len(result) == 1
-        assert result[0].student_id == student.user_id
+        assert result[0].student_id == str(student.user_id)
 
     # student không có trong lớp nhận 403
     def test_raises_forbidden_when_student_not_in_course(self, session, course):
@@ -198,5 +202,3 @@ class TestGetCourseEnrollments:
         result = get_course_enrollments(session, course.course_id, owner_teacher)
 
         assert result == []
-
-

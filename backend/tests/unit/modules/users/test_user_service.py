@@ -1,4 +1,5 @@
-from datetime import date, timedelta
+import uuid
+from datetime import timedelta
 
 import pytest
 
@@ -8,7 +9,6 @@ from app.core.security.passwords import hash_password, verify_password
 from app.core.dependencies import Role
 from app.modules.users.schemas import CreateStudentRequest, CreateTeacherRequest
 from app.modules.users.service import (
-    DateOfBirthRequiredError,
     NotAllowedToResetError,
     UserNotFoundError,
     create_student,
@@ -31,16 +31,22 @@ def _make_user(
     user_id: str,
     email: str,
     role_id: int,
-    date_of_birth=None,
     password: str = "old-password-123",
     token_version: int = 0,
 ):
+    student_code = None
+    if role_id == Role.STUDENT:
+        student_code = (
+            user_id
+            if user_id.isascii() and user_id.isdigit() and len(user_id) == 10
+            else f"{uuid.uuid5(uuid.NAMESPACE_DNS, user_id).int % 10**10:010d}"
+        )
     user = User(
-        user_id=user_id,
+        user_id=uuid.UUID(user_id) if _is_uuid(user_id) else uuid.uuid4(),
+        student_code=student_code,
         full_name=user_id,
         email=email,
         hashed_password=hash_password(password),
-        date_of_birth=date_of_birth,
         role_id=role_id,
         token_version=token_version,
     )
@@ -50,20 +56,26 @@ def _make_user(
     return user
 
 
+def _is_uuid(value: str) -> bool:
+    try:
+        uuid.UUID(value)
+    except (TypeError, ValueError, AttributeError):
+        return False
+    return True
+
+
 def _make_listed_user(
     session,
     user_id: str,
     role_id: int,
     class_id=None,
-    date_of_birth=date(2005, 8, 31),
 ):
-    """User có sẵn ngày sinh để không dính lỗi UserResponse khi list."""
+    """Create a user row for list-user tests."""
     user = _make_user(
         session,
         user_id,
         f"{user_id}@example.com",
         role_id,
-        date_of_birth=date_of_birth,
     )
     if class_id is not None:
         user.class_id = class_id
@@ -105,56 +117,28 @@ def _ids(result) -> list:
 def test_create_student_success(session):
     _make_class(session, "CQ.64.CNTT")
     data = CreateStudentRequest(
-        user_id="6451071055",
+        student_code="6451071055",
         full_name="Đinh Nhật Huyền Nhân",
-        date_of_birth="31/08/2005",
         email="6451071055@st.utc2.edu.vn",
         class_id="CQ.64.CNTT",
     )
     student = create_student(session, data)
 
-    assert student.user_id == "6451071055"
+    assert isinstance(student.user_id, uuid.UUID)
+    assert student.student_code == "6451071055"
     assert student.full_name == "Đinh Nhật Huyền Nhân"
     assert student.email == "6451071055@st.utc2.edu.vn"
     assert student.role_id == 3
     assert student.class_id == "CQ.64.CNTT"
     assert student.must_change_password is True
-    assert student.date_of_birth == date(2005, 8, 31)
     assert verify_password("6451071055", student.hashed_password)
-
-
-def test_create_student_accepts_dd_mm_yyyy_and_normalizes_to_date_object(session):
-    _make_class(session, "CQ.64.CNTT")
-    data = CreateStudentRequest(
-        user_id="6451071056",
-        full_name="Nguyễn Văn A",
-        date_of_birth="05-06-2000",
-        email="6451071056@st.utc2.edu.vn",
-        class_id="CQ.64.CNTT",
-    )
-    student = create_student(session, data)
-
-    assert student.date_of_birth == date(2000, 6, 5)
-
-
-def test_create_student_accepts_iso_date_format(session):
-    _make_class(session, "CQ.64.CNTT")
-    student_req = CreateStudentRequest(
-        user_id="6451071057",
-        full_name="Nguyễn Văn B",
-        date_of_birth="2000-06-05",
-        email="6451071057@st.utc2.edu.vn",
-        class_id="CQ.64.CNTT",
-    )
-    assert student_req.date_of_birth == date(2000, 6, 5)
 
 
 def test_create_student_duplicate_email_raises(session):
     _make_class(session, "CQ.64.CNTT")
     data = CreateStudentRequest(
-        user_id="6451071055",
+        student_code="6451071055",
         full_name="Đinh Nhật Huyền Nhân",
-        date_of_birth="31/08/2005",
         email="6451071055@st.utc2.edu.vn",
         class_id="CQ.64.CNTT",
     )
@@ -165,25 +149,10 @@ def test_create_student_duplicate_email_raises(session):
         create_student(session, data)
 
 
-def test_create_student_invalid_age_raises(session):
-    _make_class(session, "CQ.64.CNTT")
-    data = CreateStudentRequest(
-        user_id="6451071055",
-        full_name="Đinh Nhật Huyền Nhân",
-        date_of_birth="31/08/2020",
-        email="6451071055@st.utc2.edu.vn",
-        class_id="CQ.64.CNTT",
-    )
-
-    with pytest.raises(DateOfBirthRequiredError):
-        create_student(session, data)
-
-
 def test_create_student_class_not_found_raises(session):
     data = CreateStudentRequest(
-        user_id="6451071058",
+        student_code="6451071058",
         full_name="Nguyễn Văn C",
-        date_of_birth="31/08/2005",
         email="6451071058@st.utc2.edu.vn",
         class_id="CLASS_NON_EXISTENT",
     )
@@ -199,25 +168,22 @@ def test_create_student_class_not_found_raises(session):
 
 def test_create_teacher_success(session):
     data = CreateTeacherRequest(
-        user_id="teacher_IT_001",
         full_name="Đinh Nhật Huyền Nhân",
-        date_of_birth="15/05/1980",
         email="huyennhan@st.utc2.edu.vn",
     )
     teacher = create_teacher(session, data)
 
-    assert teacher.user_id == "teacher_IT_001"
+    assert isinstance(teacher.user_id, uuid.UUID)
     assert teacher.full_name == "Đinh Nhật Huyền Nhân"
     assert teacher.email == "huyennhan@st.utc2.edu.vn"
     assert teacher.role_id == 2
     assert teacher.must_change_password is True
+    assert verify_password("huyennhan@st.utc2.edu.vn", teacher.hashed_password)
 
 
 def test_create_teacher_duplicate_email_raises(session):
     data = CreateTeacherRequest(
-        user_id="teacher_IT_001",
         full_name="Đinh Nhật Huyền Nhân",
-        date_of_birth="15/05/1980",
         email="huyennhan@st.utc2.edu.vn",
     )
 
@@ -227,39 +193,24 @@ def test_create_teacher_duplicate_email_raises(session):
         create_teacher(session, data)
 
 
-def test_create_teacher_invalid_date_of_birth_raises(session):
-    data = CreateTeacherRequest(
-        user_id="teacher_IT_001",
-        full_name="Đinh Nhật Huyền Nhân",
-        date_of_birth="15/05/2020",
-        email="huyennhan@st.utc2.edu.vn",
-    )
-
-    with pytest.raises(DateOfBirthRequiredError):
-        create_teacher(session, data)
-
-
 # endregion
 
 # region Test reset_password
 
 def test_reset_password_admin_can_reset_any_user(session):
-    from datetime import date
-
     admin = _make_user(session, "admin1", "admin@example.com", Role.ADMIN)
     target = _make_user(
         session,
         "student1",
         "student@example.com",
         Role.STUDENT,
-        date_of_birth=date(2005, 8, 31),
         password="abc12345",
     )
 
     returned_id, temporary_password = reset_password(session, admin, target.user_id)
 
-    assert returned_id == target.user_id
-    assert temporary_password == "student1"  # SV: mật khẩu tạm = MSSV
+    assert returned_id == str(target.user_id)
+    assert temporary_password == target.student_code  # SV: mật khẩu tạm = MSSV
     assert temporary_password != "abc12345"
 
     session.refresh(target)
@@ -269,15 +220,12 @@ def test_reset_password_admin_can_reset_any_user(session):
 
 
 def test_reset_password_teacher_can_reset_student_in_their_class(session):
-    from datetime import date, timedelta
-
     teacher = _make_user(session, "teacher1", "teacher@example.com", Role.TEACHER)
     student = _make_user(
         session,
         "student2",
         "student2@example.com",
         Role.STUDENT,
-        date_of_birth=date(2005, 8, 31),
         password="abc12345",
     )
 
@@ -299,7 +247,7 @@ def test_reset_password_teacher_can_reset_student_in_their_class(session):
     session.commit()
 
     _, temporary_password = reset_password(session, teacher, student.user_id)
-    assert temporary_password == "student2"
+    assert temporary_password == student.student_code
 
     session.refresh(student)
     assert verify_password(temporary_password, student.hashed_password)
@@ -329,19 +277,16 @@ def test_reset_password_user_not_found(session):
     admin = _make_user(session, "admin3", "admin3@example.com", Role.ADMIN)
 
     with pytest.raises(UserNotFoundError):
-        reset_password(session, admin, "missing-user-id")
+        reset_password(session, admin, uuid.uuid4())
 
 
 def test_reset_password_increments_token_version_each_time(session):
-    from datetime import date
-
     admin = _make_user(session, "admin4", "admin4@example.com", Role.ADMIN)
     target = _make_user(
         session,
         "student3",
         "student3@example.com",
         Role.STUDENT,
-        date_of_birth=date(2005, 8, 31),
         password="abc12345",
     )
 
@@ -355,8 +300,6 @@ def test_reset_password_increments_token_version_each_time(session):
 
 
 def test_reset_password_teacher_cannot_reset_student_outside_their_class(session):
-    from datetime import date, timedelta
-
     teacher = _make_user(session, "teacher5", "teacher5@example.com", Role.TEACHER)
     other_teacher = _make_user(
         session, "teacher6", "teacher6@example.com", Role.TEACHER
@@ -366,7 +309,6 @@ def test_reset_password_teacher_cannot_reset_student_outside_their_class(session
         "student4",
         "student4@example.com",
         Role.STUDENT,
-        date_of_birth=date(2005, 8, 31),
         password="abc12345",
     )
 
@@ -392,21 +334,17 @@ def test_reset_password_teacher_cannot_reset_student_outside_their_class(session
 
 
 def test_reset_password_student_is_blocked_completely(session):
-    from datetime import date
-
     student_a = _make_user(
         session,
         "student_a",
         "student_a@example.com",
         Role.STUDENT,
-        date_of_birth=date(2005, 1, 1),
     )
     student_b = _make_user(
         session,
         "student_b",
         "student_b@example.com",
         Role.STUDENT,
-        date_of_birth=date(2005, 1, 2),
     )
     teacher = _make_user(session, "teacher7", "teacher7@example.com", Role.TEACHER)
     admin = _make_user(session, "admin5", "admin5@example.com", Role.ADMIN)
@@ -426,59 +364,20 @@ def test_reset_password_teacher_cannot_reset_self(session):
         reset_password(session, teacher, teacher.user_id)
 
 
-def test_reset_password_requires_date_of_birth(session):
-    """Giáo viên chưa có ngày sinh thì không thể sinh mật khẩu tạm."""
-    admin = _make_user(session, "admin6", "admin6@example.com", Role.ADMIN)
-    target = _make_user(
-        session,
-        "teacher_no_dob",
-        "teacher_no_dob@example.com",
-        Role.TEACHER,
-        date_of_birth=None,
-    )
-
-    with pytest.raises(DateOfBirthRequiredError):
-        reset_password(session, admin, target.user_id)
-
-    session.refresh(target)
-    assert target.token_version == 0
-
-
-def test_reset_password_student_without_date_of_birth_uses_user_id(session):
-    """SV import từ file danh sách lớp không có ngày sinh vẫn reset được."""
-    admin = _make_user(session, "admin7", "admin7@example.com", Role.ADMIN)
-    target = _make_user(
-        session,
-        "675107A095",
-        "675107A095@st.utc2.edu.vn",
-        Role.STUDENT,
-        date_of_birth=None,
-    )
-
-    _, temporary_password = reset_password(session, admin, target.user_id)
-
-    assert temporary_password == "675107A095"
-    session.refresh(target)
-    assert verify_password("675107A095", target.hashed_password)
-    assert target.must_change_password is True
-    assert target.token_version == 1
-
-
-def test_reset_password_teacher_target_uses_date_of_birth(session):
+def test_reset_password_teacher_target_uses_email(session):
     admin = _make_user(session, "admin8", "admin8@example.com", Role.ADMIN)
     target = _make_user(
         session,
         "teacher8",
         "teacher8@example.com",
         Role.TEACHER,
-        date_of_birth=date(1990, 1, 15),
     )
 
     _, temporary_password = reset_password(session, admin, target.user_id)
 
-    assert temporary_password == "15011990"
+    assert temporary_password == target.email
     session.refresh(target)
-    assert verify_password("15011990", target.hashed_password)
+    assert verify_password(target.email, target.hashed_password)
 
 
 def test_reset_password_rejects_unknown_target_role(session):
@@ -489,7 +388,6 @@ def test_reset_password_rejects_unknown_target_role(session):
         "ghost",
         "ghost@example.com",
         99,
-        date_of_birth=date(2000, 1, 1),
         password="keep-me-123",
     )
 
@@ -523,7 +421,7 @@ def test_list_users_admin_without_filter_returns_all_ordered_by_user_id(session)
 
     assert result.total == 3
     assert _ids(result) == sorted(
-        [admin.user_id, teacher.user_id, student.user_id]
+        [str(admin.user_id), str(teacher.user_id), str(student.user_id)]
     )
 
 
@@ -534,7 +432,7 @@ def test_list_users_admin_filter_by_role_id(session):
 
     result = _call(session, admin, role_id=Role.STUDENT)
 
-    assert _ids(result) == [student.user_id]
+    assert _ids(result) == [str(student.user_id)]
     assert result.total == 1
 
 
@@ -547,7 +445,7 @@ def test_list_users_admin_filter_by_class_id(session):
 
     result = _call(session, admin, class_id="CQ.64.CNTT")
 
-    assert _ids(result) == [cntt.user_id]
+    assert _ids(result) == [str(cntt.user_id)]
     assert result.total == 1
 
 
@@ -571,7 +469,7 @@ def test_list_users_admin_combined_role_and_class_filter(session):
 
     result = _call(session, admin, role_id=Role.STUDENT, class_id="CQ.64.CNTT")
 
-    assert _ids(result) == [student.user_id]
+    assert _ids(result) == [str(student.user_id)]
 
 
 # --- teacher -----------------------------------------------------------------
@@ -590,7 +488,7 @@ def test_list_users_teacher_sees_only_students_in_own_courses(session):
 
     result = _call(session, teacher)
 
-    assert _ids(result) == [mine.user_id]
+    assert _ids(result) == [str(mine.user_id)]
     assert result.total == 1
 
 
@@ -614,7 +512,7 @@ def test_list_users_teacher_student_in_multiple_own_courses_appears_once(session
 
     result = _call(session, teacher)
 
-    assert _ids(result) == [student.user_id]
+    assert _ids(result) == [str(student.user_id)]
     assert result.total == 1
 
 
@@ -627,7 +525,7 @@ def test_list_users_teacher_ignores_role_id_param(session, role_param):
 
     result = _call(session, teacher, role_id=role_param)
 
-    assert _ids(result) == [student.user_id]
+    assert _ids(result) == [str(student.user_id)]
 
 
 def test_list_users_teacher_class_id_filter_stays_within_own_scope(session):
@@ -645,8 +543,8 @@ def test_list_users_teacher_class_id_filter_stays_within_own_scope(session):
 
     result = _call(session, teacher, class_id="CQ.64.CNTT")
 
-    assert _ids(result) == [in_class.user_id]
-    assert outsider.user_id not in _ids(result)
+    assert _ids(result) == [str(in_class.user_id)]
+    assert str(outsider.user_id) not in _ids(result)
 
 
 # --- pagination --------------------------------------------------------------
@@ -662,9 +560,10 @@ def test_list_users_pagination_pages_and_total(session):
     page2 = _call(session, admin, role_id=Role.STUDENT, page=2, page_size=2)
     page3 = _call(session, admin, role_id=Role.STUDENT, page=3, page_size=2)
 
-    assert _ids(page1) == [s.user_id for s in students[:2]]
-    assert _ids(page2) == [s.user_id for s in students[2:4]]
-    assert _ids(page3) == [students[4].user_id]  # trang cuối thiếu item
+    expected_ids = sorted(str(student.user_id) for student in students)
+    assert _ids(page1) == expected_ids[:2]
+    assert _ids(page2) == expected_ids[2:4]
+    assert _ids(page3) == expected_ids[4:]  # trang cuối thiếu item
     assert page1.total == page2.total == page3.total == 5
     assert (page1.page, page1.page_size) == (1, 2)
 
@@ -692,8 +591,9 @@ def test_list_users_pagination_applies_to_teacher_scope(session):
     page1 = _call(session, teacher, page=1, page_size=2)
     page2 = _call(session, teacher, page=2, page_size=2)
 
-    assert _ids(page1) == [s.user_id for s in students[:2]]
-    assert _ids(page2) == [students[2].user_id]
+    expected_ids = sorted(str(student.user_id) for student in students)
+    assert _ids(page1) == expected_ids[:2]
+    assert _ids(page2) == expected_ids[2:]
     assert page1.total == page2.total == 3
 
 
@@ -714,4 +614,3 @@ def test_list_users_class_id_only_exposed_for_students(session):
     assert teachers[0].class_id is None
 
 # endregion
-

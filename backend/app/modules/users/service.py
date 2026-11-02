@@ -1,6 +1,7 @@
+import uuid
+
 from sqlmodel import Session, select, func
 
-from app.core.utils.dates import age_calculation
 from app.core.exceptions import AppError, ConflictError, NotFoundError, InvalidFormatError, ForbiddenError
 from app.core.security.passwords import hash_password
 from app.core.dependencies import Role
@@ -9,15 +10,8 @@ from app.modules.users.schemas import (
     CreateTeacherRequest,
     UserResponse,
     UserListResponse,
-    password_from_date,
-    student_temp_password,
 )
 from app.models import Class, Course, Enrollment, User
-
-
-class DateOfBirthRequiredError(AppError):
-    status_code = 422
-    error_code = "DATE_OF_BIRTH_INVALID"
 
 
 class UserNotFoundError(AppError):
@@ -35,24 +29,14 @@ def create_teacher(session: Session, data: CreateTeacherRequest) -> User:
     if existing:
         raise ConflictError("Email đã được đăng ký")
 
-    age = age_calculation(
-        data.date_of_birth.day,
-        data.date_of_birth.month,
-        data.date_of_birth.year,
-    )
-
-    if age < 22:
-        raise DateOfBirthRequiredError("Người dùng phải đủ 22 tuổi")
-
     teacher = User(
-        user_id=data.user_id,
         full_name=data.full_name,
         email=data.email,
-        hashed_password=hash_password(password_from_date(data.date_of_birth)),
+        # Default password = email; teacher bắt buộc đổi mật khẩu lần đầu đăng nhập
+        hashed_password=hash_password(data.email),
         must_change_password=True,
-        date_of_birth=data.date_of_birth,
         avt_link=data.avt_link,
-        role_id=2,  # 1: admin, 2: teacher, 3: student
+        role_id=Role.TEACHER,  # 1: admin, 2: teacher, 3: student
     )
     session.add(teacher)
     session.commit()
@@ -65,28 +49,25 @@ def create_student(session: Session, data: CreateStudentRequest) -> User:
     if existing:
         raise ConflictError("Email đã được đăng ký")
 
+    existing_code = session.exec(
+        select(User).where(User.student_code == data.student_code)
+    ).first()
+    if existing_code:
+        raise ConflictError("Mã sinh viên đã được sử dụng")
+
     db_class = session.get(Class, data.class_id)
     if not db_class:
         raise NotFoundError(f"Không tìm thấy lớp học có ID: {data.class_id}")
 
-    age = age_calculation(
-        data.date_of_birth.day,
-        data.date_of_birth.month,
-        data.date_of_birth.year,
-    )
-
-    if age < 17:
-        raise DateOfBirthRequiredError("Người dùng phải đủ 17 tuổi")
-
     student = User(
-        user_id=data.user_id,
+        student_code=data.student_code,
         full_name=data.full_name,
         email=data.email,
-        hashed_password=hash_password(student_temp_password(data.user_id)),
+        # Default password = student_code (MSSV)
+        hashed_password=hash_password(data.student_code),
         must_change_password=True,
-        date_of_birth=data.date_of_birth,
         avt_link=data.avt_link,
-        role_id=3,  # 1: admin, 2: teacher, 3: student
+        role_id=Role.STUDENT,  # 1: admin, 2: teacher, 3: student
         class_id=data.class_id,
     )
     session.add(student)
@@ -97,13 +78,14 @@ def create_student(session: Session, data: CreateStudentRequest) -> User:
 
 def user_response(user: User) -> UserResponse:
     return UserResponse(
-        user_id=user.user_id,
+        user_id=str(user.user_id),
         full_name=user.full_name,
         email=user.email,
         role_id=user.role_id,
-        date_of_birth=user.date_of_birth,
+        student_code=user.student_code if user.role_id == Role.STUDENT else None,
         class_id=user.class_id if user.role_id == Role.STUDENT else None,
     )
+
 
 def list_users(
     session: Session,
@@ -133,7 +115,7 @@ def list_users(
         conditions.append(User.role_id == Role.STUDENT)
         conditions.append(User.user_id.in_(managed_student_ids))
     elif current_user.role_id != Role.ADMIN:
-        # Whitelist: chỉ Admin và Teacher được xem, mọi role khác (kể cả role phát sinh sau này) bị từ chối
+        # Whitelist: chỉ Admin và Teacher được xem, mọi role khác bị từ chối
         raise ForbiddenError("Bạn không có quyền xem danh sách người dùng")
     elif role_id is not None:
         conditions.append(User.role_id == role_id)
@@ -162,30 +144,29 @@ def list_users(
 def _temporary_password_for(user: User) -> str:
     """Sinh mật khẩu tạm theo vai trò của tài khoản.
 
-    - STUDENT: MSSV (``user_id``), không cần ngày sinh.
-    - TEACHER, ADMIN: ngày sinh dạng ddmmyyyy.
+    - STUDENT: student_code (MSSV).
+    - TEACHER, ADMIN: email.
     - Vai trò khác: không cho reset (whitelist, tránh role lạ rơi vào nhánh sai).
     """
     if user.role_id == Role.STUDENT:
-        return student_temp_password(user.user_id)
-    if user.role_id in (Role.TEACHER, Role.ADMIN):
-        if user.date_of_birth is None:
-            raise DateOfBirthRequiredError(
-                "Tài khoản chưa có ngày sinh để tạo mật khẩu tạm thời"
+        if user.student_code is None:
+            raise NotAllowedToResetError(
+                "Tài khoản sinh viên chưa có mã sinh viên để tạo mật khẩu tạm thời"
             )
-        return password_from_date(user.date_of_birth)
+        return user.student_code
+    if user.role_id in (Role.TEACHER, Role.ADMIN):
+        return user.email
     raise NotAllowedToResetError(
         "Bạn không có quyền đặt lại mật khẩu cho tài khoản này"
     )
 
 
 def reset_password(
-    session: Session, current_user: User, target_user_id: str
+    session: Session, current_user: User, target_user_id: str | uuid.UUID
 ) -> tuple[str, str]:
     """Đặt lại mật khẩu cho tài khoản mục tiêu.
 
-    Mật khẩu tạm thời: sinh viên = MSSV; giáo viên/admin = ngày sinh
-    dạng ddmmyyyy (xem ``_temporary_password_for``).
+    Mật khẩu tạm thời: sinh viên = student_code (MSSV); giáo viên/admin = email.
 
     Quyền:
         - ADMIN: đặt lại mật khẩu bất kỳ tài khoản nào.
@@ -193,14 +174,18 @@ def reset_password(
         - STUDENT: không được phép đặt lại mật khẩu ai.
 
     Returns:
-        tuple ``(user_id, temporary_password)`` để router trả về response.
+        tuple ``(user_id_str, temporary_password)`` để router trả về response.
 
     Raises:
         UserNotFoundError: không tìm thấy tài khoản mục tiêu.
         NotAllowedToResetError: người gọi không đủ quyền, hoặc tài khoản mục tiêu có vai trò lạ.
-        DateOfBirthRequiredError: giáo viên/admin mục tiêu chưa có ngày sinh.
     """
-    target = session.get(User, target_user_id)
+    try:
+        target_uuid = uuid.UUID(str(target_user_id))
+    except ValueError:
+        raise UserNotFoundError("Không tìm thấy tài khoản") from None
+
+    target = session.get(User, target_uuid)
     if target is None:
         raise UserNotFoundError("Không tìm thấy tài khoản")
 
@@ -225,7 +210,7 @@ def reset_password(
             )
         enrolled = session.exec(
             select(Enrollment).where(
-                Enrollment.student_id == target_user_id,
+                Enrollment.student_id == target.user_id,
                 Enrollment.course_id.in_(teacher_courses),
             )
         ).first()
@@ -242,4 +227,4 @@ def reset_password(
     session.add(target)
     session.commit()
     session.refresh(target)
-    return target.user_id, temporary_password
+    return str(target.user_id), temporary_password

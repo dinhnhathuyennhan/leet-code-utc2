@@ -1,5 +1,5 @@
 import re
-
+from uuid import UUID
 from sqlmodel import Session, func, or_, select
 
 from app.core.exceptions import (
@@ -214,8 +214,15 @@ def get_course_terms(session: Session, current_user: User) -> CourseTermsRespons
 # ─── Helpers dùng chung cho 2 endpoint mới (Lỗi 7 + Lỗi 8) ──────────────
 
 
+def _student_uuid(student_id: str) -> UUID:
+    try:
+        return UUID(str(student_id))
+    except (TypeError, ValueError, AttributeError):
+        raise NotFoundError("Không tìm thấy sinh viên") from None
+
+
 def _check_can_view_student_courses(
-    session: Session, current_user: User, target_student_id: str
+    session: Session, current_user: User, target_student_id: UUID
 ) -> None:
     """Check quyền xem lớp/enrollments của 1 sinh viên.
 
@@ -258,18 +265,19 @@ def get_student_courses(
     session: Session, student_id: str, current_user: User
 ) -> list[CourseResponse]:
     """Lấy danh sách lớp mà 1 sinh viên đang học (Lỗi 7)."""
-    _check_can_view_student_courses(session, current_user, student_id)
+    student_uuid = _student_uuid(student_id)
+    _check_can_view_student_courses(session, current_user, student_uuid)
 
     statement = (
         select(Course)
         .join(Enrollment, Enrollment.course_id == Course.course_id)
-        .where(Enrollment.student_id == student_id)
+        .where(Enrollment.student_id == student_uuid)
         .distinct()
     )
     if current_user.role_id == Role.TEACHER:
         statement = statement.where(Course.created_by == current_user.user_id)
 
-    only_student_id = student_id if current_user.role_id == Role.STUDENT else None
+    only_student_id = student_uuid if current_user.role_id == Role.STUDENT else None
     courses = session.exec(statement.order_by(Course.course_id)).all()
     return [
         build_course_response(course, session, only_student_id=only_student_id)
@@ -281,12 +289,13 @@ def get_student_enrollments(
     session: Session, student_id: str, current_user: User
 ) -> list[StudentEnrollmentResponse]:
     """Lấy danh sách enrollment (kèm thông tin lớp) của 1 sinh viên (Lỗi 8)."""
-    _check_can_view_student_courses(session, current_user, student_id)
+    student_uuid = _student_uuid(student_id)
+    _check_can_view_student_courses(session, current_user, student_uuid)
 
     statement = (
         select(Enrollment, Course)
         .join(Course, Course.course_id == Enrollment.course_id)
-        .where(Enrollment.student_id == student_id)
+        .where(Enrollment.student_id == student_uuid)
     )
     if current_user.role_id == Role.TEACHER:
         statement = statement.where(Course.created_by == current_user.user_id)
@@ -312,12 +321,13 @@ def get_student_dashboard(
     session: Session, student_id: str, current_user: User
 ) -> StudentDashboardResponse:
     """Lấy thống kê tổng quan cho trang Student Dashboard."""
-    _check_can_view_student_courses(session, current_user, student_id)
+    student_uuid = _student_uuid(student_id)
+    _check_can_view_student_courses(session, current_user, student_uuid)
 
     course_statement = (
         select(Course)
         .join(Enrollment, Enrollment.course_id == Course.course_id)
-        .where(Enrollment.student_id == student_id)
+        .where(Enrollment.student_id == student_uuid)
         .distinct()
     )
     if current_user.role_id == Role.TEACHER:
@@ -326,7 +336,7 @@ def get_student_dashboard(
         )
     courses = session.exec(course_statement.order_by(Course.course_id)).all()
 
-    only_student_id = student_id if current_user.role_id == Role.STUDENT else None
+    only_student_id = student_uuid if current_user.role_id == Role.STUDENT else None
     course_responses = [
         build_course_response(course, session, only_student_id=only_student_id)
         for course in courses
@@ -347,7 +357,7 @@ def get_student_dashboard(
         .join(Lesson, Lesson.lesson_id == Problem.lesson_id)
         .join(Course, Course.course_id == Lesson.course_id)
         .join(Enrollment, Enrollment.course_id == Course.course_id)
-        .where(Enrollment.student_id == student_id)
+        .where(Enrollment.student_id == student_uuid)
     )
     if current_user.role_id == Role.TEACHER:
         problem_count_statement = problem_count_statement.where(
@@ -358,7 +368,7 @@ def get_student_dashboard(
     completed_statement = (
         select(func.count(Submission.submission_id))
         .where(
-            Submission.student_id == student_id,
+            Submission.student_id == student_uuid,
             Submission.status == "accepted",
         )
     )
@@ -371,7 +381,7 @@ def get_student_dashboard(
         )
         .join(Problem, Problem.problem_id == Submission.problem_id)
         .where(
-            Submission.student_id == student_id,
+            Submission.student_id == student_uuid,
             Problem.total_number_testcase > 0,
         )
     )

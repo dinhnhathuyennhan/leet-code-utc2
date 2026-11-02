@@ -1,3 +1,4 @@
+from uuid import UUID
 from sqlmodel import Session, select
 
 from app.core.dependencies import Role
@@ -29,7 +30,7 @@ def get_course_enrollments(
     return [
         GetStudentListResponse(
             enrollment_id=enrollment.enrollment_id,
-            student_id=student.user_id,
+            student_id=str(student.user_id),
             full_name=student.full_name,
             email=student.email,
         )
@@ -50,21 +51,25 @@ def add_student_to_course(
         "Bạn không có quyền thêm sinh viên vào lớp này",
     )
 
-    student = session.get(User, student_id)
+    try:
+        student_uuid = UUID(str(student_id))
+    except (TypeError, ValueError, AttributeError):
+        raise NotFoundError("Không tìm thấy sinh viên") from None
+    student = session.get(User, student_uuid)
     if not student or student.role_id != Role.STUDENT:
         raise NotFoundError("Không tìm thấy sinh viên")
 
-    if find_enrollment(session, course_id, student_id):
+    if find_enrollment(session, course_id, student_uuid):
         raise ConflictError("Sinh viên đã có trong lớp học")
 
-    enrollment = Enrollment(course_id=course_id, student_id=student_id)
+    enrollment = Enrollment(course_id=course_id, student_id=student_uuid)
     course.total_number_student += 1
     session.add(enrollment)
     session.commit()
     session.refresh(enrollment)
 
     return AddStudentToCourseResponse(
-        student_id=student_id,
+        student_id=str(student_uuid),
         course_id=course_id,
         enrollment_id=enrollment.enrollment_id,
     )
@@ -83,7 +88,11 @@ def delete_student_from_course(
         "Bạn không có quyền thực hiện hành động này",
     )
 
-    enrollment = find_enrollment(session, course_id, student_id)
+    try:
+        student_uuid = UUID(str(student_id))
+    except (TypeError, ValueError, AttributeError):
+        raise NotFoundError("Sinh viên không thuộc lớp học này") from None
+    enrollment = find_enrollment(session, course_id, student_uuid)
     if not enrollment:
         raise NotFoundError("Sinh viên không thuộc lớp học này")
 
@@ -132,5 +141,5 @@ def add_class_to_course(
         class_id=class_id,
         added_count=len(new_ids),
         skipped_count=len(existing_ids),
-        added_student_ids=new_ids,
+        added_student_ids=[str(student_id) for student_id in new_ids],
     )

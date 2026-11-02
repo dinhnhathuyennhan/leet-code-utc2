@@ -20,12 +20,12 @@ def lesson_status(lesson: Lesson) -> str:
 def build_course_response(
     course: Course,
     session: Session | None = None,
-    only_student_id: str | None = None,   # truyền user_id khi người xem là sinh viên
+    only_student_id=None,   # UUID người xem nếu là sinh viên
 ) -> CourseResponse:
     response = CourseResponse(
         course_id=course.course_id, course_name=course.course_name, term=course.term,
         start_date=course.start_date, end_date=course.end_date, avt_link=course.avt_link,
-        created_by=course.created_by, total_number_student=course.total_number_student,
+        created_by=str(course.created_by), total_number_student=course.total_number_student,
     )
     if session is None:
         return response

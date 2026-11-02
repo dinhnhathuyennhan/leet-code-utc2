@@ -1,8 +1,28 @@
+from uuid import uuid4
+
 import pytest
 
 from app.core.exceptions import ConflictError
 from app.modules.ai_review.preview_receipt import create_preview_receipt, verify_preview_receipt
 from app.modules.ai_review.schemas import AdminPreviewReviewRequest
+
+
+@pytest.mark.parametrize("verify_as_string", [False, True])
+def test_preview_receipt_supports_uuid_user_ids(verify_as_string):
+    user_id = uuid4()
+    receipt = create_preview_receipt(
+        user_id=user_id, problem_id=10, language="python", code="print(1)",
+        status="accepted", passed_count=1, total_count=1,
+    )
+    result = verify_preview_receipt(
+        receipt, user_id=str(user_id) if verify_as_string else user_id,
+        problem_id=10, language="python", code="print(1)",
+    )
+    assert result["sub"] == str(user_id)
+    with pytest.raises(ConflictError):
+        verify_preview_receipt(
+            receipt, user_id=uuid4(), problem_id=10, language="python", code="print(1)",
+        )
 
 
 def test_preview_receipt_only_accepts_matching_user_problem_and_code():

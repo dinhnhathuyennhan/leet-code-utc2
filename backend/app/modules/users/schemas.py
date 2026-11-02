@@ -1,5 +1,3 @@
-
-from datetime import date
 from typing import Annotated
 
 from pydantic import (
@@ -46,7 +44,6 @@ def _validate_student_code(value: str) -> str:
 
 class CreateTeacherRequest(BaseModel):
     full_name: str
-    date_of_birth: date
     email: AccountEmailStr
     avt_link: str | None = None
 
@@ -54,7 +51,6 @@ class CreateTeacherRequest(BaseModel):
 class CreateStudentRequest(BaseModel):
     student_code: str
     full_name: str
-    date_of_birth: date
     email: AccountEmailStr
     class_id: str
     avt_link: str | None = None

@@ -18,7 +18,6 @@ import { accountsQueryKey } from "@/lib/query-client";
 const PAGE_SIZE = 20;
 const ACCOUNT_EMAIL_PATTERN = /^[a-zA-Z0-9._%+-]+@st\.utc2\.edu\.vn$/i;
 const ACCOUNT_EMAIL_MESSAGE = "Email phải có đuôi @st.utc2.edu.vn.";
-const USER_LIST_PAGE_SIZE = 100;
 
 type RoleFilter = "all" | "student" | "teacher";
 
@@ -28,18 +27,6 @@ function roleLabel(roleId: Role): string {
 
 function errorMessage(error: unknown, fallback: string): string {
   return error instanceof ApiError ? error.detail : fallback;
-}
-
-async function userIdExists(userId: string): Promise<boolean> {
-  let page = 1;
-  let total = 0;
-  do {
-    const result = await listUsers({ page, page_size: USER_LIST_PAGE_SIZE });
-    total = result.total;
-    if (result.items.some((account) => account.user_id === userId)) return true;
-    page += 1;
-  } while ((page - 1) * USER_LIST_PAGE_SIZE < total);
-  return false;
 }
 
 async function copyPassword(password: string) {
@@ -54,9 +41,8 @@ async function copyPassword(password: string) {
 function AccountModal({ onClose, onCreated }: { onClose: () => void; onCreated: () => void }) {
   const [roleId, setRoleId] = useState<2 | 3>(3);
   const [form, setForm] = useState({
-    user_id: "",
+    student_code: "",
     full_name: "",
-    date_of_birth: "2005-01-01",
     email: "",
     class_id: "",
   });
@@ -73,15 +59,18 @@ function AccountModal({ onClose, onCreated }: { onClose: () => void; onCreated: 
     event.preventDefault();
     if (isSubmitting || created) return;
     const payload = {
-      user_id: form.user_id.trim(),
+      student_code: form.student_code.trim(),
       full_name: form.full_name.trim().replace(/\s+/g, " "),
-      date_of_birth: form.date_of_birth,
       email: form.email.trim(),
       class_id: form.class_id.trim(),
     };
 
-    if (!payload.user_id || !payload.full_name) {
-      toast.error("Mã tài khoản và họ tên không được để trống.");
+    if (!payload.full_name) {
+      toast.error("Họ tên không được để trống.");
+      return;
+    }
+    if (roleId === 3 && !/^[0-9]{10}$/.test(payload.student_code)) {
+      toast.error("Mã sinh viên phải gồm đúng 10 chữ số.");
       return;
     }
     if (!ACCOUNT_EMAIL_PATTERN.test(payload.email)) {
@@ -91,24 +80,15 @@ function AccountModal({ onClose, onCreated }: { onClose: () => void; onCreated: 
 
     setIsSubmitting(true);
     try {
-      if (await userIdExists(payload.user_id)) {
-        toast.error("Mã tài khoản đã tồn tại.");
-        return;
-      }
-
       const account = roleId === 2
         ? await createTeacher({
-            user_id: payload.user_id,
             full_name: payload.full_name,
-            date_of_birth: payload.date_of_birth,
             email: payload.email,
           })
         : await createStudent(payload);
 
-      // POST /teachers and POST /students return UserResponse without a password.
-      // These are the same rules used in backend/app/services/user_service.py.
-      const [year, month, day] = payload.date_of_birth.split("-");
-      const temporaryPassword = roleId === 3 ? account.user_id : `${day}${month}${year}`;
+      // Match backend account creation: student password = MSSV; teacher password = email.
+      const temporaryPassword = roleId === 3 ? payload.student_code : account.email;
       setCreated({ account, temporaryPassword });
       onCreated();
       toast.success(`Đã cấp tài khoản ${roleLabel(roleId).toLowerCase()}`);
@@ -126,7 +106,7 @@ function AccountModal({ onClose, onCreated }: { onClose: () => void; onCreated: 
           <div>
             <p className="text-lg font-bold text-slate-900 dark:text-white">Cấp phát tài khoản</p>
             <p className="text-sm text-slate-500">
-              Sinh viên dùng MSSV; giảng viên dùng ngày sinh dạng ddmmyyyy làm mật khẩu tạm.
+              Sinh viên dùng MSSV; giảng viên dùng email làm mật khẩu tạm.
             </p>
           </div>
           <Button variant="ghost" size="icon" onClick={onClose} disabled={isSubmitting} aria-label="Đóng"><X className="size-5" /></Button>
@@ -135,7 +115,7 @@ function AccountModal({ onClose, onCreated }: { onClose: () => void; onCreated: 
         {created ? (
           <div>
             <p className="text-sm text-slate-600 dark:text-slate-300">
-              Đã tạo tài khoản cho {created.account.full_name} ({created.account.user_id}).
+              Đã tạo tài khoản cho {created.account.full_name} ({created.account.student_code || created.account.email}).
               Hãy lưu mật khẩu tạm trước khi đóng cửa sổ.
             </p>
             <div className="mt-4 rounded-xl border border-amber-200 bg-amber-50 p-4">
@@ -177,17 +157,15 @@ function AccountModal({ onClose, onCreated }: { onClose: () => void; onCreated: 
               ))}
             </div>
             <form onSubmit={(event) => void submit(event)} className="grid gap-4 sm:grid-cols-2">
-              <div className="grid gap-1.5">
-                <Label htmlFor="account-user-id">Mã tài khoản</Label>
-                <Input id="account-user-id" value={form.user_id} onChange={(event) => update("user_id", event.target.value)} disabled={isSubmitting} required />
-              </div>
+              {roleId === 3 && (
+                <div className="grid gap-1.5">
+                  <Label htmlFor="account-student-code">Mã sinh viên (MSSV)</Label>
+                  <Input id="account-student-code" value={form.student_code} onChange={(event) => update("student_code", event.target.value)} inputMode="numeric" pattern="[0-9]{10}" maxLength={10} title="Mã sinh viên phải gồm đúng 10 chữ số." disabled={isSubmitting} required />
+                </div>
+              )}
               <div className="grid gap-1.5">
                 <Label htmlFor="account-name">Họ và tên</Label>
                 <Input id="account-name" value={form.full_name} onChange={(event) => update("full_name", event.target.value)} disabled={isSubmitting} required />
-              </div>
-              <div className="grid gap-1.5">
-                <Label htmlFor="account-dob">Ngày sinh</Label>
-                <Input id="account-dob" type="date" value={form.date_of_birth} onChange={(event) => update("date_of_birth", event.target.value)} disabled={isSubmitting} required />
               </div>
               <div className="grid gap-1.5">
                 <Label htmlFor="account-email">Email UTC2</Label>
@@ -197,7 +175,7 @@ function AccountModal({ onClose, onCreated }: { onClose: () => void; onCreated: 
                   value={form.email}
                   onChange={(event) => update("email", event.target.value)}
                   onInvalid={() => setEmailError(ACCOUNT_EMAIL_MESSAGE)}
-                  pattern="[a-zA-Z0-9._%+-]+@st[.]utc2[.]edu[.]vn"
+                  pattern={"[a-zA-Z0-9._%+\\-]+@[sS][tT][.][uU][tT][cC]2[.][eE][dD][uU][.][vV][nN]"}
                   title={ACCOUNT_EMAIL_MESSAGE}
                   placeholder="ten@st.utc2.edu.vn"
                   aria-invalid={Boolean(emailError)}
@@ -260,7 +238,7 @@ function ResetPasswordModal({
         <div className="flex items-start justify-between gap-4">
           <div>
             <p className="text-lg font-bold">Đặt lại mật khẩu</p>
-            <p className="text-sm text-slate-500">{account.full_name} · {account.user_id} · {account.email}</p>
+            <p className="text-sm text-slate-500">{account.full_name}{account.student_code ? ` · ${account.student_code}` : ""} · {account.email}</p>
           </div>
           <Button variant="ghost" size="icon" onClick={onClose} disabled={isSubmitting} aria-label="Đóng"><X className="size-5" /></Button>
         </div>
@@ -322,7 +300,7 @@ export function AccountManagement() {
   const filteredAccounts = useMemo(() => {
     const normalizedQuery = query.trim().toLowerCase();
     return (accounts ?? []).filter((account) =>
-      `${account.full_name} ${account.user_id} ${account.email}`.toLowerCase().includes(normalizedQuery),
+      `${account.full_name} ${account.student_code ?? ""} ${account.email}`.toLowerCase().includes(normalizedQuery),
     );
   }, [accounts, query]);
   const totalPages = Math.max(1, Math.ceil((accountsQuery.data?.total ?? 0) / PAGE_SIZE));
@@ -391,7 +369,7 @@ export function AccountManagement() {
                 <TableHead className="text-white">Email UTC2</TableHead>
                 <TableHead className="text-white">Vai trò</TableHead>
                 <TableHead className="text-white">Lớp</TableHead>
-                <TableHead className="text-white">Ngày sinh</TableHead>
+                <TableHead className="text-white">MSSV</TableHead>
                 <TableHead className="text-right text-white">Thao tác</TableHead>
               </TableRow>
             </TableHeader>
@@ -412,7 +390,6 @@ export function AccountManagement() {
                   <TableCell className="text-slate-400">{String((page - 1) * PAGE_SIZE + index + 1).padStart(2, "0")}</TableCell>
                   <TableCell>
                     <p className="font-semibold text-slate-800 dark:text-slate-100">{account.full_name}</p>
-                    <p className="text-xs text-slate-400">{account.user_id}</p>
                   </TableCell>
                   <TableCell className="text-sm text-slate-600 dark:text-slate-300">{account.email}</TableCell>
                   <TableCell>
@@ -421,7 +398,7 @@ export function AccountManagement() {
                     </span>
                   </TableCell>
                   <TableCell>{account.class_id || "—"}</TableCell>
-                  <TableCell>{account.date_of_birth || "—"}</TableCell>
+                  <TableCell>{account.student_code || "—"}</TableCell>
                   <TableCell className="text-right">
                     <Button variant="outline" size="sm" onClick={() => setResetAccount(account)}>
                       <KeyRound className="size-3.5" />Đặt lại MK

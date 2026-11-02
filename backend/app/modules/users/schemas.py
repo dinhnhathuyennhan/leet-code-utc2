@@ -1,7 +1,9 @@
 from datetime import date
+from typing import Annotated
 
 from pydantic import (
     BaseModel,
+    AfterValidator,
     field_serializer,
     field_validator,
 )
@@ -9,6 +11,15 @@ from pydantic import (
 from app.core.utils.dates import build_date
 from app.core.exceptions import InvalidFormatError
 from app.core.utils.validation import AppEmailStr
+
+
+def validate_account_email(value: str) -> str:
+    if value.rsplit("@", 1)[-1].lower() != "st.utc2.edu.vn":
+        raise InvalidFormatError("Email phải có đuôi @st.utc2.edu.vn.")
+    return value
+
+
+AccountEmailStr = Annotated[AppEmailStr, AfterValidator(validate_account_email)]
 
 
 def parse_date_of_birth(value: date | str) -> date:
@@ -57,7 +68,7 @@ class CreateTeacherRequest(BaseModel):
     user_id: str
     full_name: str
     date_of_birth: date
-    email: AppEmailStr
+    email: AccountEmailStr
     avt_link: str | None = None
 
     @field_validator("date_of_birth", mode="before")
@@ -70,7 +81,7 @@ class CreateStudentRequest(BaseModel):
     user_id: str
     full_name: str
     date_of_birth: date
-    email: AppEmailStr
+    email: AccountEmailStr
     class_id: str
     avt_link: str | None = None
 

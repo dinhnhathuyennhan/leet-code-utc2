@@ -44,15 +44,52 @@ services:
     restart: unless-stopped
     volumes:
       - pgadmin_data:/var/lib/pgadmin
+
   # ---------- Judge0 CE (chấm code) ----------
-  # Cấu hình nằm ở judge0.conf. DB và Redis riêng cho Judge0, không dùng chung với DB của app.
+  # Cấu hình truyền qua `environment` thay vì file judge0.conf: image đọc cấu
+  # hình bằng ENV trực tiếp (app/helpers/config.rb), nên không cần file conf.
+  #
+  # Image dùng là mrkushalsm/judge0:cgv2 thay vì judge0/judge0:1.13.1 chính thức:
+  # bản chính thức dùng sandbox `isolate` chỉ chạy trên cgroup v1, còn Docker
+  # Desktop / WSL2 / Ubuntu >= 22.04 đều là cgroup v2 -> mọi bài nộp trả
+  # Internal Error (13). Bản cgv2 đã được patch cho cgroup v2.
   judge0-server:
-    image: judge0/judge0:1.13.1
+    image: mrkushalsm/judge0:cgv2
     container_name: cham-code-judge0-server
     privileged: true # isolate (sandbox) cần quyền này
     ports:
       - "127.0.0.1:2358:2358"
-    env_file: ./judge0.conf
+    environment:
+      JUDGE0_TELEMETRY_ENABLE: "false"
+      RAILS_ENV: production
+      # Xác thực: backend gửi header X-Auth-Token
+      AUTHN_HEADER: "${JUDGE0_AUTHN_HEADER:-X-Auth-Token}"
+      AUTHN_TOKEN: "${JUDGE0_AUTH_TOKEN}"
+      # Hạ tầng nội bộ
+      POSTGRES_HOST: judge0-db
+      POSTGRES_PORT: 5432
+      POSTGRES_DB: judge0
+      POSTGRES_USER: judge0
+      POSTGRES_PASSWORD: "${JUDGE0_POSTGRES_PASSWORD}"
+      REDIS_HOST: judge0-redis
+      REDIS_PORT: 6379
+      REDIS_PASSWORD: "${JUDGE0_REDIS_PASSWORD}"
+      # Hành vi API — disable wait vì backend tự poll theo token
+      ENABLE_WAIT_RESULT: "false"
+      MAX_QUEUE_SIZE: 200
+      # Giới hạn thời gian: hai trần MAX phải >= JUDGE0_MAX_CPU_TIME_SECONDS /
+      # JUDGE0_MAX_WALL_TIME_SECONDS trong backend/app/core/config.py
+      CPU_TIME_LIMIT: 15
+      MAX_CPU_TIME_LIMIT: 15
+      WALL_TIME_LIMIT: 20
+      MAX_WALL_TIME_LIMIT: 20
+      # Trần bộ nhớ phải >= memory_limit_kb của ngôn ngữ nặng nhất trong
+      # backend/app/core/config.py (Java: 6_144_000 KB), nếu không Judge0 trả
+      # 422 khi sinh viên nộp bài Java.
+      MEMORY_LIMIT: 128000
+      MAX_MEMORY_LIMIT: 6144000
+      ENABLE_PER_PROCESS_AND_THREAD_TIME_LIMIT: "true"
+      ENABLE_PER_PROCESS_AND_THREAD_MEMORY_LIMIT: "true"
     healthcheck:
       test: [ "CMD-SHELL", "curl -s -o /dev/null http://localhost:2358/about || exit 1" ]
       interval: 30s
@@ -64,11 +101,35 @@ services:
     restart: unless-stopped
 
   judge0-workers:
-    image: judge0/judge0:1.13.1
+    image: mrkushalsm/judge0:cgv2
     container_name: cham-code-judge0-workers
     command: ["./scripts/workers"]
     privileged: true
-    env_file: ./judge0.conf
+    environment:
+      JUDGE0_TELEMETRY_ENABLE: "false"
+      RAILS_ENV: production
+      POSTGRES_HOST: judge0-db
+      POSTGRES_PORT: 5432
+      POSTGRES_DB: judge0
+      POSTGRES_USER: judge0
+      POSTGRES_PASSWORD: "${JUDGE0_POSTGRES_PASSWORD}"
+      REDIS_HOST: judge0-redis
+      REDIS_PORT: 6379
+      REDIS_PASSWORD: "${JUDGE0_REDIS_PASSWORD}"
+      ENABLE_WAIT_RESULT: "false"
+      MAX_QUEUE_SIZE: 200
+      CPU_TIME_LIMIT: 15
+      MAX_CPU_TIME_LIMIT: 15
+      WALL_TIME_LIMIT: 20
+      MAX_WALL_TIME_LIMIT: 20
+      # Xem ghi chú ở judge0-server: trần bộ nhớ phải đủ cho Java.
+      MEMORY_LIMIT: 128000
+      MAX_MEMORY_LIMIT: 6144000
+      ENABLE_PER_PROCESS_AND_THREAD_TIME_LIMIT: "true"
+      ENABLE_PER_PROCESS_AND_THREAD_MEMORY_LIMIT: "true"
+    volumes:
+      # Bắt buộc với cgroup v2: isolate cần quyền ghi vào cgroup
+      - /sys/fs/cgroup:/sys/fs/cgroup:rw
     depends_on:
       - judge0-db
       - judge0-redis
@@ -77,7 +138,10 @@ services:
   judge0-db:
     image: postgres:16.2
     container_name: cham-code-judge0-db
-    env_file: ./judge0.conf
+    environment:
+      POSTGRES_DB: judge0
+      POSTGRES_USER: judge0
+      POSTGRES_PASSWORD: "${JUDGE0_POSTGRES_PASSWORD}"
     volumes:
       - judge0_data:/var/lib/postgresql/data
     restart: unless-stopped
@@ -89,10 +153,12 @@ services:
       - bash
       - -c
       - docker-entrypoint.sh --appendonly yes --requirepass "$$REDIS_PASSWORD"
-    env_file: ./judge0.conf
+    environment:
+      REDIS_PASSWORD: "${JUDGE0_REDIS_PASSWORD}"
     volumes:
       - judge0_redis_data:/data
     restart: unless-stopped
+
 volumes:
   postgres_data:
   pgadmin_data:

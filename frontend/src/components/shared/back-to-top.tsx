@@ -4,11 +4,13 @@ import { useEffect, useState } from "react";
 import { ArrowUp } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
+import { useLocale } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
 
 /** Nút nổi góc phải dưới — chỉ hiện khi đã cuộn xuống. */
 export function BackToTop() {
   const [visible, setVisible] = useState(false);
+  const { t } = useLocale();
 
   useEffect(() => {
     const onScroll = () => setVisible(window.scrollY > 320);
@@ -20,7 +22,7 @@ export function BackToTop() {
   return (
     <Button
       size="icon"
-      aria-label="Lên đầu trang"
+      aria-label={t("layout.backToTop")}
       tabIndex={visible ? 0 : -1}
       onClick={() => window.scrollTo({ top: 0, behavior: "smooth" })}
       className={cn(

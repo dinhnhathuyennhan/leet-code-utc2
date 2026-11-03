@@ -7,6 +7,7 @@ import { ApiError } from "@/lib/api/error";
 
 import { Button } from "@/components/ui/button";
 import { getErrorMessage } from "@/lib/helpers/error-message";
+import { useLocale } from "@/lib/i18n";
 
 interface ErrorStateProps {
   error: unknown;
@@ -16,6 +17,7 @@ interface ErrorStateProps {
 
 /** Lỗi tải dữ liệu — hiện message từ ApiError + nút thử lại. */
 export function ErrorState({ error, onRetry, className }: ErrorStateProps) {
+  const { t } = useLocale();
   const [retrying, setRetrying] = useState(false);
   const retry = async () => {
     if (!onRetry || retrying) return;
@@ -38,7 +40,7 @@ export function ErrorState({ error, onRetry, className }: ErrorStateProps) {
       <p className="max-w-md text-sm font-medium text-red-700 dark:text-red-300">{getErrorMessage(error)}</p>
       {onRetry && (
         <Button variant="outline" size="sm" onClick={onRetry} className="border-red-300 bg-card text-red-600 hover:bg-red-50">
-          <RefreshCw className="size-4" /> Thử lại
+          <RefreshCw className="size-4" /> {t("action.retry")}
         </Button>
       )}
     </div>

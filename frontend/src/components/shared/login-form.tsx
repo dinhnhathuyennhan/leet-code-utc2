@@ -22,6 +22,7 @@ import { PasswordInput } from "./password-input";
 
 import { useAuth } from "@/context/auth-context";
 import { ApiError } from "@/lib/api/error";
+import { useLocale } from "@/lib/i18n";
 import { loginSchema, type LoginFormValues } from "@/lib/validations/validate-field-form";
 import { toast } from "sonner";
 
@@ -45,13 +46,14 @@ const WELCOME_DEBOUNCE_MS = 5_000;
  * Đặt ngoài component để ESLint `react-hooks/purity` không flag
  * `Date.now()` / `sessionStorage` (chỉ impure trong render, không phải callback).
  */
-function maybeShowWelcomeToast(userName: string): void {
+function maybeShowWelcomeToast(userName: string, locale: "vi" | "en"): void {
   if (typeof window === "undefined") return;
   const last = window.sessionStorage.getItem(WELCOME_STORAGE_KEY);
   const now = Date.now();
   if (last && now - Number(last) <= WELCOME_DEBOUNCE_MS) return;
   window.sessionStorage.setItem(WELCOME_STORAGE_KEY, String(now));
-  toast.success(`Chào mừng ${userName || "bạn"} quay lại!`);
+  const name = userName || (locale === "en" ? "there" : "bạn");
+  toast.success(locale === "en" ? `Welcome back, ${name}!` : `Chào mừng ${name} quay lại!`);
 }
 
 function FormItem({
@@ -85,6 +87,7 @@ function FormMessage({ name }: { name: string }) {
 
 export function LoginForm({ onSuccess }: LoginFormProps) {
   const { login } = useAuth();
+  const { t, locale } = useLocale();
   const [connectionError, setConnectionError] = React.useState<string | null>(null);
 
   const form = useForm<z.input<typeof loginSchema>, unknown, LoginFormValues>({
@@ -111,17 +114,17 @@ export function LoginForm({ onSuccess }: LoginFormProps) {
 
       // Toast chỉ hiển thị 1 lần khi login thật sự (không hiện lại khi chuyển tab).
       // Lý do: form có thể bị remount do layout/state — chỉ fire nếu đây là login mới.
-      maybeShowWelcomeToast(user.full_name);
+      maybeShowWelcomeToast(user.full_name, locale);
       onSuccess?.(user);
     } catch (error) {
       if (error instanceof ApiError) {
         if (error.isNetworkError) {
-          setConnectionError("Mất kết nối từ server, vui lòng thử lại.");
-          toast.error("Mất kết nối từ server, vui lòng thử lại.");
+          setConnectionError(t("error.network"));
+          toast.error(t("error.network"));
           return;
         }
 
-        const message = error.detail || "Email hoặc mật khẩu không chính xác";
+        const message = error.detail || t("error.invalidCredentials");
         form.setError("password", {
           message,
         });
@@ -130,8 +133,8 @@ export function LoginForm({ onSuccess }: LoginFormProps) {
         return;
       }
 
-      setConnectionError("Đã có lỗi xảy ra, vui lòng thử lại.");
-      toast.error("Đã có lỗi xảy ra, vui lòng thử lại.");
+      setConnectionError(t("error.generic"));
+      toast.error(t("error.generic"));
     }
   }
 
@@ -151,7 +154,7 @@ export function LoginForm({ onSuccess }: LoginFormProps) {
             UTC2 Judge Master
           </h1>
           <p className="text-xs sm:text-sm text-slate-500 leading-relaxed max-w-[280px] sm:max-w-none mx-auto">
-            Sử dụng tài khoản nội bộ UTC2 để truy cập hệ thống lập trình
+            {t("auth.login.subtitle")}
           </p>
         </header>
 
@@ -168,7 +171,7 @@ export function LoginForm({ onSuccess }: LoginFormProps) {
               render={({ field }) => (
                 <FormItem className="flex w-full min-w-0 flex-col gap-1.5">
                   <FormLabel className="text-slate-700 text-xs sm:text-sm font-semibold">
-                    Email UTC2 <span className="text-red-500">*</span>
+                    {t("auth.login.email")} <span className="text-red-500">*</span>
                   </FormLabel>
                   <FormControl>
                     <div className="relative">
@@ -204,13 +207,13 @@ export function LoginForm({ onSuccess }: LoginFormProps) {
                 <FormItem className="flex w-full min-w-0 flex-col gap-1.5">
                   <div className="flex items-baseline justify-between gap-2">
                     <FormLabel className="text-slate-700 text-xs sm:text-sm font-semibold">
-                      Mật khẩu <span className="text-red-500">*</span>
+                      {t("auth.login.password")} <span className="text-red-500">*</span>
                     </FormLabel>
                     <Link
                       href="/forgot-password"
                       className="text-slate-700 text-xs sm:text-sm font-semibold hover:text-blue-600 transition-colors"
                     >
-                      Quên mật khẩu?
+                      {t("auth.login.forgot")}
                     </Link>
                   </div>
                   <FormControl>
@@ -246,7 +249,7 @@ export function LoginForm({ onSuccess }: LoginFormProps) {
                     />
                   </FormControl>
                   <FormLabel className="text-xs sm:text-sm font-normal text-slate-600 cursor-pointer select-none">
-                    Ghi nhớ phiên đăng nhập
+                    {t("auth.login.remember")}
                   </FormLabel>
                 </FormItem>
               )}
@@ -271,7 +274,7 @@ export function LoginForm({ onSuccess }: LoginFormProps) {
               disabled={isSubmitting}
               className="h-11 sm:h-12 lg:h-[48px] w-full rounded-xl bg-[linear-gradient(to_right,#1CB0FF_0%,#2F56D9_50%,#5F38B2_100%)] text-xs sm:text-base font-semibold shadow-lg shadow-blue-500/20 transition-[background-image,opacity] duration-200 hover:bg-[linear-gradient(to_right,#5F38B2_24%,#29184C_100%)] disabled:opacity-50"
             >
-              Đăng nhập
+              {t("auth.login.submit")}
               {isSubmitting ? (
                 <Loader2 className="ml-2 size-4 sm:size-5 animate-spin" />
               ) : (

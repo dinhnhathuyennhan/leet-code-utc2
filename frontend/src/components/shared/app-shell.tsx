@@ -9,6 +9,7 @@ import { Topbar } from "@/components/shared/top-bar";
 import { Sheet, SheetContent, SheetDescription, SheetTitle } from "@/components/ui/sheet";
 import type { ShellUser } from "@/lib/hooks/use-shell-user";
 import type { NavItem } from "@/lib/constants/navigation";
+import { useLocale } from "@/lib/i18n";
 
 interface AppShellProps {
   navItems: NavItem[];
@@ -24,6 +25,7 @@ interface AppShellProps {
  */
 export function AppShell({ navItems, homeHref, user, onLogout, children }: AppShellProps) {
   const [menuOpen, setMenuOpen] = useState(false);
+  const { t } = useLocale();
 
   return (
     <BreadcrumbProvider>
@@ -34,8 +36,8 @@ export function AppShell({ navItems, homeHref, user, onLogout, children }: AppSh
 
         <Sheet open={menuOpen} onOpenChange={setMenuOpen}>
           <SheetContent side="left" className="w-[min(82vw,280px)] p-0 [&>button]:hidden">
-            <SheetTitle className="sr-only">Menu điều hướng</SheetTitle>
-            <SheetDescription className="sr-only">Chọn mục cần truy cập</SheetDescription>
+            <SheetTitle className="sr-only">{t("layout.navMenu")}</SheetTitle>
+            <SheetDescription className="sr-only">{t("layout.navMenuDesc")}</SheetDescription>
             <Sidebar navItems={navItems} user={user} onLogout={onLogout} onNavigate={() => setMenuOpen(false)} />
           </SheetContent>
         </Sheet>

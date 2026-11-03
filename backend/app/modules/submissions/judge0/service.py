@@ -185,12 +185,25 @@ def run(
         )
         for index, (tc, (result, status, actual)) in enumerate(zip(samples, judged, strict=True))
     ]
-    compile_output = next((r.compile_output for r, s, _ in judged if s == "compile_error"), None)
+    compile_output = _compile_output_of(judged)
     return RunResponse(
         status=_overall_status([c.status for c in cases]),
         compile_output=compile_output,
         cases=cases,
     )
+
+
+def _compile_output_of(judged: list[tuple[Judge0Result, str, Any]]) -> str | None:
+    """Lấy output lỗi của testcase đầu tiên bị lỗi biên dịch.
+
+    Với C/C++/Java, Judge0 trả lỗi ở `compile_output`. Với Python không có
+    bước biên dịch nên lỗi cú pháp nằm ở `stderr` -> cần lấy cả hai.
+    """
+    for result, status, _ in judged:
+        if status != "compile_error":
+            continue
+        return result.compile_output or result.stderr or result.message
+    return None
 
 
 def submit(
@@ -283,7 +296,7 @@ def grade_submission(submission_id: int) -> None:
             statuses = [status for _, status, _ in judged]
             status = _overall_status(statuses)
             passed_count = statuses.count("accepted")
-            compile_output = next((r.compile_output for r, s, _ in judged if s == "compile_error"), None)
+            compile_output = _compile_output_of(judged)
         except Judge0Error:
             logger.warning("Judge0 không khả dụng khi chấm, submission_id=%s", submission_id)
             if now_utc() - submitted_at > PENDING_TTL:

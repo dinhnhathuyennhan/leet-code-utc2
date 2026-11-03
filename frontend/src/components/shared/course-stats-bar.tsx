@@ -13,6 +13,9 @@ export interface StatItem {
 
 export function CourseStatsBar({ items }: { items: StatItem[] }) {
   return (
+    // `grid-cols-1` ở mobile rồi mới lên 3 cột từ `sm` — nếu dùng
+    // `grid-cols-3` + `min-w-[145px]` ngay từ đầu thì 3*145 + gap vượt quá
+    // bề rộng màn hình 390px => trang bị tràn ngang.
     <div className="grid w-full grid-cols-1 gap-2 rounded-xl bg-indigo-50/70 p-2 dark:bg-slate-800/50 sm:inline-grid sm:grid-cols-3 sm:w-auto">
       {items.map(({ icon: Icon, value, label, highlight }) => (
         <div

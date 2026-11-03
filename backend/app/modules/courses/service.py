@@ -355,13 +355,26 @@ def get_student_dashboard(
         )
     total_problems = session.exec(problem_count_statement).one() or 0
 
+    # Đếm số BÀI TẬP khác nhau đã đạt (distinct problem_id), không phải số lượt
+    # nộp accepted — nếu không, nộp lại nhiều lần một bài sẽ đẩy tử số vượt
+    # mẫu số (VD: "36/11"). Phạm vi khoá học phải khớp với `total_problems`
+    # để tử số không bao giờ lớn hơn mẫu số.
     completed_statement = (
-        select(func.count(Submission.submission_id))
+        select(func.count(func.distinct(Submission.problem_id)))
+        .join(Problem, Problem.problem_id == Submission.problem_id)
+        .join(Lesson, Lesson.lesson_id == Problem.lesson_id)
+        .join(Course, Course.course_id == Lesson.course_id)
+        .join(Enrollment, Enrollment.course_id == Course.course_id)
         .where(
+            Enrollment.student_id == student_id,
             Submission.student_id == student_id,
             Submission.status == "accepted",
         )
     )
+    if current_user.role_id == Role.TEACHER:
+        completed_statement = completed_statement.where(
+            Course.created_by == current_user.user_id
+        )
     completed_problems = session.exec(completed_statement).one() or 0
 
     average_statement = (

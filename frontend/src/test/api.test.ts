@@ -56,17 +56,27 @@ describe("API: getStudentOverview", () => {
     const data = await getStudentOverview("stu-001");
 
     expect(data.courses).toHaveLength(mockCoursesRaw.length);
+    // Shape raw của backend được transform sang CourseSummary (dùng `id`).
     expect(data.courses[0]).toMatchObject({
-      course_id: "CS101",
-      course_name: "Nhập môn lập trình",
-      total_number_student: 60,
+      id: "CS101",
+      code: "CS101",
+      name: "Nhập môn lập trình",
     });
   });
 
-  it("passes through the raw CourseResponseRaw shape from backend", async () => {
+  it("transforms raw CourseResponseRaw shape into CourseSummary", async () => {
     setAccessToken("any-token");
     const data = await getStudentOverview("stu-001");
-    expect(data.courses).toEqual(mockCoursesRaw);
+
+    // Không được trả nguyên raw: `id` phải có giá trị để React key + link đúng.
+    expect(data.courses[0]).not.toHaveProperty("course_id");
+    expect(data.courses[0].id).toBe("CS101");
+    expect(data.courses.map((course) => course.id)).toEqual([
+      "CS101",
+      "CS201",
+      "PY101",
+      "JS101",
+    ]);
   });
 
   it("passes through stats fields from the API response", async () => {

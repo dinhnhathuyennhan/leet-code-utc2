@@ -8,6 +8,7 @@ import { Suspense, useState, type ReactNode } from "react";
 import { Toaster } from "@/components/ui/sonner";
 import { AuthProvider } from "@/context/auth-context";
 import { makeQueryClient } from "@/lib/query-client";
+import { LocaleProvider } from "@/lib/i18n";
 import { RouteGuard } from "./route-guard";
 import { Loader2 } from "lucide-react";
 
@@ -18,22 +19,25 @@ export function Providers({ children }: { children: ReactNode }) {
 
   return (
     <ThemeProvider attribute="class" storageKey="utc2-local-theme" defaultTheme="light" enableSystem={false} disableTransitionOnChange>
-      <QueryClientProvider client={queryClient}>
-        <AuthProvider>
-          <Suspense
-          fallback={
-              <div className="flex h-[100dvh] w-full items-center justify-center bg-slate-900" aria-busy="true">
-                <Loader2 className="size-8 animate-spin text-white" />
-              </div>
-            }>
-            <RouteGuard>
-              {children}
-              <Toaster />
-            </RouteGuard>
-          </Suspense> 
-        </AuthProvider>
-        {process.env.NODE_ENV !== "production" && <ReactQueryDevtools initialIsOpen={false} />}
-      </QueryClientProvider>
+      <LocaleProvider>
+        <QueryClientProvider client={queryClient}>
+          <AuthProvider>
+            <Suspense
+              fallback={
+                <div className="flex h-[100dvh] w-full items-center justify-center bg-slate-900" aria-busy="true">
+                  <Loader2 className="size-8 animate-spin text-white" />
+                </div>
+              }
+            >
+              <RouteGuard>
+                {children}
+                <Toaster />
+              </RouteGuard>
+            </Suspense>
+          </AuthProvider>
+          {process.env.NODE_ENV !== "production" && <ReactQueryDevtools initialIsOpen={false} />}
+        </QueryClientProvider>
+      </LocaleProvider>
     </ThemeProvider>
   );
 }

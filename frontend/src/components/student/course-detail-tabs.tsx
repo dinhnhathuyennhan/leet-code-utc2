@@ -3,6 +3,7 @@
 import type { ReactNode } from "react";
 
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { useLocale } from "@/lib/i18n";
 
 export type StudentCourseTab = "info" | "roster";
 
@@ -17,6 +18,7 @@ interface StudentCourseDetailTabsProps {
 }
 
 export function StudentCourseDetailTabs({ value, onValueChange, info, roster }: StudentCourseDetailTabsProps) {
+  const { t } = useLocale();
   return (
     <Tabs
       value={value}
@@ -25,8 +27,8 @@ export function StudentCourseDetailTabs({ value, onValueChange, info, roster }: 
     >
       <div className="border-b">
         <TabsList className="h-auto gap-1 rounded-none bg-transparent p-0">
-          <TabsTrigger value="info" className={TRIGGER}>Thông tin lớp</TabsTrigger>
-          <TabsTrigger value="roster" className={TRIGGER}>Sinh viên cùng lớp</TabsTrigger>
+          <TabsTrigger value="info" className={TRIGGER}>{t("student.classDetail.tabs.info")}</TabsTrigger>
+          <TabsTrigger value="roster" className={TRIGGER}>{t("student.classDetail.tabs.roster")}</TabsTrigger>
         </TabsList>
       </div>
 

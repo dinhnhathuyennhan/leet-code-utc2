@@ -27,6 +27,17 @@ _STATUS_MAP = {
 
 _BUSY_MESSAGE = "Hệ thống chấm bài đang bận, vui lòng thử lại sau"
 
+# Python báo lỗi cú pháp ở bước chạy (stderr chứa SyntaxError/IndentationError) —
+# Judge0 trả về runtime error nhưng với sinh viên đó là "lỗi biên dịch".
+_SYNTAX_ERROR_MARKERS = ("SyntaxError", "IndentationError")
+
+
+def _looks_like_syntax_error(stderr: str | None) -> bool:
+    """True nếu stderr của Python cho thấy lỗi cú pháp (không phải lỗi runtime)."""
+    if not stderr:
+        return False
+    return any(marker in stderr for marker in _SYNTAX_ERROR_MARKERS)
+
 
 class Judge0Error(AppError):
     status_code = 503
@@ -52,6 +63,10 @@ class Judge0Result:
     def system_status(self) -> str:
         if self.status_id in _STATUS_MAP:
             return _STATUS_MAP[self.status_id]
+        # Python không có bước biên dịch nên SyntaxError bị Judge0 báo thành runtime
+        # error. Với sinh viên, "lỗi biên dịch" mô tả đúng hơn "lỗi runtime".
+        if self.status_id not in _STATUS_MAP and _looks_like_syntax_error(self.stderr):
+            return "compile_error"
         return "runtime_error"  # 7-12: SIGSEGV, SIGXFSZ, SIGFPE, SIGABRT, NZEC, other
 
 

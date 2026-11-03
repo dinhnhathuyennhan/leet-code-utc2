@@ -63,6 +63,24 @@ def test_status_mapping(status_id, expected):
     assert result.system_status == expected
 
 
+@pytest.mark.parametrize(
+    "stderr",
+    [
+        "  File \"script.py\", line 1\n    def broken(:\n               ^\nSyntaxError: invalid syntax\n",
+        "IndentationError: unexpected indent",
+    ],
+)
+def test_python_syntax_error_is_reported_as_compile_error(stderr):
+    """Python không có bước biên dịch nên Judge0 báo SyntaxError thành runtime error."""
+    result = judge0_client.Judge0Result("t", 11, None, stderr, None, None, None, None)
+    assert result.system_status == "compile_error"
+
+
+def test_real_runtime_error_stays_runtime_error():
+    result = judge0_client.Judge0Result("t", 11, None, "Traceback...\nZeroDivisionError\n", None, None, None, None)
+    assert result.system_status == "runtime_error"
+
+
 @pytest.fixture(autouse=True)
 def no_sleep(monkeypatch):
     monkeypatch.setattr(config, "JUDGE0_RETRY_BACKOFF_SECONDS", 0)

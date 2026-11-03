@@ -1,5 +1,6 @@
 import { CourseCard } from "@/components/shared/course-card";
 import { Skeleton } from "@/components/ui/skeleton";
+import { useLocale } from "@/lib/i18n";
 import type { CourseSummary, CourseView } from "@/lib/types/course";
 import { cn } from "@/lib/utils";
 
@@ -26,8 +27,9 @@ export function CourseGrid({ courses, view, hrefFor, className }: CourseGridProp
 }
 
 export function CourseGridSkeleton({ view }: { view: CourseView }) {
+  const { t } = useLocale();
   return (
-    <div className={LAYOUT[view]} aria-busy aria-label="Đang tải danh sách lớp">
+    <div className={LAYOUT[view]} aria-busy aria-label={t("state.loading")}>
       {Array.from({ length: 8 }, (_, i) => (
         <div key={i} className={cn("overflow-hidden rounded-xl border bg-card", view === "list" && "flex")}>
           <Skeleton className={cn("rounded-none", view === "list" ? "h-28 w-40 sm:w-56" : "aspect-[13/5] w-full")} />

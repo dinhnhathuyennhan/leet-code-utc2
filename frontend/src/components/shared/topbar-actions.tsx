@@ -1,7 +1,6 @@
 "use client";
 
 import Link from "next/link";
-import { useState } from "react";
 import { Bell, ChevronDown, KeyRound, LogOut, Moon, Sun, User } from "lucide-react";
 import { useTheme } from "next-themes";
 
@@ -14,19 +13,23 @@ import {
   DropdownMenuTrigger,
 } from "../ui/dropdown-menu";
 import { ToggleGroup, ToggleGroupItem } from "../ui/toggle-group";
+import { useLocale } from "@/lib/i18n";
 
 const LANG_ITEM =
   "h-7 min-w-9 rounded-full px-2.5 text-xs font-semibold text-slate-500 data-[state=on]:bg-card data-[state=on]:text-indigo-700 data-[state=on]:shadow-sm";
 
-/** TODO(i18n): mới là công tắc giao diện — nối với thư viện i18n khi dự án chọn xong. */
+/**
+ * Toggle VI / EN — dùng `LocaleProvider` để đổi ngôn ngực thật cho toàn app.
+ * Locale được lưu trong localStorage nên giữ nguyên sau khi reload.
+ */
 function LanguageToggle() {
-  const [lang, setLang] = useState("vi");
+  const { locale, setLocale, t } = useLocale();
   return (
     <ToggleGroup
       type="single"
-      value={lang}
-      onValueChange={(value) => value && setLang(value)}
-      aria-label="Ngôn ngữ"
+      value={locale}
+      onValueChange={(value) => value && setLocale(value as "vi" | "en")}
+      aria-label={t("layout.language")}
       className="rounded-full bg-indigo-50 p-0.5 dark:bg-slate-800"
     >
       <ToggleGroupItem value="vi" className={LANG_ITEM}>VI</ToggleGroupItem>
@@ -38,11 +41,12 @@ function LanguageToggle() {
 /** Hai icon đổi bằng class `dark:` nên không cần chờ mount (tránh hydration mismatch). */
 function ThemeToggle() {
   const { resolvedTheme, setTheme } = useTheme();
+  const { t } = useLocale();
   return (
     <Button
       variant="ghost"
       size="icon"
-      aria-label="Đổi giao diện sáng/tối"
+      aria-label={t("layout.themeToggle")}
       onClick={() => setTheme(resolvedTheme === "dark" ? "light" : "dark")}
       className="rounded-full text-slate-500"
     >
@@ -53,8 +57,9 @@ function ThemeToggle() {
 }
 
 function NotificationButton({ hasUnread }: { hasUnread: boolean }) {
+  const { t } = useLocale();
   return (
-    <Button variant="ghost" size="icon" aria-label="Thông báo" className="relative rounded-full text-slate-500">
+    <Button variant="ghost" size="icon" aria-label={t("layout.notifications")} className="relative rounded-full text-slate-500">
       <Bell className="size-5" />
       {hasUnread && <span className="absolute right-2 top-2 size-2 rounded-full bg-red-500 ring-2 ring-card" />}
     </Button>
@@ -62,12 +67,13 @@ function NotificationButton({ hasUnread }: { hasUnread: boolean }) {
 }
 
 function UserMenu({ onLogout }: { onLogout: () => void }) {
+  const { t } = useLocale();
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
         <button
           type="button"
-          aria-label="Menu tài khoản"
+          aria-label={t("layout.accountMenu")}
           className="flex items-center gap-1.5 rounded-full p-0.5 pr-1 outline-none transition-colors hover:bg-indigo-50 focus-visible:ring-2 focus-visible:ring-indigo-500 dark:hover:bg-slate-800"
         >
           <span className="flex size-10 items-center justify-center rounded-full bg-indigo-950 text-white">
@@ -78,11 +84,11 @@ function UserMenu({ onLogout }: { onLogout: () => void }) {
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end" className="w-52">
         <DropdownMenuItem asChild>
-          <Link href="/change-password"><KeyRound className="size-4" /> Đổi mật khẩu</Link>
+          <Link href="/change-password"><KeyRound className="size-4" /> {t("layout.changePassword")}</Link>
         </DropdownMenuItem>
         <DropdownMenuSeparator />
         <DropdownMenuItem onSelect={onLogout} className="text-red-600 focus:text-red-600">
-          <LogOut className="size-4" /> Đăng xuất
+          <LogOut className="size-4" /> {t("layout.logout")}
         </DropdownMenuItem>
       </DropdownMenuContent>
     </DropdownMenu>

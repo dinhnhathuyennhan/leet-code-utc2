@@ -18,6 +18,7 @@ from app.modules.courses.service import (
     get_course,
     get_courses,
     get_course_terms,
+    get_student_dashboard,
     update_course,
 )
 from app.modules.courses.view import build_course_response
@@ -494,3 +495,119 @@ class TestStudentCourseGrades:
         assert response.sessions[0].problems == []
         assert response.grades[0].session_scores[str(lesson.lesson_id)] == []
         assert future_problem.problem_id is not None
+
+
+class TestStudentDashboardCounters:
+    """`completed_problems` phải đếm số BÀI đã đạt, không phải số LƯỢT nộp.
+
+    Lỗi cũ: đếm mọi submission `accepted` nên nộp lại cùng một bài nhiều lần
+    đẩy tử số vượt mẫu số — giao diện hiện "36/11".
+    """
+
+    def _problem_with_testcases(self, session, lesson, title, total=2):
+        return make_problem(
+            session, lesson, title=title, total_number_testcase=total
+        )
+
+    def test_resubmitting_same_problem_counts_once(
+        self, session, course, owner_teacher, student
+    ):
+        from tests.support.fixtures.builders import make_submission
+
+        lesson = make_lesson(session, course)
+        problem = self._problem_with_testcases(session, lesson, "Cộng hai số")
+        enroll_directly(session, course, student)
+
+        # 3 lượt nộp accepted cho CÙNG một bài (sinh viên bấm nộp lại).
+        for _ in range(3):
+            make_submission(
+                session, problem, student, status="accepted", passed_count=2
+            )
+        session.commit()
+
+        result = get_student_dashboard(session, student.user_id, student)
+
+        assert result.completed_problems == 1
+        assert result.total_problems == 1
+
+    def test_completed_never_exceeds_total(
+        self, session, course, owner_teacher, student
+    ):
+        from tests.support.fixtures.builders import make_submission
+
+        lesson = make_lesson(session, course)
+        solved = self._problem_with_testcases(session, lesson, "Bài 1")
+        self._problem_with_testcases(session, lesson, "Bài 2")
+        enroll_directly(session, course, student)
+
+        for _ in range(5):
+            make_submission(session, solved, student, status="accepted", passed_count=2)
+        make_submission(
+            session,
+            solved,
+            student,
+            status="wrong_answer",
+            passed_count=1,
+        )
+        session.commit()
+
+        result = get_student_dashboard(session, student.user_id, student)
+
+        assert result.completed_problems == 1
+        assert result.total_problems == 2
+        assert result.completed_problems <= result.total_problems
+
+    def test_only_accepted_submissions_are_counted(
+        self, session, course, owner_teacher, student
+    ):
+        from tests.support.fixtures.builders import make_submission
+
+        lesson = make_lesson(session, course)
+        solved = self._problem_with_testcases(session, lesson, "Đã giải")
+        broken = self._problem_with_testcases(session, lesson, "Chưa giải")
+        enroll_directly(session, course, student)
+
+        make_submission(session, solved, student, status="accepted", passed_count=2)
+        make_submission(
+            session, broken, student, status="compile_error", passed_count=0
+        )
+        session.commit()
+
+        result = get_student_dashboard(session, student.user_id, student)
+
+        assert result.completed_problems == 1
+        assert result.total_problems == 2
+
+    def test_problem_accepted_in_course_student_is_not_enrolled_in_is_ignored(
+        self, session, course, owner_teacher, student, other_teacher
+    ):
+        """Bài đạt ở lớp không ghi danh không được tính vào tử số.
+
+        `total_problems` chỉ đếm bài trong lớp sinh viên ghi danh, nên nếu tử
+        số đếm rộng hơn thì tỉ lệ vẫn có thể vượt 100%.
+        """
+        from tests.support.fixtures.builders import make_submission
+
+        lesson = make_lesson(session, course)
+        enrolled_problem = self._problem_with_testcases(session, lesson, "Trong lớp")
+        enroll_directly(session, course, student)
+
+        # Lớp khác (không ghi danh) có bài sinh viên đã đạt.
+        other_course = make_course(session, "CS999", other_teacher)
+        other_lesson = make_lesson(session, other_course, lesson_number=2)
+        outside_problem = self._problem_with_testcases(
+            session, other_lesson, "Ngoài lớp", total=1
+        )
+        make_submission(
+            session, outside_problem, student, status="accepted", passed_count=1
+        )
+        make_submission(
+            session, enrolled_problem, student, status="accepted", passed_count=2
+        )
+        session.commit()
+
+        result = get_student_dashboard(session, student.user_id, student)
+
+        assert result.completed_problems == 1
+        assert result.total_problems == 1
+

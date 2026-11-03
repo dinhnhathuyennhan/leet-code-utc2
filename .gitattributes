@@ -1,0 +1,6 @@
+# Giữ LF cho script chạy trong container Linux — CRLF làm /bin/sh báo
+# "bad interpreter" và image không khởi động được.
+*.sh            text eol=lf
+*.bash          text eol=lf
+Dockerfile      text eol=lf
+*.dockerignore  text eol=lf

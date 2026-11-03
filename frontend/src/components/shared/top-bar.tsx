@@ -8,6 +8,7 @@ import { TopbarActions } from "@/components/shared/topbar-actions";
 import { Button } from "@/components/ui/button";
 import { buildBreadcrumbs } from "@/lib/helpers/breadcrumbs";
 import { Breadcrumbs } from "@/components/shared/Breadcrumbs";
+import { useLocale } from "@/lib/i18n";
 
 interface TopbarProps {
   homeHref: string;
@@ -18,12 +19,13 @@ interface TopbarProps {
 export function Topbar({ homeHref, onMenuClick, onLogout }: TopbarProps) {
   const pathname = usePathname();
   const dynamicLabel = useBreadcrumbValue();
-  const crumbs = buildBreadcrumbs(pathname, dynamicLabel);
+  const { t } = useLocale();
+  const crumbs = buildBreadcrumbs(pathname, dynamicLabel, t);
 
   return (
     <header className="sticky top-0 z-20 flex h-[61px] items-center justify-between gap-3 border-b bg-card px-4 backdrop-blur sm:px-6 lg:px-5">
       <div className="flex min-w-0 items-center gap-2">
-        <Button variant="ghost" size="icon" onClick={onMenuClick} aria-label="Mở menu" className="lg:hidden">
+        <Button variant="ghost" size="icon" onClick={onMenuClick} aria-label={t("layout.openMenu")} className="lg:hidden">
           <Menu className="size-5" />
         </Button>
         <Breadcrumbs homeHref={homeHref} crumbs={crumbs} />

@@ -4,6 +4,101 @@ Mục tiêu: dựng Judge0 self-host, gửi code thử và nhận đúng 5 loạ
 (Accepted, Wrong Answer, Time Limit Exceeded, Compile Error, Runtime Error).
 Xem bối cảnh trong [roadmap.md](roadmap.md).
 
+## Cách chạy nhanh với docker-compose (khuyến nghị cho local)
+
+Stack local đã **gộp sẵn Judge0 vào `docker-compose.yml` ở thư mục gốc**, không cần
+làm các bước 1–7 bên dưới (bước đó dành cho khi cần dựng Judge0 trên VM riêng
+để chia sẻ cho cả nhóm).
+
+```bash
+cp .env.example .env      # điền JUDGE0_AUTH_TOKEN, mật khẩu Postgres/Redis
+docker compose up -d
+```
+
+| Service | Cổng | Vai trò |
+|---|---|---|
+| `judge0-server` | 2358 | API chấm code (chỉ mở cho localhost) |
+| `judge0-workers` | — | Worker chạy code trong sandbox `isolate` |
+| `judge0-db` / `judge0-redis` | — | Lưu trữ nội bộ của Judge0 |
+| `postgres` / `migrate` | 5432 | DB chính của ứng dụng + chạy migration |
+| `pgadmin` | 5050 | Giao diện quản trị DB |
+
+**Cấu hình Judge0 truyền qua biến môi trường** (`environment:` trong compose),
+không dùng file `judge0.conf` — image đọc cấu hình bằng ENV trực tiếp
+(xem `app/helpers/config.rb` trong Judge0).
+
+### Chuyển giữa Judge0 local và Judge0 trên AWS/VPS
+
+Backend đọc **hai nhóm tên biến**, nhóm chuẩn được ưu tiên:
+
+| Nhóm | URL | Token | Dùng cho |
+|---|---|---|---|
+| Chuẩn | `JUDGE0_URL` | `JUDGE0_AUTH_TOKEN` | Judge0 local (docker compose) |
+| Alias | `JUDGE0_API_URL` | `JUDGE0_API_TOKEN` | Instance dựng trên AWS/VPS |
+
+Nhờ vậy chuyển sang instance từ xa chỉ cần sửa `backend/.env`:
+
+```env
+# Judge0 local (docker compose)
+JUDGE0_URL=http://localhost:2358
+JUDGE0_AUTH_TOKEN=local-dev-token-abc123
+
+# hoặc Judge0 trên AWS/VPS
+JUDGE0_API_URL=https://utc2-judge0.duckdns.org
+JUDGE0_API_TOKEN=<token>
+```
+
+Không cần sửa code, và không nên commit URL/token thật lên git.
+
+### Về cgroup v2
+
+Bản Judge0 chính thức (`judge0/judge0:1.13.1`) dùng sandbox `isolate` chỉ chạy
+được trên **cgroup v1**. Docker Desktop / WSL2 / Ubuntu ≥ 22.04 đều dùng
+**cgroup v2** → mọi bài nộp sẽ trả `Internal Error (13)`.
+
+Vì vậy compose dùng image **`mrkushalsm/judge0:cgv2`** (đã patch cho cgroup v2),
+kèm mount `/sys/fs/cgroup:/sys/fs/cgroup:rw` cho worker. Kiểm tra máy đang dùng
+loại nào:
+
+```bash
+docker run --rm --entrypoint sh mrkushalsm/judge0:cgv2 -c "stat -fc %T /sys/fs/cgroup/"
+# cgroup2fs = cgroup v2 (dùng image cgv2) | tmpfs = cgroup v1 (image chính thức cũng được)
+```
+
+Nếu chạy trên Linux cgroup v1, đổi `image:` của `judge0-server` và
+`judge0-workers` sang `judge0/judge0:1.13.1` là được (bỏ luôn volume cgroup).
+
+### Kiểm tra nhanh sau khi dựng
+
+```bash
+# Judge0 còn sống?
+curl -s -H "X-Auth-Token: <JUDGE0_AUTH_TOKEN>" http://localhost:2358/about
+
+# Chấm thử đủ 5 ngôn ngữ + các trạng thái kết quả (cần backend chạy)
+cd backend && python -m tools.live_judge_check
+```
+
+### Kiểm tra luồng sinh viên và AI review (cần backend + Ollama chạy)
+
+```bash
+# Chấm bài end-to-end qua HTTP: nộp bài -> Judge0 -> kết quả (41 assertion)
+cd backend && python -m tools.e2e_student_flow
+
+# AI review end-to-end với Ollama thật: cả VI và EN (16 assertion)
+cd backend && python -m tools.e2e_ai_review
+```
+
+`tools.e2e_ai_review` cần Ollama ở `http://localhost:11434` với model
+`qwen2.5-coder:7b` (xem `OLLAMA_BASE_URL` / `OLLAMA_MODEL` trong `backend/.env`).
+
+---
+
+## Dựng Judge0 trên VM riêng (khi cần chia sẻ cho cả nhóm)
+
+Các bước 1–7 dưới đây dành cho trường hợp dựng Judge0 trên một VM riêng
+(Multipass/VPS) để **chia sẻ cho cả nhóm** qua Tailscale — xem
+[Chia sẻ Judge0 cho cả nhóm](#chia-sẻ-judge0-cho-cả-nhóm-tailscale).
+
 ## Bước 0: Kiểm tra máy mình thuộc trường hợp nào
 
 Judge0 (bản 1.13.x) dùng sandbox `isolate` và **bắt buộc chạy trên cgroup v1**.

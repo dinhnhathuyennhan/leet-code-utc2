@@ -9,6 +9,7 @@ import { Button } from "@/components/ui/button";
 import type { NavItem } from "@/lib/constants/navigation";
 import type { ShellUser } from "@/lib/hooks/use-shell-user";
 import { getInitial } from "@/lib/helpers/format";
+import { useLocale } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
 
 interface SidebarProps {
@@ -27,6 +28,7 @@ function isActive(pathname: string, item: NavItem): boolean {
 
 export function Sidebar({ navItems, user, onLogout, onNavigate }: SidebarProps) {
   const pathname = usePathname();
+  const { t } = useLocale();
 
   return (
     <div className="flex h-full min-w-0 flex-col bg-card">
@@ -36,11 +38,11 @@ export function Sidebar({ navItems, user, onLogout, onNavigate }: SidebarProps) 
           <p className="truncate text-[15px] font-bold tracking-tight text-indigo-950 dark:text-indigo-200">
             UTC2 JUDGE MASTER
           </p>
-          <p className="truncate text-xs text-muted-foreground">Hệ Thống Đánh Giá Lập Trình</p>
+          <p className="truncate text-xs text-muted-foreground">{t("layout.brandSubtitle")}</p>
         </div>
       </div>
 
-      <nav aria-label="Điều hướng chính" className="flex-1 space-y-1 overflow-y-auto p-3.5">
+      <nav aria-label={t("layout.mainNav")} className="flex-1 space-y-1 overflow-y-auto p-3.5">
         {navItems.map((item) => {
           const active = isActive(pathname, item);
           return (
@@ -57,7 +59,7 @@ export function Sidebar({ navItems, user, onLogout, onNavigate }: SidebarProps) 
               )}
             >
               <item.icon className="size-4 shrink-0" />
-              {item.label}
+              {item.labelKey ? t(item.labelKey) : item.label}
             </Link>
           );
         })}
@@ -71,7 +73,7 @@ export function Sidebar({ navItems, user, onLogout, onNavigate }: SidebarProps) 
           <p className="truncate text-[13px] font-semibold">{user.fullName}</p>
           <p className="truncate text-[11px] text-muted-foreground">{user.subtitle}</p>
         </div>
-        <Button variant="ghost" size="icon" onClick={onLogout} aria-label="Đăng xuất" className="text-slate-500 hover:text-red-600">
+        <Button variant="ghost" size="icon" onClick={onLogout} aria-label={t("layout.logout")} className="text-slate-500 hover:text-red-600">
           <LogOut className="size-5" />
         </Button>
       </div>

@@ -9,7 +9,6 @@ from app.core.dependencies import Role, require_role
 from app.modules.ai_review.preview_receipt import verify_preview_receipt
 from app.models import User
 from app.modules.ai_review.schemas import (
-    AIReviewRequest,
     AIReviewResponse,
     AdminPreviewReviewRequest,
     AIConnectionResponse,

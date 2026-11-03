@@ -6,7 +6,6 @@ Output: docs/security-regression-result.png
 import html
 import re
 import subprocess
-import sys
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent.parent
@@ -20,6 +19,7 @@ if BASH and Path(BASH).exists():
     proc = subprocess.run(
         [BASH, "-lc", "./security-regression.sh"],
         cwd=ROOT, capture_output=True, text=True,
+        check=False,
     )
     raw = proc.stdout + proc.stderr
 else:
@@ -38,7 +38,7 @@ def color_for(line: str) -> str:
         return "fail"
     if s.startswith("[OK]"):
         return "ok"
-    if s.startswith("[*]") or s.startswith("[!]"):
+    if s.startswith(("[*]", "[!]")):
         return "warn"
     if s.startswith("[X]"):
         return "err"
@@ -46,13 +46,13 @@ def color_for(line: str) -> str:
         return "res" if "FAIL" in s else "res-pass"
     if re.match(r"^={5,}", s):
         return "rule"
-    if s.startswith("SECURITY REGRESSION") or s.startswith("Target:"):
+    if s.startswith(("SECURITY REGRESSION", "Target:")):
         return "head"
     if s.startswith("Test case"):
         return "sub"
     if s.startswith("$"):
         return "cmd"
-    if s.startswith("(") or s.startswith("Day chinh"):
+    if s.startswith(("(", "Day chinh")):
         return "dim"
     return "plain"
 

@@ -110,7 +110,7 @@ def get_class_students(session: Session, class_id: str) -> list[ClassStudentResp
     ).all()
     return [
         ClassStudentResponse(
-            user_id=s.user_id, full_name=s.full_name, email=s.email, class_id=s.class_id
+            user_id=str(s.user_id), full_name=s.full_name, email=s.email, class_id=s.class_id
         )
         for s in students
     ]

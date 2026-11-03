@@ -4,7 +4,17 @@ from app.core.exceptions import InvalidFormatError
 from app.core.utils.validation import required_text
 from app.modules.classrooms.schemas import parse_class_id
 
-MAX_ID_LENGTH = 50
+STUDENT_CODE_LENGTH = 10
+
+
+def _validate_student_code(value: str) -> str:
+    """Validate MSSV đúng 10 chữ số."""
+    code = required_text(value, "Mã sinh viên không được trống")
+    if len(code) != STUDENT_CODE_LENGTH:
+        raise InvalidFormatError(f"Mã sinh viên phải gồm đúng {STUDENT_CODE_LENGTH} chữ số")
+    if not code.isascii() or not code.isdigit():
+        raise InvalidFormatError("Mã sinh viên chỉ được gồm chữ số (0-9)")
+    return code
 
 
 class StudentImportRow(BaseModel):
@@ -17,21 +27,14 @@ class StudentImportRow(BaseModel):
 
     sheet: str
     row: int
-    user_id: str
+    student_code: str   # MSSV đọc từ cột "Mã sinh viên" trong file Excel
     full_name: str
     class_id: str
 
-    @field_validator("user_id", mode="before")
+    @field_validator("student_code", mode="before")
     @classmethod
-    def validate_user_id(cls, value) -> str:
-        user_id = required_text(value, "Mã sinh viên không được trống")
-        if len(user_id) > MAX_ID_LENGTH:
-            raise InvalidFormatError(
-                f"Mã sinh viên không được dài quá {MAX_ID_LENGTH} ký tự"
-            )
-        if not (user_id.isascii() and user_id.isalnum()):
-            raise InvalidFormatError("Mã sinh viên chỉ được gồm chữ không dấu và số")
-        return user_id
+    def validate_student_code(cls, value) -> str:
+        return _validate_student_code(str(value) if value is not None else "")
 
     @field_validator("full_name", mode="before")
     @classmethod
@@ -47,7 +50,7 @@ class StudentImportRow(BaseModel):
 class StudentImportCreatedRow(BaseModel):
     """Một sinh viên đã được tạo tài khoản."""
 
-    user_id: str
+    student_code: str
     full_name: str
     email: str
     class_id: str
@@ -59,7 +62,7 @@ class StudentImportSkippedRow(BaseModel):
 
     sheet: str
     row: int
-    user_id: str
+    student_code: str
     reason: str
 
 
@@ -68,7 +71,7 @@ class StudentImportErrorRow(BaseModel):
 
     sheet: str
     row: int
-    user_id: str | None = None
+    student_code: str | None = None
     reason: str
 
 

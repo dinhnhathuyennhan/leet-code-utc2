@@ -1,3 +1,5 @@
+import uuid
+
 from fastapi import Depends
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from sqlmodel import Session
@@ -28,7 +30,12 @@ def get_current_user(
     if payload.get("type") != "access":
         raise UnauthorizedError("Token không hợp lệ")
 
-    user = session.get(User, payload.get("sub"))
+    try:
+        user_id = uuid.UUID(payload.get("sub"))
+    except (TypeError, ValueError, AttributeError):
+        raise UnauthorizedError("Token không hợp lệ") from None
+
+    user = session.get(User, user_id)
     if user is None:
         raise UnauthorizedError("Token không hợp lệ")
 

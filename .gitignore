@@ -35,3 +35,5 @@ docs/_tmp_img.jpg
 docs/_*.png
 docs/_*.jpg
 docs/_*.html
+
+/backend/bruno

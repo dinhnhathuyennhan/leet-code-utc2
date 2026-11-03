@@ -36,7 +36,7 @@ class TestCourseRoutes:
         assert response.status_code == 201, response.text
         body = response.json()
         assert body["course_id"] == "CS_HTTP_1"
-        assert body["created_by"] == owner_teacher.user_id
+        assert body["created_by"] == str(owner_teacher.user_id)
         assert body["total_number_student"] == 0
         app.dependency_overrides.clear()
 
@@ -226,7 +226,7 @@ class TestGetCourseRoutes:
         body = response.json()
         assert len(body) == 1
         assert body[0]["course_id"] == "CS101"
-        assert body[0]["created_by"] == owner_teacher.user_id
+        assert body[0]["created_by"] == str(owner_teacher.user_id)
         app.dependency_overrides.clear()
 
     # GET /courses — role lạ nhận 403 qua Global Exception Handler

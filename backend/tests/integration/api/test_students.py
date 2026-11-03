@@ -5,9 +5,11 @@ SQLite in-memory và ``get_current_user`` bằng user cố định để không 
 """
 
 from collections.abc import Iterator
+import uuid
 
 import pytest
 from fastapi.testclient import TestClient
+from sqlmodel import select
 
 from app.core.database import get_session
 from app.core.dependencies import Role, get_current_user
@@ -29,7 +31,7 @@ def client(session) -> Iterator[TestClient]:
 
 def _login_as(role_id: int) -> None:
     user = User(
-        user_id=f"caller{role_id}",
+        user_id=uuid.uuid4(),
         full_name="Người gọi",
         email=f"caller{role_id}@example.com",
         hashed_password="placeholder",
@@ -59,7 +61,7 @@ def test_admin_and_teacher_can_import(client, one_student_file, role_id):
     body = response.json()
     assert body["created"] == [
         {
-            "user_id": "6751071001",
+            "student_code": "6751071001",
             "full_name": "Nguyễn Văn An",
             "email": "6751071001@st.utc2.edu.vn",
             "class_id": "CQ.67.CNTT",
@@ -79,7 +81,7 @@ def test_student_and_unknown_role_are_forbidden(client, session, one_student_fil
     response = _upload(client, one_student_file)
 
     assert response.status_code == 403
-    assert session.get(User, "6751071001") is None
+    assert session.exec(select(User).where(User.student_code == "6751071001")).first() is None
 
 
 def test_requires_login(client, one_student_file):
@@ -155,7 +157,7 @@ def test_rows_with_errors_still_return_201(client, class_list_xlsx):
         {
             "sheet": SHEET,
             "row": 12,
-            "user_id": None,
+            "student_code": None,
             "reason": "Mã sinh viên không được trống",
         }
     ]

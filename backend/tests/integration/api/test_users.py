@@ -7,6 +7,7 @@ mật khẩu). Dùng ``app`` thật, thay ``get_session`` bằng SQLite in-memor
 """
 
 from collections.abc import Iterator
+import uuid
 
 import pytest
 from fastapi.testclient import TestClient
@@ -17,15 +18,12 @@ from app.main import app
 from app.models import Class, User
 
 TEACHER_BODY = {
-    "user_id": "1111111199",
     "full_name": "Giáo Viên Mới",
-    "date_of_birth": "01/01/1990",
     "email": "GiaoVienMoi@st.utc2.edu.vn",
 }
 STUDENT_BODY = {
-    "user_id": "6851071001",
+    "student_code": "6851071001",
     "full_name": "Sinh Viên Mới",
-    "date_of_birth": "15/05/2007",
     "email": "6851071001@st.utc2.edu.vn",
     "class_id": "CQ.68.CNTT",
 }
@@ -47,7 +45,7 @@ def class_68(session) -> None:
 
 def _login_as(role_id: int) -> None:
     user = User(
-        user_id=f"caller{role_id}",
+        user_id=uuid.uuid4(),
         full_name="Người gọi",
         email=f"caller{role_id}@example.com",
         hashed_password="placeholder",
@@ -66,10 +64,10 @@ def test_admin_creates_teacher_returns_201(client, session):
 
     assert response.status_code == 201, response.text
     body = response.json()
-    assert body["user_id"] == "1111111199"
+    assert uuid.UUID(body["user_id"])
     assert body["role_id"] == Role.TEACHER
     assert "hashed_password" not in body
-    assert session.get(User, "1111111199") is not None
+    assert session.exec(User.__table__.select().where(User.email == TEACHER_BODY["email"])).first() is not None
 
 
 @pytest.mark.parametrize("role_id", [Role.TEACHER, Role.STUDENT, 99])
@@ -79,7 +77,7 @@ def test_only_admin_can_create_teacher(client, session, role_id):
     response = client.post("/teachers", json=TEACHER_BODY)
 
     assert response.status_code == 403
-    assert session.get(User, "1111111199") is None
+    assert session.exec(User.__table__.select().where(User.email == TEACHER_BODY["email"])).first() is None
 
 
 def test_create_teacher_requires_login(client):
@@ -99,11 +97,12 @@ def test_admin_and_teacher_create_student_returns_201(client, session, class_68,
 
     assert response.status_code == 201, response.text
     body = response.json()
-    assert body["user_id"] == "6851071001"
+    assert uuid.UUID(body["user_id"])
+    assert body["student_code"] == "6851071001"
     assert body["role_id"] == Role.STUDENT
     assert body["class_id"] == "CQ.68.CNTT"
     assert "hashed_password" not in body
-    assert session.get(User, "6851071001") is not None
+    assert session.exec(User.__table__.select().where(User.student_code == "6851071001")).first() is not None
 
 
 @pytest.mark.parametrize("role_id", [Role.STUDENT, 99])
@@ -113,7 +112,7 @@ def test_student_and_unknown_role_cannot_create_student(client, session, class_6
     response = client.post("/students", json=STUDENT_BODY)
 
     assert response.status_code == 403
-    assert session.get(User, "6851071001") is None
+    assert session.exec(User.__table__.select().where(User.student_code == "6851071001")).first() is None
 
 
 def test_create_student_in_missing_class_returns_404(client):

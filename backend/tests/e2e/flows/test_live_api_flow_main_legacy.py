@@ -19,6 +19,7 @@ Covers:
 
 import os
 import sys
+import uuid
 from datetime import datetime
 from pathlib import Path
 
@@ -46,6 +47,13 @@ from app.main import app  # noqa: E402
 from app.models import Class, Course, Enrollment, User  # noqa: E402
 
 
+ADMIN_ID = uuid.uuid4()
+TEACHER_A_ID = uuid.uuid4()
+TEACHER_B_ID = uuid.uuid4()
+STUDENT_A_ID = uuid.uuid4()
+STUDENT_B_ID = uuid.uuid4()
+
+
 # ============================== SETUP DB ==============================
 
 
@@ -67,7 +75,7 @@ def setup_test_db() -> Session:
 
     # Admin
     admin = User(
-        user_id="AD001",
+        user_id=ADMIN_ID,
         full_name="Admin Demo",
         email="admin@utc2.edu.vn",
         hashed_password=hash_password("dummy"),
@@ -75,7 +83,7 @@ def setup_test_db() -> Session:
     )
     # Teacher 1
     teacher_a = User(
-        user_id="GV001",
+        user_id=TEACHER_A_ID,
         full_name="Nguyễn Văn A",
         email="gv.a@utc2.edu.vn",
         hashed_password=hash_password("dummy"),
@@ -83,7 +91,7 @@ def setup_test_db() -> Session:
     )
     # Teacher 2
     teacher_b = User(
-        user_id="GV002",
+        user_id=TEACHER_B_ID,
         full_name="Trần Thị B",
         email="gv.b@utc2.edu.vn",
         hashed_password=hash_password("dummy"),
@@ -91,7 +99,8 @@ def setup_test_db() -> Session:
     )
     # Student A
     student_a = User(
-        user_id="SV001",
+        user_id=STUDENT_A_ID,
+        student_code="6451071001",
         full_name="Lê Văn C",
         email="sv.c@st.utc2.edu.vn",
         hashed_password=hash_password("dummy"),
@@ -100,7 +109,8 @@ def setup_test_db() -> Session:
     )
     # Student B
     student_b = User(
-        user_id="SV002",
+        user_id=STUDENT_B_ID,
+        student_code="6451071002",
         full_name="Phạm Thị D",
         email="sv.d@st.utc2.edu.vn",
         hashed_password=hash_password("dummy"),
@@ -117,7 +127,7 @@ def setup_test_db() -> Session:
             course_id="CS101",
             course_name="Nhập môn lập trình",
             term="HK1 2026-2027",
-            created_by="GV001",
+            created_by=TEACHER_A_ID,
             start_date=datetime(2026, 9, 7, tzinfo=VN_TZ),
             end_date=datetime(2026, 12, 27, tzinfo=VN_TZ),
         ),
@@ -125,7 +135,7 @@ def setup_test_db() -> Session:
             course_id="CS102",
             course_name="Cấu trúc dữ liệu",
             term="HK1 2026-2027",
-            created_by="GV001",
+            created_by=TEACHER_A_ID,
             start_date=datetime(2026, 9, 7, tzinfo=VN_TZ),
             end_date=datetime(2026, 12, 27, tzinfo=VN_TZ),
         ),
@@ -133,7 +143,7 @@ def setup_test_db() -> Session:
             course_id="MATH201",
             course_name="Toán rời rạc",
             term="HK2 2026-2027",
-            created_by="GV002",
+            created_by=TEACHER_B_ID,
             start_date=datetime(2027, 1, 5, tzinfo=VN_TZ),
             end_date=datetime(2027, 4, 30, tzinfo=VN_TZ),
         ),
@@ -141,7 +151,7 @@ def setup_test_db() -> Session:
             course_id="DB101",
             course_name="Cơ sở dữ liệu",
             term="HK2 2025-2026",
-            created_by="GV001",
+            created_by=TEACHER_A_ID,
             start_date=datetime(2026, 1, 5, tzinfo=VN_TZ),
             end_date=datetime(2026, 4, 30, tzinfo=VN_TZ),
         ),
@@ -152,9 +162,9 @@ def setup_test_db() -> Session:
     # Enrollments
     session.add_all(
         [
-            Enrollment(course_id="CS101", student_id="SV001"),
-            Enrollment(course_id="MATH201", student_id="SV001"),
-            Enrollment(course_id="CS101", student_id="SV002"),
+            Enrollment(course_id="CS101", student_id=STUDENT_A_ID),
+            Enrollment(course_id="MATH201", student_id=STUDENT_A_ID),
+            Enrollment(course_id="CS101", student_id=STUDENT_B_ID),
         ]
     )
     # Update total_number_student
@@ -172,7 +182,7 @@ def setup_test_db() -> Session:
     return session
 
 
-def make_headers(user_id: str, role_id: int, token_version: int = 0) -> dict:
+def make_headers(user_id: uuid.UUID, role_id: int, token_version: int = 0) -> dict:
     token = create_access_token(
         user_id=user_id, role_id=role_id, token_version=token_version
     )
@@ -200,10 +210,10 @@ def main() -> None:
     app.dependency_overrides[get_session] = _override_get_session
 
     with TestClient(app) as client:
-        headers_student_a = make_headers("SV001", Role.STUDENT)
-        headers_teacher_a = make_headers("GV001", Role.TEACHER)
-        headers_teacher_b = make_headers("GV002", Role.TEACHER)
-        headers_admin = make_headers("AD001", Role.ADMIN)
+        headers_student_a = make_headers(STUDENT_A_ID, Role.STUDENT)
+        headers_teacher_a = make_headers(TEACHER_A_ID, Role.TEACHER)
+        headers_teacher_b = make_headers(TEACHER_B_ID, Role.TEACHER)
+        headers_admin = make_headers(ADMIN_ID, Role.ADMIN)
 
         # ==================== TEST 1: Sinh viên xem danh sách lớp đang học ====================
         banner("TEST 1: Student A xem danh sách lớp đang học (verify Lỗi 9 mapping)")
@@ -281,13 +291,13 @@ def main() -> None:
             print(f"    - {s['student_id']}: {s['full_name']} ({s['email']})")
         assert len(data) == 2
         student_ids = {s["student_id"] for s in data}
-        assert student_ids == {"SV001", "SV002"}
+        assert student_ids == {str(STUDENT_A_ID), str(STUDENT_B_ID)}
         print("  ✅ PASS: danh sách SV trong lớp đầy đủ")
 
         # ==================== TEST 6: Student xem danh sách enrollment (Lỗi 8) ====================
         banner("TEST 6: Student A xem danh sách enrollment của chính mình (verify Lỗi 8)")
         response = client.get(
-            "/students/SV001/enrollments",
+            f"/students/{STUDENT_A_ID}/enrollments",
             headers=headers_student_a,
         )
         assert response.status_code == 200
@@ -311,7 +321,7 @@ def main() -> None:
         # ==================== TEST 7: Student xem courses của chính mình (Lỗi 7) ====================
         banner("TEST 7: Student A xem courses của chính mình (verify Lỗi 7)")
         response = client.get(
-            "/students/SV001/courses",
+            f"/students/{STUDENT_A_ID}/courses",
             headers=headers_student_a,
         )
         assert response.status_code == 200
@@ -327,7 +337,7 @@ def main() -> None:
         # ==================== TEST 8: Student xem courses của người khác → 403 ====================
         banner("TEST 8: Student A xem courses của Student B → phải 403")
         response = client.get(
-            "/students/SV002/courses",
+            f"/students/{STUDENT_B_ID}/courses",
             headers=headers_student_a,
         )
         print(f"  Status: {response.status_code}")
@@ -348,13 +358,13 @@ def main() -> None:
         # Teacher A (GV001) tạo CS101, CS102, DB101
         assert course_ids == {"CS101", "CS102", "DB101"}
         for c in data:
-            assert c["created_by"] == "GV001"
+            assert c["created_by"] == str(TEACHER_A_ID)
         print("  ✅ PASS: teacher chỉ thấy lớp do mình tạo")
 
         # ==================== TEST 10: Teacher xem student của mình ====================
         banner("TEST 10: Teacher A xem courses của Student A (chỉ lớp do mình tạo)")
         response = client.get(
-            "/students/SV001/courses",
+            f"/students/{STUDENT_A_ID}/courses",
             headers=headers_teacher_a,
         )
         assert response.status_code == 200
@@ -372,7 +382,7 @@ def main() -> None:
         # ==================== TEST 11: Teacher xem student không phải của mình ====================
         banner("TEST 11: Teacher B xem courses của Student A (Student A không học GV002)")
         response = client.get(
-            "/students/SV001/courses",
+            f"/students/{STUDENT_A_ID}/courses",
             headers=headers_teacher_b,
         )
         print(f"  Status: {response.status_code}")

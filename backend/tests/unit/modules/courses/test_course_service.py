@@ -67,7 +67,7 @@ class TestCreateCourse:
 
         assert result.course_id == "CS101"
         assert result.course_name == "Nhập môn lập trình"
-        assert result.created_by == owner_teacher.user_id
+        assert result.created_by == str(owner_teacher.user_id)
         assert result.total_number_student == 0
         assert result.avt_link is None
 
@@ -79,7 +79,7 @@ class TestCreateCourse:
     def test_admin_creates_course(self, session, admin):
         result = create_course(_make_create_request(course_id="CS202"), session, admin)
 
-        assert result.created_by == admin.user_id
+        assert result.created_by == str(admin.user_id)
         assert result.total_number_student == 0
 
     # Trùng course_id → 409
@@ -186,7 +186,7 @@ class TestUpdateCourse:
         assert result.term == "HK2 2026-2027"
         # course_id, created_by, total_number_student, start/end_date phải KHÔNG đổi
         assert result.course_id == course.course_id
-        assert result.created_by == owner_teacher.user_id
+        assert result.created_by == str(owner_teacher.user_id)
         assert result.total_number_student == course.total_number_student
         assert result.start_date == course.start_date
         assert result.end_date == course.end_date
@@ -431,7 +431,7 @@ class TestGetCourse:
         result = get_course(session, course.course_id, owner_teacher)
 
         assert result.course_id == "CS101"
-        assert result.created_by == owner_teacher.user_id
+        assert result.created_by == str(owner_teacher.user_id)
 
     # admin xem được lớp bất kỳ
     def test_admin_can_get_any_course(self, session, course, admin):

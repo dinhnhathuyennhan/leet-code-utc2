@@ -59,8 +59,21 @@ def parse_languages(raw: str | None) -> dict[str, LanguageConfig]:
 
 
 # ===== Kết nối Judge0 =====
-JUDGE0_URL = (os.getenv("JUDGE0_API_URL") or os.getenv("JUDGE0_URL") or "http://localhost:2358").strip().rstrip("/")
-JUDGE0_AUTH_TOKEN = os.getenv("JUDGE0_API_TOKEN") or os.getenv("JUDGE0_AUTH_TOKEN") or ""
+# Chấp nhận cả hai tên biến: `JUDGE0_URL`/`JUDGE0_AUTH_TOKEN` (tên chuẩn của
+# dự án) và `JUDGE0_API_URL`/`JUDGE0_API_TOKEN` (tên dùng cho instance dựng trên
+# AWS/VPS). Nhờ vậy chỉ cần đổi giá trị trong .env là chuyển giữa Judge0 local
+# (docker compose) và Judge0 từ xa mà không phải sửa code.
+def _judge0_url() -> str:
+    url = os.getenv("JUDGE0_URL") or os.getenv("JUDGE0_API_URL") or "http://localhost:2358"
+    return url.rstrip("/")
+
+
+def _judge0_token() -> str:
+    return os.getenv("JUDGE0_AUTH_TOKEN") or os.getenv("JUDGE0_API_TOKEN", "")
+
+
+JUDGE0_URL = _judge0_url()
+JUDGE0_AUTH_TOKEN = _judge0_token()
 JUDGE0_HTTP_TIMEOUT_SECONDS = _env_float("JUDGE0_HTTP_TIMEOUT_SECONDS", 10)
 # Phải <= MAX_SUBMISSION_BATCH_SIZE của Judge0 (mặc định 20)
 JUDGE0_BATCH_SIZE = _env_int("JUDGE0_BATCH_SIZE", 20)

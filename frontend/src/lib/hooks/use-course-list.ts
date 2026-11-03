@@ -12,9 +12,6 @@ export interface CourseFilterState {
   semester?: number;
   setSemester: (value?: number) => void;
   semesters: number[];
-  year: string;
-  setYear: (value: string) => void;
-  years: string[];
   view: CourseView;
   setView: (value: CourseView) => void;
 }
@@ -23,26 +20,25 @@ export interface CourseFilterState {
  * State bộ lọc + query danh sách lớp — dùng chung cho trang lớp của giảng viên và sinh viên.
  *
  * - ``search`` được đẩy xuống server (BE `GET /courses?search=...`).
- * - ``semester`` + ``academic_year`` đẩy xuống server qua params tương ứng.
+ * - ``semester`` đẩy xuống server qua param tương ứng.
  * - ``view`` chỉ là state UI (grid / list), không ảnh hưởng tới request.
+ *
+ * Không còn bộ lọc "Năm học": học kỳ chỉ có nghĩa trong một năm học cụ thể nên
+ * backend trả kèm nhãn đầy đủ; lọc thêm theo năm chỉ làm hai bộ lọc chồng nhau.
  */
 export function useCourseList() {
   const [search, setSearch] = useState("");
   const [semester, setSemester] = useState<number | undefined>(undefined);
-  const [year, setYear] = useState("");
   const [view, setView] = useState<CourseView>("grid");
 
   const debouncedSearch = useDebouncedValue(search, 300);
   const terms = useCourseTerms();
-  const availableYears = terms.data?.academic_years ?? [];
   const availableSemesters = terms.data?.semesters ?? [];
-  const selectedYear = year === "" || availableYears.includes(year) ? year : "";
   const selectedSemester = semester === undefined || availableSemesters.includes(semester) ? semester : undefined;
 
   const query = useCourses({
     search: debouncedSearch.trim() || undefined,
     semester: selectedSemester || undefined,
-    academic_year: selectedYear || undefined,
   });
 
   const filters: CourseFilterState = {
@@ -50,10 +46,7 @@ export function useCourseList() {
     setSearch,
     semester: selectedSemester,
     setSemester,
-    year: selectedYear,
-    setYear,
     semesters: availableSemesters.length ? availableSemesters : [1, 2, 3],
-    years: availableYears,
     view,
     setView,
   };

@@ -12,6 +12,7 @@ import { StudentCourseHeaderCard } from "@/components/student/course-header-card
 import { StudentCourseInfoPanel } from "@/components/student/course-info-panel";
 import { StudentRosterTable } from "@/components/student/student-roster-table";
 import { ApiError } from "@/lib/api/error";
+import { useLocale } from "@/lib/i18n";
 import { useCourse, useCourseEnrollments } from "@/lib/hooks/use-courses";
 
 export default function StudentCourseDetailPage() {
@@ -21,6 +22,7 @@ export default function StudentCourseDetailPage() {
   const courseQuery = useCourse(courseId);
   const studentsQuery = useCourseEnrollments(courseId);
   const [tab, setTab] = useState<StudentCourseTab>("info");
+  const { t } = useLocale();
 
   // Ưu tiên course_id từ URL làm nhãn dự phòng.
   // Khi data về, dùng `code` (alias của course_id từ BE) — vẫn là "CS101".
@@ -38,8 +40,8 @@ export default function StudentCourseDetailPage() {
       return (
         <EmptyState
           icon={SearchX}
-          title="Không tìm thấy lớp học phần"
-          description="Lớp này không tồn tại hoặc bạn không có quyền xem."
+          title={t("student.classDetail.notFound")}
+          description={t("student.classDetail.notFoundDesc")}
         />
       );
     }

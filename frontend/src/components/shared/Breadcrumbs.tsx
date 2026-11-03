@@ -2,11 +2,13 @@ import Link from "next/link";
 import { Home } from "lucide-react";
 
 import type { Crumb } from "@/lib/helpers/breadcrumbs";
+import { useLocale } from "@/lib/i18n";
 
 export function Breadcrumbs({ homeHref, crumbs }: { homeHref: string; crumbs: Crumb[] }) {
+  const { t } = useLocale();
   return (
-    <nav aria-label="Breadcrumb" className="flex min-w-0 items-center gap-2 text-sm sm:text-base">
-      <Link href={homeHref} aria-label="Trang chủ" className="text-slate-500 transition-colors hover:text-indigo-600">
+    <nav aria-label={t("layout.breadcrumb")} className="flex min-w-0 items-center gap-2 text-sm sm:text-base">
+      <Link href={homeHref} aria-label={t("layout.home")} className="text-slate-500 transition-colors hover:text-indigo-600">
         <Home className="size-5" />
       </Link>
       {crumbs.map((crumb) => (

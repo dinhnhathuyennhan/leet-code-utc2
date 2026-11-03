@@ -6,6 +6,7 @@ import { EmptyState, ErrorState } from "@/components/shared/page-state";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { getErrorMessage } from "@/lib/helpers/error-message";
+import { useLocale } from "@/lib/i18n";
 import type { CourseStudent } from "@/lib/types/course";
 
 interface StudentRosterTableProps {
@@ -17,10 +18,11 @@ interface StudentRosterTableProps {
 
 /** Bảng danh sách sinh viên cùng lớp (use-case "Xem danh sách sinh viên trong lớp"). */
 export function StudentRosterTable({ students, isLoading, error, onRetry }: StudentRosterTableProps) {
+  const { t } = useLocale();
   if (isLoading) return <StudentRosterSkeleton />;
   if (error) return <ErrorState error={error} onRetry={onRetry} />;
   if (!students?.length) {
-    return <EmptyState icon={Users} title="Chưa có sinh viên nào" description="Danh sách sẽ hiển thị khi có sinh viên được thêm vào lớp." />;
+    return <EmptyState icon={Users} title={t("student.roster.empty")} description={t("student.roster.emptyDesc")} />;
   }
 
   return (
@@ -29,9 +31,9 @@ export function StudentRosterTable({ students, isLoading, error, onRetry }: Stud
         <TableHeader>
           <TableRow>
             <TableHead className="w-16">#</TableHead>
-            <TableHead>Mã sinh viên</TableHead>
-            <TableHead>Họ và tên</TableHead>
-            <TableHead>Email</TableHead>
+            <TableHead>{t("student.roster.col.id")}</TableHead>
+            <TableHead>{t("student.roster.col.name")}</TableHead>
+            <TableHead>{t("student.roster.col.email")}</TableHead>
           </TableRow>
         </TableHeader>
         <TableBody>
@@ -53,8 +55,9 @@ export function StudentRosterTable({ students, isLoading, error, onRetry }: Stud
 }
 
 function StudentRosterSkeleton() {
+  const { t } = useLocale();
   return (
-    <div className="space-y-2 rounded-xl border bg-card p-3" aria-busy aria-label="Đang tải danh sách sinh viên">
+    <div className="space-y-2 rounded-xl border bg-card p-3" aria-busy aria-label={t("student.roster.loading")}>
       {Array.from({ length: 5 }, (_, i) => (
         <Skeleton key={i} className="h-10 w-full" />
       ))}

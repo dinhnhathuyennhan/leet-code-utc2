@@ -62,10 +62,11 @@ describe("StudentDashboardPage", () => {
     expect(search).toBeInTheDocument();
 
     expect(screen.getByLabelText("Học kỳ")).toBeInTheDocument();
-    expect(screen.getByLabelText("Năm học")).toBeInTheDocument();
+    // Bộ lọc "Năm học" đã bị bỏ: học kỳ đã bao gồm năm học trong nhãn.
+    expect(screen.queryByLabelText("Năm học")).toBeNull();
 
-    expect(screen.getByRole("button", { name: "Xem dạng lưới" })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Xem dạng danh sách" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Dạng lưới" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Dạng danh sách" })).toBeInTheDocument();
   });
 
   it("filters courses by search input", async () => {
@@ -89,21 +90,24 @@ describe("StudentDashboardPage", () => {
 
     await screen.findByText("Nhập môn lập trình");
 
-    const gridLinks = screen.getAllByRole("link", { name: /CS101|CS201|PY101|JS101/ });
+    // Card dùng chung `CourseCard` — link chứa tên lớp, tên GV và học kỳ.
+    const gridLinks = screen.getAllByRole("link", {
+      name: /Nhập môn lập trình|Cấu trúc dữ liệu và giải thuật|Lập trình Python cơ bản|JavaScript nâng cao/,
+    });
     expect(gridLinks.length).toBeGreaterThan(0);
 
-    await user.click(screen.getByRole("button", { name: "Xem dạng danh sách" }));
-    expect(screen.getByRole("button", { name: "Xem dạng danh sách" })).toHaveAttribute("aria-pressed", "true");
+    await user.click(screen.getByRole("button", { name: "Dạng danh sách" }));
+    expect(screen.getByRole("button", { name: "Dạng danh sách" })).toHaveAttribute("aria-pressed", "true");
 
-    await user.click(screen.getByRole("button", { name: "Xem dạng lưới" }));
-    expect(screen.getByRole("button", { name: "Xem dạng lưới" })).toHaveAttribute("aria-pressed", "true");
+    await user.click(screen.getByRole("button", { name: "Dạng lưới" }));
+    expect(screen.getByRole("button", { name: "Dạng lưới" })).toHaveAttribute("aria-pressed", "true");
   });
 
   it("navigates to /student/classes/{id} when clicking a card", async () => {
     renderWithProviders(<StudentDashboardPage />);
     await screen.findByText("Nhập môn lập trình");
 
-    const card = screen.getByRole("link", { name: /CS101/ });
+    const card = screen.getByRole("link", { name: /Nhập môn lập trình/ });
     expect(card).toHaveAttribute("href", "/student/classes/CS101");
   });
 

@@ -9,6 +9,7 @@ from typing import Any
 from sqlmodel import Session, func, select
 
 from app.core import config
+from app.modules.ai_review.preview_receipt import create_preview_receipt
 from app.core.database import engine
 from app.core.exceptions import ConflictError, ForbiddenError, InvalidFormatError, NotFoundError
 from app.core.utils.datetime_utils import as_utc, now_utc
@@ -185,12 +186,67 @@ def run(
         )
         for index, (tc, (result, status, actual)) in enumerate(zip(samples, judged, strict=True))
     ]
-    compile_output = next((r.compile_output for r, s, _ in judged if s == "compile_error"), None)
+    compile_output = _compile_output_of(judged)
     return RunResponse(
         status=_overall_status([c.status for c in cases]),
         compile_output=compile_output,
         cases=cases,
     )
+
+
+def run_admin_preview(
+    session: Session, problem_id: int, data: CodeRequest, current_user: User,
+) -> RunResponse:
+    """Grade all current testcases without creating a student submission."""
+    problem = session.get(Problem, problem_id)
+    if problem is None:
+        raise NotFoundError("Không tìm thấy bài tập")
+    testcases = list(session.exec(
+        select(Testcase)
+        .where(Testcase.problem_id == problem_id)
+        .order_by(Testcase.testcase_id)
+    ).all())
+    if not testcases:
+        raise ConflictError("Bài tập chưa có testcase để chạy thử")
+    session.close()
+
+    with _run_slot(current_user.user_id):
+        judged = _run_judge(problem, data, testcases, GRADING_TIMEOUT_SECONDS)
+
+    cases = [
+        RunCaseResponse(
+            index=index,
+            status=status,
+            input=decode_testcase_value(testcase.input, testcase.input_type),
+            expected_output=decode_testcase_value(testcase.expected_output, testcase.expected_output_type),
+            actual_output=actual,
+            stderr=result.stderr or result.message,
+            time=result.time,
+        )
+        for index, (testcase, (result, status, actual)) in enumerate(zip(testcases, judged, strict=True), start=1)
+    ]
+    overall_status = _overall_status([case.status for case in cases])
+    return RunResponse(
+        status=overall_status,
+        compile_output=_compile_output_of(judged),
+        cases=cases,
+        review_token=create_preview_receipt(
+            user_id=current_user.user_id, problem_id=problem_id, language=data.language,
+            code=data.code, status=overall_status,
+            passed_count=sum(case.status == "accepted" for case in cases), total_count=len(cases),
+        ) if all(case.status != "internal_error" for case in cases) else None,
+    )
+def _compile_output_of(judged: list[tuple[Judge0Result, str, Any]]) -> str | None:
+    """Lấy output lỗi của testcase đầu tiên bị lỗi biên dịch.
+
+    Với C/C++/Java, Judge0 trả lỗi ở `compile_output`. Với Python không có
+    bước biên dịch nên lỗi cú pháp nằm ở `stderr` -> cần lấy cả hai.
+    """
+    for result, status, _ in judged:
+        if status != "compile_error":
+            continue
+        return result.compile_output or result.stderr or result.message
+    return None
 
 
 def submit(
@@ -283,7 +339,7 @@ def grade_submission(submission_id: int) -> None:
             statuses = [status for _, status, _ in judged]
             status = _overall_status(statuses)
             passed_count = statuses.count("accepted")
-            compile_output = next((r.compile_output for r, s, _ in judged if s == "compile_error"), None)
+            compile_output = _compile_output_of(judged)
         except Judge0Error:
             logger.warning("Judge0 không khả dụng khi chấm, submission_id=%s", submission_id)
             if now_utc() - submitted_at > PENDING_TTL:

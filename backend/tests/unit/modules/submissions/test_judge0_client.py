@@ -63,6 +63,24 @@ def test_status_mapping(status_id, expected):
     assert result.system_status == expected
 
 
+@pytest.mark.parametrize(
+    "stderr",
+    [
+        "  File \"script.py\", line 1\n    def broken(:\n               ^\nSyntaxError: invalid syntax\n",
+        "IndentationError: unexpected indent",
+    ],
+)
+def test_python_syntax_error_is_reported_as_compile_error(stderr):
+    """Python không có bước biên dịch nên Judge0 báo SyntaxError thành runtime error."""
+    result = judge0_client.Judge0Result("t", 11, None, stderr, None, None, None, None)
+    assert result.system_status == "compile_error"
+
+
+def test_real_runtime_error_stays_runtime_error():
+    result = judge0_client.Judge0Result("t", 11, None, "Traceback...\nZeroDivisionError\n", None, None, None, None)
+    assert result.system_status == "runtime_error"
+
+
 @pytest.fixture(autouse=True)
 def no_sleep(monkeypatch):
     monkeypatch.setattr(config, "JUDGE0_RETRY_BACKOFF_SECONDS", 0)
@@ -147,7 +165,19 @@ def test_create_batch_splits_into_chunks_of_20():
     assert len(tokens) == 45
 
 
-def test_create_batch_sends_per_language_memory_and_compiler_options():
+@pytest.mark.parametrize("memory_limit_kb", [None, 262_144])
+@pytest.mark.parametrize("compiler_options", [None, "-J-Xmx256m"])
+def test_create_batch_sends_configured_memory_and_compiler_options(
+    monkeypatch, memory_limit_kb, compiler_options,
+):
+    monkeypatch.setattr(config, "LANGUAGES", {
+        "java": config.LanguageConfig(
+            judge0_id=62,
+            memory_limit_kb=memory_limit_kb,
+            compiler_options=compiler_options,
+        ),
+        "python": config.LanguageConfig(judge0_id=71),
+    })
     seen = {}
 
     def handler(request: httpx.Request) -> httpx.Response:
@@ -156,11 +186,19 @@ def test_create_batch_sends_per_language_memory_and_compiler_options():
 
     client = Judge0Client(transport=httpx.MockTransport(handler))
     client.create_batch("x", "java", [""], 1)
-    assert seen["body"]["memory_limit"] == config.LANGUAGES["java"].memory_limit_kb
-    assert "compiler_options" in seen["body"]
+    assert seen["body"]["language_id"] == 62
+    if memory_limit_kb is None:
+        assert "memory_limit" not in seen["body"]
+    else:
+        assert seen["body"]["memory_limit"] == memory_limit_kb
+    if compiler_options is None:
+        assert "compiler_options" not in seen["body"]
+    else:
+        assert seen["body"]["compiler_options"] == compiler_options
     client.create_batch("x", "python", [""], 1)
     assert "memory_limit" not in seen["body"]
     assert "compiler_options" not in seen["body"]
+    client.close()
 
 
 def test_limits_follow_config(monkeypatch):

@@ -1,7 +1,7 @@
 
-import os
-
 import httpx
+
+from app.core import config
 
 
 class Judge0Error(Exception):
@@ -10,8 +10,8 @@ class Judge0Error(Exception):
 
 class Judge0Client:
     def __init__(self):
-        self.base_url = os.environ["JUDGE0_API_URL"].rstrip("/")
-        self.api_token = os.environ["JUDGE0_API_TOKEN"]
+        self.base_url = config.JUDGE0_URL
+        self.api_token = config.JUDGE0_AUTH_TOKEN
 
     async def submit(
         self,

@@ -5,6 +5,7 @@ import { CourseFilters } from "@/components/shared/course-filters";
 import { CourseGrid, CourseGridSkeleton } from "@/components/shared/course-grid";
 import { CourseStatsBar, CourseStatsBarSkeleton, type StatItem } from "@/components/shared/course-stats-bar";
 import { EmptyState, ErrorState } from "@/components/shared/page-state";
+import { useLocale } from "@/lib/i18n";
 import type { CourseFilterState } from "@/lib/hooks/use-course-list";
 import type { CourseListStats, CourseSummary } from "@/lib/types/course";
 import { cn } from "@/lib/utils";
@@ -22,22 +23,33 @@ interface CourseListViewProps {
   actions?: ReactNode;
 }
 
-function buildStats(role: CourseListViewProps["role"], stats: CourseListStats): StatItem[] {
-  return [
-    { icon: BookOpen, value: String(stats.active_course_count), label: role === "teacher" ? "Lớp phụ trách" : "Lớp đang học" },
-    { icon: ClipboardCheck, value: String(stats.upcoming_courses), label: "Lớp sắp mở" },
-    { icon: Timer, value: String(stats.due_this_week), label: "Hạn tuần này", highlight: true },
-  ];
-}
-
 export function CourseListView({ role, filters, courses, stats, isLoading, isFetching, error, onRetry, hrefFor, actions }: CourseListViewProps) {
-  const heading = role === "teacher" ? "Lớp phụ trách" : "Lớp đang học";
+  const { t } = useLocale();
+  const heading = role === "teacher" ? t("teacher.courses.heading") : t("student.classes.heading");
+
+  function buildStats(stats: CourseListStats): StatItem[] {
+    return [
+      {
+        icon: BookOpen,
+        value: String(stats.active_course_count),
+        label: role === "teacher" ? t("student.classes.stats.teaching") : t("student.classes.stats.learning"),
+      },
+      { icon: ClipboardCheck, value: String(stats.upcoming_courses), label: t("student.classes.stats.upcoming") },
+      { icon: Timer, value: String(stats.due_this_week), label: t("student.dashboard.stats.dueThisWeek"), highlight: true },
+    ];
+  }
 
   function renderBody() {
     if (isLoading) return <CourseGridSkeleton view={filters.view} />;
     if (error && !courses) return <ErrorState error={error} onRetry={onRetry} />;
     if (!courses?.length) {
-      return <EmptyState icon={GraduationCap} title={filters.search ? "Không tìm thấy lớp phù hợp" : `Chưa có ${heading.toLowerCase()}`} description={filters.search ? "Thử đổi từ khoá khác." : "Các lớp của bạn sẽ hiển thị tại đây."} />;
+      return (
+        <EmptyState
+          icon={GraduationCap}
+          title={filters.search ? t("student.classes.empty.noMatch") : t("student.classes.empty.title")}
+          description={filters.search ? t("student.classes.empty.noMatchDesc") : t("student.classes.empty.desc")}
+        />
+      );
     }
     return <CourseGrid view={filters.view} courses={courses} hrefFor={hrefFor} className={cn("transition-opacity duration-200", isFetching && "opacity-60")} />;
   }
@@ -45,7 +57,7 @@ export function CourseListView({ role, filters, courses, stats, isLoading, isFet
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
-        {isLoading || !stats ? <CourseStatsBarSkeleton /> : <CourseStatsBar items={buildStats(role, stats)} />}
+        {isLoading || !stats ? <CourseStatsBarSkeleton /> : <CourseStatsBar items={buildStats(stats)} />}
         {actions && <div className="flex justify-end">{actions}</div>}
       </div>
       <header className="flex flex-wrap items-baseline justify-between gap-2">

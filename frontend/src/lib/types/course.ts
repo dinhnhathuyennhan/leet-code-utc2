@@ -163,11 +163,18 @@ export interface CourseStudent {
   accepted_problems: number;
   total_lessons: number;
   progress_percent: number;
-  submission_history: StudentSubmission[];
+  submission_history: CourseStudentSubmission[];
   class_id?: string | null;
 }
 
-export interface StudentSubmission {
+/**
+ * Lịch sử nộp bài rút gọn ở góc nhìn giáo viên (dùng trong bảng sinh viên).
+ *
+ * Tên cố ý KHÁC `StudentSubmission` trong `@/lib/types/submission` — đó là shape
+ * đầy đủ của API sinh viên (`/submissions/mine`). Hai shape này khác nhau nên
+ * phải tách tên để không nhập nhằng khi import.
+ */
+export interface CourseStudentSubmission {
   id: number;
   session: string;
   problem: string;
@@ -282,6 +289,7 @@ export interface ProblemDetailData {
   start_datetime: string;
   end_datetime: string;
   starter_code: string;
+  /** Mã mẫu theo ngôn ngữ: { python, c, cpp, java }. */
   starter_codes?: Record<string, string>;
   testcases: Array<{ id: number; input: string; expected_output: string; is_sample: boolean }>;
   submitted_count?: number;

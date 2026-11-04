@@ -1,9 +1,11 @@
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, File, Query, UploadFile
 from sqlmodel import Session
 from starlette import status
 
 from app.core.database import get_session
 from app.core.dependencies import get_current_user, require_role, Role
+from app.modules.students.schemas import StudentImportResponse
+from app.modules.students.service import MAX_IMPORT_FILE_BYTES, import_students
 from app.modules.users.schemas import (
     CreateStudentRequest,
     CreateTeacherRequest,
@@ -79,3 +81,19 @@ def list_users_route(
     current_user: User = Depends(require_role(Role.ADMIN, Role.TEACHER)),
 ):
     return list_users(session, current_user, role_id, class_id, page, page_size)
+
+
+@router.post(
+    "/students/import",
+    response_model=StudentImportResponse,
+    status_code=201,
+)
+def import_students_route(
+    file: UploadFile = File(...),
+    session: Session = Depends(get_session),
+    current_user: User = Depends(require_role(Role.ADMIN, Role.TEACHER)),
+):
+    # Đọc tối đa giới hạn + 1 byte: đủ để service biết file vượt giới hạn
+    # mà không phải nạp cả file quá lớn vào bộ nhớ
+    contents = file.file.read(MAX_IMPORT_FILE_BYTES + 1)
+    return import_students(session, contents, file.filename or "")

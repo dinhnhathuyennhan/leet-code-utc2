@@ -1,6 +1,8 @@
 import os
 import logging
 import sys
+import time
+import asyncio
 from contextlib import asynccontextmanager
 
 from dotenv import load_dotenv
@@ -30,10 +32,33 @@ from app.seed.seed_data import seed_data  # noqa: E402
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    seed_data()
-    start_grading()
-    yield
-    stop_grading()
+    startup_started_at = time.monotonic()
+    app_logger.info("Application startup: starting seed data")
+    try:
+        # Seed and queue recovery use synchronous SQLAlchemy sessions.
+        await asyncio.to_thread(seed_data)
+        app_logger.info(
+            "Application startup: seed data finished in %.2fs",
+            time.monotonic() - startup_started_at,
+        )
+        grading_started_at = time.monotonic()
+        app_logger.info("Application startup: starting grading queue recovery")
+        await asyncio.to_thread(start_grading)
+        app_logger.info(
+            "Application startup: grading queue recovery finished in %.2fs",
+            time.monotonic() - grading_started_at,
+        )
+        app_logger.info(
+            "Application startup tasks complete in %.2fs",
+            time.monotonic() - startup_started_at,
+        )
+        yield
+    except Exception:
+        app_logger.exception("Application startup failed")
+        raise
+    finally:
+        app_logger.info("Application shutdown: stopping grading queue")
+        stop_grading()
 
 
 app = FastAPI(lifespan=lifespan)

@@ -1,7 +1,8 @@
 import { getCourses } from "@/lib/api/endpoints/courses";
+import { toCourseSummary } from "@/lib/api/transformers/course";
 import axiosInstance from "@/lib/axios";
 import { wrapAxiosError } from "@/lib/api/client";
-import type { PendingFilter, PendingSubmissionParams, PendingSubmissionsResponse, StudentOverview, SubmissionDetail, TeacherOverview } from "@/lib/types/dashboard";
+import type { PendingFilter, PendingSubmissionParams, PendingSubmissionsResponse, StudentOverview, StudentOverviewRaw, SubmissionDetail, TeacherOverview } from "@/lib/types/dashboard";
 import type { UserResponse } from "@/lib/api/types";
 
 export async function getTeacherOverview(): Promise<TeacherOverview> {
@@ -79,10 +80,19 @@ export async function updateSubmission(id: string | number, data: { feedback?: s
 export const EMPTY_PENDING_COUNTS: Record<PendingFilter, number> = { all: 0, pending: 0, wrong_answer: 0, compile_error: 0 };
 export async function getStudentOverview(studentId: string): Promise<StudentOverview> {
   try {
-    const response = await axiosInstance.get<StudentOverview>(
+    const response = await axiosInstance.get<StudentOverviewRaw>(
       `/students/${encodeURIComponent(studentId)}/dashboard`,
     );
-    return response.data;
+    const raw = response.data;
+    return {
+      total_classes: raw.total_classes ?? 0,
+      completed_problems: raw.completed_problems ?? 0,
+      total_problems: raw.total_problems ?? 0,
+      average_score: raw.average_score ?? null,
+      // Phải transform từ shape thô (course_id) sang CourseSummary (id),
+      // nếu không `course.id` sẽ undefined -> sai key React + sai link lớp.
+      courses: (raw.courses ?? []).map(toCourseSummary),
+    };
   } catch (error) {
     throw wrapAxiosError(error);
   }

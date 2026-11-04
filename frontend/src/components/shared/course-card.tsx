@@ -6,6 +6,7 @@ import { StatusBadge } from "@/components/shared/status-badge";
 import { COURSE_COVERS } from "@/lib/constants/course-covers";
 import { COURSE_STATUS } from "@/lib/constants/status";
 import { formatTerm } from "@/lib/helpers/format";
+import { useLocale } from "@/lib/i18n";
 import type { CourseSummary, CourseView } from "@/lib/types/course";
 import { cn } from "@/lib/utils";
 
@@ -18,6 +19,7 @@ interface CourseCardProps {
 /** Thẻ lớp học phần — dùng chung cho giảng viên và sinh viên, có 2 kiểu hiển thị lưới/danh sách. */
 export function CourseCard({ course, href, view }: CourseCardProps) {
   const status = COURSE_STATUS[course.status];
+  const { t, locale } = useLocale();
   const isList = view === "list";
 
   return (
@@ -39,7 +41,7 @@ export function CourseCard({ course, href, view }: CourseCardProps) {
       </div>
 
       <div className={cn("min-h-[142px] min-w-0 space-y-3 p-4", isList && "flex flex-1 flex-col justify-center")}>
-        <StatusBadge label={status.label} tone={status.tone} className="w-fit" />
+        <StatusBadge label={t(status.labelKey)} tone={status.tone} className="w-fit" />
         <h3 className="truncate text-[15px] font-semibold leading-snug" title={course.name}>{course.name}</h3>
         <p className="flex items-center gap-2 text-sm font-medium">
           <CircleUser className="size-4 shrink-0 text-muted-foreground" />
@@ -47,7 +49,7 @@ export function CourseCard({ course, href, view }: CourseCardProps) {
         </p>
         <p className="flex items-center gap-2 text-sm text-muted-foreground">
           <CalendarDays className="size-4 shrink-0" />
-          <span className="truncate">{formatTerm(course)}</span>
+          <span className="truncate">{formatTerm(course, locale)}</span>
         </p>
       </div>
     </Link>

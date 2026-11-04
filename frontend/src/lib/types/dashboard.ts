@@ -1,4 +1,4 @@
-import type { CourseSummary } from "@/lib/types/course";
+import type { CourseApiRecord, CourseSummary } from "@/lib/types/course";
 
 export type JudgeKind = "pending" | "accepted" | "wrong_answer" | "similarity" | "compile_error" | "graded";
 
@@ -82,14 +82,27 @@ export interface SubmissionDetail {
 // ─── Student Dashboard ──────────────────────────────────────────────
 
 /**
- * Response cho `GET /students/{student_id}/dashboard`.
- * Cấu trúc trùng với `StudentDashboardResponse` ở backend.
+ * Response thô của `GET /students/{student_id}/dashboard`.
+ *
+ * Backend trả list course theo shape `CourseResponseRaw` (có `course_id`),
+ * KHÔNG phải `CourseSummary` (dùng `id`). Nếu khai báo thẳng là
+ * `CourseSummary[]` thì `course.id` sẽ là `undefined` -> React báo thiếu
+ * `key` và link tới lớp học bị sai.
  */
-export interface StudentOverview {
+export interface StudentOverviewRaw {
   total_classes: number;
   completed_problems: number;
   total_problems: number;
   /** 0-10; `null` khi SV chưa có submission nào. */
+  average_score: number | null;
+  courses: CourseApiRecord[];
+}
+
+/** Shape sau khi đã transform sang `CourseSummary` (dùng `id`). */
+export interface StudentOverview {
+  total_classes: number;
+  completed_problems: number;
+  total_problems: number;
   average_score: number | null;
   courses: CourseSummary[];
 }

@@ -60,13 +60,12 @@ export interface ResetPasswordResponse {
 }
 
 export interface CreateTeacherRequest {
-  user_id: string;
   full_name: string;
-  date_of_birth: string;
   email: string;
 }
 
 export interface CreateStudentRequest extends CreateTeacherRequest {
+  student_code: string;
   class_id: string;
 }
 
@@ -75,7 +74,7 @@ export interface AccountResponse {
   full_name: string;
   email: string;
   role_id: Role;
-  date_of_birth: string | null;
+  student_code?: string | null;
   class_id?: string | null;
 }
 
@@ -95,6 +94,7 @@ export interface AccountListResponse {
 
 export interface ImportStudentsCreatedRow {
   user_id: string;
+  student_code: string;
   full_name: string;
   email: string;
   class_id: string;
@@ -102,16 +102,17 @@ export interface ImportStudentsCreatedRow {
 }
 
 export interface ImportStudentsSkippedRow {
+  user_id: string;
   sheet: string;
   row: number;
-  user_id: string;
+  student_code: string;
   reason: string;
 }
 
 export interface ImportStudentsErrorRow {
   sheet: string;
   row: number;
-  user_id: string | null;
+  student_code: string | null;
   reason: string;
 }
 

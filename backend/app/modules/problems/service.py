@@ -4,7 +4,7 @@ from app.core.utils.datetime_utils import as_utc, now_utc, vn_day_end, vn_day_st
 from app.core.exceptions import ConflictError, ForbiddenError, InvalidFormatError, NotFoundError
 from app.core.dependencies import Role
 from app.modules.testcases.testcase_format import testcase_to_storage, testcase_to_api_values
-from app.modules.problems.schemas import ProblemDetailResponse, ProblemUpdateRequest, ProblemCreateRequest, \
+from app.modules.problems.schemas import AdminTestcaseMutation, ProblemDetailResponse, ProblemUpdateRequest, ProblemCreateRequest, \
     ProblemListResponse, validate_problem_schedule
 from app.modules.courses.access import (
     get_lesson_in_course, get_manageable_course, get_problem_in_lesson, get_viewable_course,
@@ -74,6 +74,51 @@ def create_bank_problem(
     session.commit()
     session.refresh(problem)
     return _build_problem_detail_response(session, problem, course_id=None)
+
+def get_bank_problem(session: Session, problem_id: int, current_user: User) -> ProblemDetailResponse:
+    problem = session.get(Problem, problem_id)
+    if problem is None:
+        raise NotFoundError("Không tìm thấy bài tập nguồn")
+    if problem.lesson_id is not None:
+        lesson = session.get(Lesson, problem.lesson_id)
+        if lesson is None:
+            raise NotFoundError("Không tìm thấy buổi học của bài tập")
+        return get_problem_detail(session, lesson.course_id, lesson.lesson_id, problem_id, current_user)
+    return _build_problem_detail_response(session, problem, course_id=None)
+
+def update_bank_problem(session: Session, problem_id: int, data: ProblemUpdateRequest) -> ProblemDetailResponse:
+    problem = session.get(Problem, problem_id)
+    if problem is None or problem.lesson_id is not None:
+        raise NotFoundError("Không tìm thấy bài tập nguồn")
+    updates = data.model_dump(exclude_unset=True, exclude={"testcases", "starter_code", "starter_codes"})
+    if updates.get("start_datetime") is not None or updates.get("end_datetime") is not None:
+        validate_problem_schedule(updates.get("start_datetime") or problem.start_datetime, updates.get("end_datetime") or problem.end_datetime)
+    for field, value in updates.items():
+        if value is not None or field in {"hint", "complexity", "report"}:
+            setattr(problem, field, value)
+    if data.starter_codes is not None:
+        problem.starter_codes = data.starter_codes
+        problem.start_format_code = data.starter_codes["python"]
+    elif data.starter_code is not None:
+        problem.start_format_code = data.starter_code
+        problem.starter_codes = {**(problem.starter_codes or {}), "python": data.starter_code}
+    if data.testcases is not None:
+        _replace_testcases(session, problem, [testcase_to_storage(t.model_dump()) for t in data.testcases])
+    session.add(problem)
+    session.commit()
+    session.refresh(problem)
+    return _build_problem_detail_response(session, problem, course_id=None)
+
+def delete_bank_problem(session: Session, problem_id: int) -> None:
+    problem = session.get(Problem, problem_id)
+    if problem is None or problem.lesson_id is not None:
+        raise NotFoundError("Không tìm thấy bài tập nguồn")
+    if _has_submissions(session, problem_id):
+        raise ConflictError("Bài đã có bài nộp, không thể xoá")
+    for testcase in session.exec(select(Testcase).where(Testcase.problem_id == problem_id)).all():
+        session.delete(testcase)
+    session.delete(problem)
+    session.commit()
 
 
 def list_problems(
@@ -236,6 +281,73 @@ def get_problem_detail(
 
 def _has_submissions(session: Session, problem_id: int) -> bool:
     return session.exec(select(Submission.submission_id).where(Submission.problem_id == problem_id)).first() is not None
+
+
+def _get_admin_testcase_problem(session: Session, problem_id: int) -> Problem:
+    problem = session.get(Problem, problem_id)
+    if problem is None:
+        raise NotFoundError("Không tìm thấy bài tập")
+    if _has_submissions(session, problem_id):
+        raise ConflictError("Bài đã có bài nộp, không thể thay đổi testcase")
+    return problem
+
+
+def _refresh_problem_testcase_count(session: Session, problem: Problem) -> None:
+    session.flush()
+    problem.total_number_testcase = session.exec(
+        select(func.count()).select_from(Testcase).where(Testcase.problem_id == problem.problem_id)
+    ).one()
+    session.add(problem)
+
+
+def _validate_admin_testcase_mode(problem: Problem, data: AdminTestcaseMutation) -> None:
+    expected = ("json_args", "json") if problem.function_name else ("stdin", "stdout")
+    if (data.input_type, data.expected_output_type) != expected:
+        raise InvalidFormatError(
+            "Đề chấm theo hàm cần testcase JSON; đề stdin/stdout cần testcase văn bản"
+        )
+
+
+def add_admin_testcase(
+    session: Session, problem_id: int, data: AdminTestcaseMutation, current_user: User,
+) -> ProblemDetailResponse:
+    problem = _get_admin_testcase_problem(session, problem_id)
+    _validate_admin_testcase_mode(problem, data)
+    session.add(Testcase(problem_id=problem_id, **testcase_to_storage(data.model_dump())))
+    _refresh_problem_testcase_count(session, problem)
+    session.commit()
+    return get_bank_problem(session, problem_id, current_user)
+
+
+def update_admin_testcase(
+    session: Session, problem_id: int, testcase_id: int,
+    data: AdminTestcaseMutation, current_user: User,
+) -> ProblemDetailResponse:
+    problem = _get_admin_testcase_problem(session, problem_id)
+    _validate_admin_testcase_mode(problem, data)
+    testcase = session.get(Testcase, testcase_id)
+    if testcase is None or testcase.problem_id != problem_id:
+        raise NotFoundError("Không tìm thấy testcase trong bài tập")
+    for field, value in testcase_to_storage(data.model_dump()).items():
+        setattr(testcase, field, value)
+    session.add(testcase)
+    session.commit()
+    return get_bank_problem(session, problem_id, current_user)
+
+
+def delete_admin_testcase(session: Session, problem_id: int, testcase_id: int) -> None:
+    problem = _get_admin_testcase_problem(session, problem_id)
+    testcase = session.get(Testcase, testcase_id)
+    if testcase is None or testcase.problem_id != problem_id:
+        raise NotFoundError("Không tìm thấy testcase trong bài tập")
+    count = session.exec(
+        select(func.count()).select_from(Testcase).where(Testcase.problem_id == problem_id)
+    ).one()
+    if count <= 1:
+        raise ConflictError("Bài tập phải có ít nhất một testcase")
+    session.delete(testcase)
+    _refresh_problem_testcase_count(session, problem)
+    session.commit()
 
 
 def _replace_testcases(session: Session, problem: Problem, items: list[dict]) -> None:

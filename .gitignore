@@ -4,5 +4,36 @@ CLAUDE.md
 .idea/
 .playwright-mcp/
 .chamcode-api.bruno_collection.json
+.tmp-admin-playwright/
+
+# judge0.conf chỉ dùng khi self-host Judge0 thủ công (xem docs/judge0-setup.md).
+# Stack local đã gộp vào docker-compose.yml gốc nên không cần file này.
+judge0/judge0.conf
 judge0.conf
+
+# Dependencies
+node_modules/
+.next/
+out/
+
+# Cache Python / Node
+__pycache__/
+*.pyc
+.pytest_cache/
+.ruff_cache/
+
+# Log khi chạy dev local (backend uvicorn, frontend next dev)
+*.log
+
+# Generated test artifacts (recreated by frontend/test/ui-test-student.mjs, frontend/test/render_secreg_png.py)
+docs/ui-shots/
+docs/security-regression-result.png
+docs/screenshot-secreg.html
+docs/_secreg_render.html
+docs/_crop_tmp/
+docs/_raw_screen.png
+docs/_tmp_img.jpg
+docs/_*.png
+docs/_*.jpg
+docs/_*.html
 /backend/bruno

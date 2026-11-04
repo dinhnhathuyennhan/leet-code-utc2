@@ -221,11 +221,12 @@ def _split_existing(
     emails = [_student_email(code) for code in student_codes]
 
     # Tìm MSSV đã tồn tại trong DB (theo student_code, không phải user_id)
-    existing_codes = set(
-        session.exec(
-            select(User.student_code).where(User.student_code.in_(student_codes))
+    existing_codes = {
+        user.student_code: str(user.user_id)
+        for user in session.exec(
+            select(User).where(User.student_code.in_(student_codes))
         ).all()
-    )
+    }
     taken_emails = set(
         session.exec(select(User.email).where(User.email.in_(emails))).all()
     )
@@ -236,6 +237,7 @@ def _split_existing(
         if student.student_code in existing_codes:
             skipped.append(
                 StudentImportSkippedRow(
+                    user_id=existing_codes[student.student_code],
                     sheet=student.sheet,
                     row=student.row,
                     student_code=student.student_code,
@@ -302,18 +304,18 @@ def _save_students(
         students, passwords, hashed_passwords, strict=True
     ):
         email = _student_email(student.student_code)
-        session.add(
-            User(
-                student_code=student.student_code,
-                full_name=student.full_name,
-                email=email,
-                hashed_password=hashed,
-                must_change_password=True,
-                role_id=Role.STUDENT,
-                class_id=student.class_id,
-                # user_id: auto-generated UUID, không set thủ công
-            )
+        user = User(
+            student_code=student.student_code,
+            full_name=student.full_name,
+            email=email,
+            hashed_password=hashed,
+            must_change_password=True,
+            role_id=Role.STUDENT,
+            class_id=student.class_id,
+            # user_id: auto-generated UUID, không set thủ công
         )
+        user_id = str(user.user_id)
+        session.add(user)
         try:
             session.commit()
         except IntegrityError:
@@ -332,6 +334,7 @@ def _save_students(
 
         created.append(
             StudentImportCreatedRow(
+                user_id=user_id,
                 student_code=student.student_code,
                 full_name=student.full_name,
                 email=email,

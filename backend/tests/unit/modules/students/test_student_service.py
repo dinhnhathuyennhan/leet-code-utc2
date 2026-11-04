@@ -99,6 +99,7 @@ def test_import_creates_student_accounts(session, class_list_xlsx):
 
     assert [row.model_dump() for row in response.created] == [
         {
+            "user_id": str(_users(session)["6751071001"].user_id),
             "student_code": "6751071001",
             "full_name": "Nguyễn Văn An",
             "email": "6751071001@st.utc2.edu.vn",
@@ -106,6 +107,7 @@ def test_import_creates_student_accounts(session, class_list_xlsx):
             "temporary_password": "6751071001",
         },
         {
+            "user_id": str(_users(session)["6751071002"].user_id),
             "student_code": "6751071002",
             "full_name": "Trần Thị Bình",
             "email": "6751071002@st.utc2.edu.vn",
@@ -446,6 +448,7 @@ def test_import_skips_students_that_already_have_accounts(session, class_list_xl
         {
             "sheet": SHEET,
             "row": _row(1),
+            "user_id": str(_users(session)["6751071001"].user_id),
             "student_code": "6751071001",
             "reason": "Sinh viên đã có tài khoản",
         }

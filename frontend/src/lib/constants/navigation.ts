@@ -1,6 +1,7 @@
 import {
   FileCheck2,
   BookOpenCheck,
+  BookOpen,
   GraduationCap,
   History,
   LayoutDashboard,
@@ -10,8 +11,13 @@ import {
   type LucideIcon,
 } from "lucide-react";
 
+import type { TranslationKey } from "@/lib/i18n";
+
 export interface NavItem {
+  /** Nhãn hiển thị khi chưa có i18n context (fallback tiếng Việt). */
   label: string;
+  /** Key tra cứu bản dịch — nếu có, sẽ được ưu tiên hơn `label`. */
+  labelKey?: TranslationKey;
   href: string;
   icon: LucideIcon;
   /** true → chỉ active khi pathname trùng khớp hoàn toàn (vd: trang chủ). */
@@ -21,25 +27,29 @@ export interface NavItem {
 }
 
 export const TEACHER_NAV: NavItem[] = [
-  { label: "Tổng quan", href: "/teacher", icon: LayoutDashboard, exact: true },
-  { label: "Lớp học phần", href: "/teacher/courses", icon: GraduationCap },
-  { label: "Bài nộp", href: "/teacher/submissions", icon: FileCheck2 },
-  { label: "Ngân hàng đề", href: "/teacher/problem-bank", icon: BookOpenCheck },
-  { label: "Quản lý tài khoản", href: "/teacher/accounts", icon: ShieldCheck },
+  { label: "Tổng quan", labelKey: "nav.overview", href: "/teacher", icon: LayoutDashboard, exact: true },
+  { label: "Lớp học phần", labelKey: "nav.courses", href: "/teacher/courses", icon: GraduationCap },
+  { label: "Bài nộp", labelKey: "nav.submissions", href: "/teacher/submissions", icon: FileCheck2 },
+  { label: "Ngân hàng đề", labelKey: "nav.problemBank", href: "/teacher/problem-bank", icon: BookOpenCheck },
+  { label: "Quản lý tài khoản", labelKey: "nav.accounts", href: "/teacher/accounts", icon: ShieldCheck },
 ];
 
 export const STUDENT_NAV: NavItem[] = [
   // SV: "Tổng quan" = trang chủ /student/dashboard
   //     "Lớp học phần" = danh sách + chi tiết lớp
-  { label: "Tổng quan", href: "/student/dashboard", icon: LayoutDashboard, exact: true },
-  { label: "Lớp học phần", href: "/student/classes", icon: GraduationCap },
-  { label: "Lịch sử nộp bài", href: "/student/history", icon: History },
+  //     "Bài tập" = danh sách bài tập gom từ mọi lớp + chi tiết bài tập
+  { label: "Tổng quan", labelKey: "nav.overview", href: "/student/dashboard", icon: LayoutDashboard, exact: true },
+  { label: "Lớp học phần", labelKey: "nav.courses", href: "/student/classes", icon: GraduationCap },
+  { label: "Bài tập", labelKey: "nav.assignments", href: "/student/assignments", icon: BookOpenCheck },
+  { label: "Lịch sử nộp bài", labelKey: "nav.history", href: "/student/history", icon: History },
 ];
 
 export const ADMIN_NAV: NavItem[] = [
-  { label: "Tổng quan", href: "/admin/dashboard", icon: LayoutDashboard, exact: true },
-  { label: "Lớp học phần", href: "/admin/courses", icon: GraduationCap },
-  { label: "Quản lý tài khoản", href: "/admin/accounts", icon: Users },
-  { label: "Bài nộp", href: "/admin/submissions", icon: FileCheck2 },
-  { label: "Cấu hình", href: "/admin/settings", icon: Settings },
+  { label: "Tổng quan", labelKey: "nav.overview", href: "/admin/dashboard", icon: LayoutDashboard, exact: true },
+  { label: "Lớp học phần", labelKey: "nav.courses", href: "/admin/courses", icon: GraduationCap },
+  { label: "Lớp hành chính", href: "/admin/classes", icon: BookOpen },
+  { label: "Quản lý tài khoản", labelKey: "nav.accounts", href: "/admin/accounts", icon: Users },
+  { label: "Bài nộp", labelKey: "nav.submissions", href: "/admin/submissions", icon: FileCheck2 },
+  { label: "Ngân hàng đề", href: "/admin/problem-bank", icon: BookOpenCheck },
+  { label: "Cấu hình", labelKey: "nav.settings", href: "/admin/settings", icon: Settings },
 ];

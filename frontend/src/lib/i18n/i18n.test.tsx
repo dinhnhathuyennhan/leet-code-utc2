@@ -41,7 +41,7 @@ function LocaleHarness({ onRender }: { onRender?: (locale: string) => void }) {
 }
 
 describe("i18n dictionary", () => {
-  it("mọi key đều có cả bản tiếng Việt và tiếng Anh", () => {
+  it("every key has both a Vietnamese and an English translation", () => {
     const missing: string[] = [];
     for (const [key, entry] of Object.entries(DICTIONARY)) {
       if (!entry.vi?.trim()) missing.push(`${key}.vi`);
@@ -50,7 +50,7 @@ describe("i18n dictionary", () => {
     expect(missing).toEqual([]);
   });
 
-  it("bản tiếng Anh khác bản tiếng Việt cho các nhãn chính", () => {
+  it("the English translation differs from the Vietnamese one for the main labels", () => {
     const keyChecks: TranslationKey[] = [
       "nav.overview",
       "nav.courses",
@@ -66,7 +66,7 @@ describe("i18n dictionary", () => {
     }
   });
 
-  it("không có chuỗi tiếng Việt còn sót trong bản tiếng Anh của nhóm nhãn chính", () => {
+  it("no Vietnamese text is left in the English translations of the main label group", () => {
     // Nhãn được dùng trong nav + header — bắt buộc là tiếng Anh.
     const navKeys: TranslationKey[] = [
       "nav.overview",
@@ -83,14 +83,14 @@ describe("i18n dictionary", () => {
 });
 
 describe("i18n locale helpers", () => {
-  it("isLocale nhận diện đúng 2 locale", () => {
+  it("isLocale recognises exactly the 2 supported locales", () => {
     expect(isLocale("vi")).toBe(true);
     expect(isLocale("en")).toBe(true);
     expect(isLocale("fr")).toBe(false);
     expect(isLocale(null)).toBe(false);
   });
 
-  it("default locale là vi", () => {
+  it("the default locale is vi", () => {
     expect(DEFAULT_LOCALE).toBe("vi");
   });
 });
@@ -103,7 +103,7 @@ describe("LocaleProvider", () => {
     resetLocaleStore();
   });
 
-  it("mặc định render bằng tiếng Việt", async () => {
+  it("renders in Vietnamese by default", async () => {
     render(<LocaleHarness />);
 
     expect(await screen.findByTestId("locale")).toHaveTextContent("vi");
@@ -111,7 +111,7 @@ describe("LocaleProvider", () => {
     expect(screen.getByTestId("courses")).toHaveTextContent("Lớp học phần");
   });
 
-  it("đổi sang tiếng Anh sẽ đổi nội dung render", async () => {
+  it("switching to English changes the rendered content", async () => {
     const user = userEvent.setup();
     render(<LocaleHarness />);
 
@@ -123,7 +123,7 @@ describe("LocaleProvider", () => {
     expect(screen.getByTestId("courses")).toHaveTextContent("Courses");
   });
 
-  it("lưu locale vào localStorage khi đổi", async () => {
+  it("saves the locale into localStorage when switching", async () => {
     const user = userEvent.setup();
     render(<LocaleHarness />);
 
@@ -133,7 +133,7 @@ describe("LocaleProvider", () => {
     expect(window.localStorage.getItem(LOCALE_STORAGE_KEY)).toBe("en");
   });
 
-  it("khôi phục locale đã lưu sau khi reload trang", async () => {
+  it("restores the saved locale after a page reload", async () => {
     window.localStorage.setItem(LOCALE_STORAGE_KEY, "en");
 
     render(<LocaleHarness />);
@@ -142,7 +142,7 @@ describe("LocaleProvider", () => {
     expect(screen.getByTestId("title")).toHaveTextContent("Overview");
   });
 
-  it("đồng bộ thuộc tính lang của <html>", async () => {
+  it("syncs the lang attribute of <html>", async () => {
     const user = userEvent.setup();
     render(<LocaleHarness />);
 
@@ -154,7 +154,7 @@ describe("LocaleProvider", () => {
     expect(document.documentElement.lang).toBe("en");
   });
 
-  it("bỏ qua locale không hợp lệ trong localStorage", async () => {
+  it("ignores an invalid locale stored in localStorage", async () => {
     window.localStorage.setItem(LOCALE_STORAGE_KEY, "fr");
 
     render(<LocaleHarness />);
@@ -164,7 +164,7 @@ describe("LocaleProvider", () => {
 });
 
 describe("useTranslation params", () => {
-  it("thay thế tham số {name} trong bản dịch", () => {
+  it("replaces the {name} placeholder in a translation", () => {
     function ParamProbe() {
       const { t } = useLocale();
       return <span data-testid="msg">{t("auth.login.welcome", { name: "An" })}</span>;
@@ -180,8 +180,8 @@ describe("useTranslation params", () => {
   });
 });
 
-describe("useLocale ngoài provider", () => {
-  it("trả về locale mặc định và hàm dịch dùng được", () => {
+describe("useLocale outside the provider", () => {
+  it("returns the default locale and a usable translate function", () => {
     function BareProbe() {
       const { locale, t } = useLocale();
       return <span data-testid="bare">{locale}:{t("nav.overview")}</span>;

@@ -37,7 +37,7 @@ afterEach(() => {
 });
 
 describe("reviewSubmission", () => {
-  it("POST đúng URL theo submission id, không gửi code và gắn Bearer token", async () => {
+  it("POSTs to the submission URL, sends no code and attaches the Bearer token", async () => {
     let seen: { method: string; url: string; body: string; auth: string | null } | null = null;
     server.use(
       http.post(`${API}/ai/review/:id`, async ({ request }) => {
@@ -64,7 +64,7 @@ describe("reviewSubmission", () => {
     expect(seen!.auth).toBe("Bearer token-abc");
   });
 
-  it("encode submission id để không chèn được path khác", async () => {
+  it("encodes the submission id so no other path can be injected", async () => {
     let url = "";
     server.use(
       http.post(`${API}/ai/review/:id`, ({ request }) => {
@@ -78,7 +78,7 @@ describe("reviewSubmission", () => {
     expect(url).toContain("/ai/review/1%2F..%2F..%2Fadmin");
   });
 
-  it("gửi locale hiện tại trong body, mặc định là vi", async () => {
+  it("sends the current locale in the body, defaulting to vi", async () => {
     const bodies: unknown[] = [];
     server.use(
       http.post(`${API}/ai/review/:id`, async ({ request }) => {
@@ -93,7 +93,7 @@ describe("reviewSubmission", () => {
     expect(bodies).toEqual([{ locale: "vi" }, { locale: "en" }]);
   });
 
-  it("dùng timeout dài (200s) thay vì mặc định 10s", async () => {
+  it("uses a long timeout (200s) instead of the default 10s", async () => {
     let timeout: number | undefined;
     const id = axiosInstance.interceptors.request.use((config) => {
       timeout = config.timeout;
@@ -119,7 +119,7 @@ describe("reviewSubmission", () => {
     [409, "SUBMISSION_NOT_ACCEPTED", "Bài nộp phải pass toàn bộ testcase mới được review code"],
     [422, "CODE_TOO_LONG", "Mã nguồn dài hơn 15000 ký tự, AI không review được"],
     [404, "NOT_FOUND", "Không tìm thấy bài nộp"],
-  ])("HTTP %i %s -> AiReviewError giữ nguyên code và message", async (status, code, message) => {
+  ])("HTTP %i %s -> AiReviewError keeps the original code and message", async (status, code, message) => {
     server.use(
       http.post(`${API}/ai/review/:id`, () =>
         HttpResponse.json({ error_code: code, message }, { status }),
@@ -134,7 +134,7 @@ describe("reviewSubmission", () => {
     expect(error).toMatchObject({ status, code, detail: message, message });
   });
 
-  it("lỗi 5xx lạ không lộ chi tiết kỹ thuật lên UI", async () => {
+  it("an unexpected 5xx error does not leak technical details to the UI", async () => {
     server.use(
       http.post(`${API}/ai/review/:id`, () =>
         HttpResponse.json(
@@ -150,7 +150,7 @@ describe("reviewSubmission", () => {
     expect(error.detail).not.toContain("Traceback");
   });
 
-  it("404 không có body vẫn map thành NOT_FOUND", async () => {
+  it("a 404 without a body still maps to NOT_FOUND", async () => {
     server.use(
       http.post(`${API}/ai/review/:id`, () => new HttpResponse(null, { status: 404 })),
     );
@@ -160,7 +160,7 @@ describe("reviewSubmission", () => {
     expect(error.code).toBe("NOT_FOUND");
   });
 
-  it("mất mạng -> code NETWORK, isNetworkError = true", async () => {
+  it("network failure -> code NETWORK, isNetworkError = true", async () => {
     server.use(http.post(`${API}/ai/review/:id`, () => HttpResponse.error()));
 
     const error = (await reviewSubmission(1).catch((e: unknown) => e)) as AiReviewError;

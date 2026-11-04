@@ -93,7 +93,7 @@ def captured(monkeypatch) -> dict:
     return calls
 
 
-def test_locale_mac_dinh_la_tieng_viet(client, session, problem, student, captured):
+def test_default_locale_is_vietnamese(client, session, problem, student, captured):
     """Client cũ không gửi body vẫn nhận review tiếng Việt."""
     submission = _submission(session, problem, student)
     _login(student)
@@ -104,7 +104,7 @@ def test_locale_mac_dinh_la_tieng_viet(client, session, problem, student, captur
     assert captured["data"].locale == "vi"
 
 
-def test_body_rong_cung_dung_tieng_viet(client, session, problem, student, captured):
+def test_empty_body_also_uses_vietnamese(client, session, problem, student, captured):
     submission = _submission(session, problem, student)
     _login(student)
 
@@ -114,7 +114,7 @@ def test_body_rong_cung_dung_tieng_viet(client, session, problem, student, captu
     assert captured["data"].locale == "vi"
 
 
-def test_gui_locale_en_thi_review_bang_tieng_anh(client, session, problem, student, captured):
+def test_sending_locale_en_reviews_in_english(client, session, problem, student, captured):
     submission = _submission(session, problem, student)
     _login(student)
 
@@ -124,7 +124,7 @@ def test_gui_locale_en_thi_review_bang_tieng_anh(client, session, problem, stude
     assert captured["data"].locale == "en"
 
 
-def test_locale_khong_hop_le_tra_422(client, session, problem, student, captured):
+def test_invalid_locale_returns_422(client, session, problem, student, captured):
     submission = _submission(session, problem, student)
     _login(student)
 
@@ -134,7 +134,7 @@ def test_locale_khong_hop_le_tra_422(client, session, problem, student, captured
     assert "data" not in captured
 
 
-def test_body_chi_doi_duoc_locale_khong_doi_duoc_code(client, session, problem, student, captured):
+def test_body_can_only_change_locale_not_code(client, session, problem, student, captured):
     """Body có `code`/`language` lạ phải bị bỏ qua (extra=ignore), không ghi đè DB."""
     submission = _submission(session, problem, student, code="print('da nop')")
     _login(student)
@@ -153,7 +153,7 @@ def _url(submission) -> str:
     return f"/ai/review/{submission.submission_id}"
 
 
-def test_bai_pass_het_duoc_review_va_code_lay_tu_db(client, session, problem, student, captured):
+def test_accepted_submission_is_reviewed_with_code_from_db(client, session, problem, student, captured):
     code = "def is_prime(n):\n    for i in range(2, n):\n        if n % i == 0: return False\n    return True"
     submission = _submission(session, problem, student, code=code)
     _login(student)
@@ -169,7 +169,7 @@ def test_bai_pass_het_duoc_review_va_code_lay_tu_db(client, session, problem, st
     assert data.constraints == "1 <= n <= 10^9"
 
 
-def test_body_cua_client_bi_bo_qua(client, session, problem, student, captured):
+def test_client_body_is_ignored(client, session, problem, student, captured):
     """Client không thể thay code: endpoint luôn dùng code của bài nộp."""
     submission = _submission(session, problem, student, code="print('da nop')")
     _login(student)
@@ -192,7 +192,7 @@ def test_body_cua_client_bi_bo_qua(client, session, problem, student, captured):
         ("accepted", 2),
     ],
 )
-def test_bai_chua_pass_het_tra_409(client, session, problem, student, captured, status, passed_count):
+def test_submission_not_fully_passed_returns_409(client, session, problem, student, captured, status, passed_count):
     submission = _submission(session, problem, student, status=status, passed_count=passed_count)
     _login(student)
 
@@ -203,7 +203,7 @@ def test_bai_chua_pass_het_tra_409(client, session, problem, student, captured, 
     assert "data" not in captured
 
 
-def test_bai_khong_co_testcase_khong_duoc_review(client, session, student, captured):
+def test_submission_without_testcases_is_not_reviewed(client, session, student, captured):
     teacher = make_user(session, "GV002", Role.TEACHER)
     empty = make_problem(session, make_lesson(session, make_course(session, teacher, "CS102")))
     submission = _submission(session, empty, student, passed_count=0)
@@ -215,7 +215,7 @@ def test_bai_khong_co_testcase_khong_duoc_review(client, session, student, captu
     assert "data" not in captured
 
 
-def test_bai_cua_sinh_vien_khac_tra_404(client, session, problem, student, captured):
+def test_other_student_submission_returns_404(client, session, problem, student, captured):
     submission = _submission(session, problem, student)
     _login(make_user(session, "SV002", Role.STUDENT))
 
@@ -225,7 +225,7 @@ def test_bai_cua_sinh_vien_khac_tra_404(client, session, problem, student, captu
     assert "data" not in captured
 
 
-def test_bai_khong_ton_tai_tra_404(client, student, captured):
+def test_nonexistent_submission_returns_404(client, student, captured):
     _login(student)
 
     response = client.post("/ai/review/999999")
@@ -234,7 +234,7 @@ def test_bai_khong_ton_tai_tra_404(client, student, captured):
 
 
 @pytest.mark.parametrize("role_id", [Role.ADMIN, Role.TEACHER, 99])
-def test_khong_phai_sinh_vien_bi_chan_403(client, session, problem, student, captured, role_id):
+def test_non_student_role_is_forbidden_403(client, session, problem, student, captured, role_id):
     submission = _submission(session, problem, student)
     _login(make_user(session, f"U{role_id}", role_id))
 
@@ -245,7 +245,7 @@ def test_khong_phai_sinh_vien_bi_chan_403(client, session, problem, student, cap
     assert "data" not in captured
 
 
-def test_chua_dang_nhap_bi_chan(client, session, problem, student, captured):
+def test_unauthenticated_request_is_blocked(client, session, problem, student, captured):
     submission = _submission(session, problem, student)
     app.dependency_overrides.pop(get_current_user, None)
 
@@ -259,7 +259,7 @@ def test_chua_dang_nhap_bi_chan(client, session, problem, student, captured):
 
 
 @pytest.mark.parametrize("role_id", [Role.ADMIN, Role.TEACHER, Role.STUDENT])
-def test_route_free_form_cho_phep_ca_3_vai_tro(client, session, captured, role_id):
+def test_free_form_route_allows_all_three_roles(client, session, captured, role_id):
     _login(make_user(session, f"F{role_id}", role_id))
 
     response = client.post("/ai/review", json={"code": "print(1)", "language": "python"})
@@ -268,7 +268,7 @@ def test_route_free_form_cho_phep_ca_3_vai_tro(client, session, captured, role_i
     assert captured["data"].code == "print(1)"
 
 
-def test_route_free_form_role_la_bi_chan_403(client, session, captured):
+def test_free_form_route_unknown_role_is_forbidden_403(client, session, captured):
     _login(make_user(session, "F99", 99))
 
     response = client.post("/ai/review", json={"code": "print(1)"})
@@ -278,7 +278,7 @@ def test_route_free_form_role_la_bi_chan_403(client, session, captured):
     assert "data" not in captured
 
 
-def test_route_free_form_chua_dang_nhap_bi_chan(client, session, captured):
+def test_free_form_route_unauthenticated_is_blocked(client, session, captured):
     app.dependency_overrides.pop(get_current_user, None)
 
     response = client.post("/ai/review", json={"code": "print(1)"})
@@ -287,7 +287,7 @@ def test_route_free_form_chua_dang_nhap_bi_chan(client, session, captured):
     assert "data" not in captured
 
 
-def test_code_qua_dai_tra_422(client, session, problem, student, captured):
+def test_too_long_code_returns_422(client, session, problem, student, captured):
     submission = _submission(session, problem, student, code="x" * (MAX_REVIEW_CODE_CHARS + 1))
     _login(student)
 
@@ -298,7 +298,7 @@ def test_code_qua_dai_tra_422(client, session, problem, student, captured):
     assert "data" not in captured
 
 
-def test_endpoint_nhan_code_tuy_y_quay_lai(client, student, captured):
+def test_endpoint_accepts_arbitrary_code(client, student, captured):
     """`POST /ai/review` (không có submission_id) review code tuỳ ý — route của admin.
 
     Route này tồn tại ở develop (dùng cho admin/teacher), nên phải giữ lại.
@@ -315,7 +315,7 @@ def test_endpoint_nhan_code_tuy_y_quay_lai(client, student, captured):
     assert captured["data"].free_form is True
 
 
-def test_body_thieu_code_tra_422(client, student):
+def test_missing_code_returns_422(client, student):
     _login(student)
 
     response = client.post("/ai/review", json={"language": "python"})
@@ -324,7 +324,7 @@ def test_body_thieu_code_tra_422(client, student):
     assert response.json()["error_code"] == "VALIDATION_ERROR"
 
 
-def test_loi_service_di_qua_global_exception_handler(client, session, problem, student, monkeypatch):
+def test_service_error_goes_through_global_exception_handler(client, session, problem, student, monkeypatch):
     async def review(data, transport=None):
         raise AIReviewUnavailableError("Không thể kết nối AI Server.")
 

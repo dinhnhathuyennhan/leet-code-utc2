@@ -6,7 +6,7 @@ import { describe, expect, it } from "vitest";
 import { canReviewCode, scoreOutOfTen, submissionStatusMeta } from "./submission-status";
 
 describe("canReviewCode", () => {
-  it("cho review khi accepted và pass hết testcase", () => {
+  it("allows review when accepted and all testcases passed", () => {
     expect(canReviewCode({ status: "accepted", passed_count: 3, total_testcases: 3 })).toBe(true);
   });
 
@@ -25,7 +25,7 @@ describe("canReviewCode", () => {
     ["accepted", 0, 0],
     // wrong_answer mà passed_count lại bằng total (dữ liệu bất thường) vẫn không cho
     ["wrong_answer", 3, 3],
-  ])('không cho review: status="%s", passed=%i/%i', (status, passed, total) => {
+  ])('does not allow review: status="%s", passed=%i/%i', (status, passed, total) => {
     expect(canReviewCode({ status, passed_count: passed, total_testcases: total })).toBe(false);
   });
 

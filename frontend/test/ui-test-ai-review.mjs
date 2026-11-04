@@ -82,7 +82,7 @@ async function main() {
   /** Ghi lại mọi request gọi AI review của trang. */
   const aiRequests = [];
   page.on("request", (request) => {
-    if (request.url().includes("/ai-review")) {
+    if (request.url().includes("/ai/review")) {
       aiRequests.push({ url: request.url(), method: request.method(), body: request.postData() });
     }
   });
@@ -183,8 +183,8 @@ async function main() {
     const seconds = ((Date.now() - started) / 1000).toFixed(1);
     check("bam: goi AI dung 1 lan", aiRequests.length === 1, `requests=${aiRequests.length}`);
     const firstRequest = aiRequests[0];
-    check("request: POST /submissions/{id}/ai-review",
-      firstRequest?.method === "POST" && /\/submissions\/\d+\/ai-review$/.test(firstRequest.url), firstRequest?.url);
+    check("request: POST /ai/review/{id}",
+      firstRequest?.method === "POST" && /\/ai\/review\/\d+$/.test(firstRequest.url), firstRequest?.url);
     check("request: KHONG gui code len server", !firstRequest?.body || !firstRequest.body.includes("sys.stdin"));
     check("ket qua AI hien thi", await resultCard().isVisible(), `${seconds}s`);
 
@@ -209,7 +209,7 @@ async function main() {
     check("nop lai sai: khong co nut Review code", (await reviewButton().count()) === 0);
 
     // ── 4. Trang chi tiết bài nộp ──────────────────────────────────────
-    const acceptedId = Number(firstRequest.url.match(/submissions\/(\d+)\/ai-review/)[1]);
+    const acceptedId = Number(firstRequest.url.match(/ai\/review\/(\d+)/)[1]);
     const mine = await (await api.get(`${API}/submissions/mine?problem_id=${PROBLEM_ID}`, {
       headers: { Authorization: `Bearer ${token}` },
     })).json();
@@ -227,7 +227,7 @@ async function main() {
     await resultCard().waitFor({ timeout: AI_TIMEOUT_MS });
     check("chi tiet bai dung: review thanh cong", await resultCard().isVisible());
     check("chi tiet bai dung: goi dung bai nop",
-      aiRequests.length === 1 && aiRequests[0].url.endsWith(`/submissions/${acceptedId}/ai-review`));
+      aiRequests.length === 1 && aiRequests[0].url.endsWith(`/ai/review/${acceptedId}`));
     await shot(page, "06-detail-result");
 
     await page.getByRole("button", { name: "Đóng AI review" }).click();
@@ -236,7 +236,7 @@ async function main() {
 
     // ── 5. Lỗi giả lập -> thẻ lỗi + Thử lại ─────────────────────────────
     let failOnce = true;
-    await page.route("**/ai-review", async (route) => {
+    await page.route("**/ai/review/*", async (route) => {
       if (failOnce) {
         failOnce = false;
         await route.fulfill({
@@ -260,7 +260,7 @@ async function main() {
     await alert.getByRole("button", { name: /Thử lại/ }).click();
     await resultCard().waitFor({ timeout: AI_TIMEOUT_MS });
     check("Thu lai: thanh cong, the loi bien mat", (await section.getByRole("alert").count()) === 0);
-    await page.unroute("**/ai-review");
+    await page.unroute("**/ai/review/*");
 
     // ── 6a. Tiếng Anh ──────────────────────────────────────────────────
     await page.evaluate(() => window.localStorage.setItem("utc2:locale", "en"));
@@ -305,16 +305,16 @@ async function main() {
 
     // ── 7. Gọi API trực tiếp (không qua UI) ────────────────────────────
     const auth = { Authorization: `Bearer ${token}` };
-    const notAccepted = await api.post(`${API}/submissions/${wrongSubmission.id}/ai-review`, { headers: auth });
+    const notAccepted = await api.post(`${API}/ai/review/${wrongSubmission.id}`, { headers: auth });
     check("API: bai sai -> 409 SUBMISSION_NOT_ACCEPTED",
       notAccepted.status() === 409 && (await notAccepted.json()).error_code === "SUBMISSION_NOT_ACCEPTED");
 
-    const noToken = await api.post(`${API}/submissions/${acceptedId}/ai-review`);
+    const noToken = await api.post(`${API}/ai/review/${acceptedId}`);
     check("API: khong token -> 401", noToken.status() === 401, String(noToken.status()));
 
     const other = await apiLogin(api, OTHER_STUDENT_EMAIL);
     if (other.token) {
-      const foreign = await api.post(`${API}/submissions/${acceptedId}/ai-review`, {
+      const foreign = await api.post(`${API}/ai/review/${acceptedId}`, {
         headers: { Authorization: `Bearer ${other.token}` },
       });
       check("API: bai cua sinh vien khac -> 404", foreign.status() === 404, String(foreign.status()));
@@ -322,11 +322,12 @@ async function main() {
       check("API: dang nhap sinh vien thu hai", false, OTHER_STUDENT_EMAIL);
     }
 
+    // Route nhận code tuỳ ý đã bị gỡ: chỉ review được code của bài nộp đã pass hết.
     const oldEndpoint = await api.post(`${API}/ai/review`, {
       headers: auth,
       data: { code: "print(1)", language: "python" },
     });
-    check("API: endpoint cu /ai/review da go", [404, 405].includes(oldEndpoint.status()), String(oldEndpoint.status()));
+    check("API: route nhan code tuy y da go", [404, 405].includes(oldEndpoint.status()), String(oldEndpoint.status()));
   } catch (error) {
     check("khong co exception", false, String(error));
     await shot(page, "99-exception").catch(() => {});

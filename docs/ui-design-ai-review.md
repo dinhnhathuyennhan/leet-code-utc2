@@ -126,7 +126,7 @@ Nội dung review (summary, giải thích, issues, suggestion) do model sinh ra,
 ngôn ngữ phải do prompt quyết định — **không dịch ở client** (review là văn xuôi
 kỹ thuật, dịch máy sẽ sai thuật ngữ và không đồng bộ với Big O).
 
-`POST /submissions/{id}/ai-review` nhận body tuỳ chọn `{"locale": "vi" | "en"}`.
+`POST /ai/review/{submission_id}` nhận body tuỳ chọn `{"locale": "vi" | "en"}`.
 Backend chọn `SYSTEM_PROMPTS[locale]` ở `app/modules/ai_review/prompts.py`; body
 rỗng hoặc không gửi (client cũ) dùng `"vi"`. `locale` **không** ảnh hưởng code
 đem đi review — code vẫn lấy từ DB theo `submission_id`.
@@ -150,7 +150,9 @@ kết quả, lỗi, và cả lượt đang chạy đều được cache theo t�
 
 ## API backend
 
-`POST /submissions/{submission_id}/ai-review` (`backend/app/api/ai_review.py`). Endpoint cũ `POST /ai/review` (nhận code tuỳ ý) đã bị gỡ.
+Có hai route AI review:
+
+### 1. `POST /ai/review/{submission_id}` — của sinh viên (feature này)
 
 - **Quyền:** chỉ Student, và chỉ bài nộp của chính mình.
 - **Request body:** tuỳ chọn `{"locale": "vi" | "en"}` — chỉ chọn ngôn ngữ của nội dung review. Code, ngôn ngữ lập trình, đề bài và ràng buộc đều lấy từ DB theo `submission_id`, client không gửi code được. Body rỗng dùng mặc định `"vi"`.
@@ -168,6 +170,13 @@ kết quả, lỗi, và cả lượt đang chạy đều được cache theo t�
 | 409 | `SUBMISSION_NOT_ACCEPTED` | Bài chưa pass hết testcase | Không xảy ra nếu UI ẩn nút đúng điều kiện |
 | 422 | `CODE_TOO_LONG` | Code đã nộp dài hơn 15.000 ký tự | Thông báo lỗi, không có nút Thử lại |
 | 502/503/504 | `AI_*` | Lỗi phía AI (bảng ở mục trên) | Thông báo + nút Thử lại |
+
+### 2. `POST /ai/review` — review code tuỳ ý (admin/teacher, có sẵn ở develop)
+
+- **Quyền:** `ADMIN`, `TEACHER`, `STUDENT` (role khác bị chặn 403 `FORBIDDEN`).
+- **Request body:** `{"code": "...", "language": "python"}` — giữ đúng shape như develop.
+- **Prompt:** dùng `SYSTEM_PROMPT` trung tính của develop (`prompts.py`), **không** giả định code đã pass testcase (code do client gửi lên, chưa chắc đã được chấm). Luôn trả về tiếng Việt.
+- Route này không nằm trong phạm vi feature sinh viên — giữ lại để không phá chức năng của phần admin.
 
 Kết quả chạy thật với `qwen2.5-coder:7b`:
 - Bài số nguyên tố duyệt tới `n-1`: AI trả `O(n) → O(sqrt(n))`, đề xuất chỉ duyệt ước tới `sqrt(n)`.

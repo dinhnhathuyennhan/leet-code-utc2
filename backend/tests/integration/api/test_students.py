@@ -52,7 +52,7 @@ def one_student_file(class_list_xlsx) -> bytes:
 
 
 @pytest.mark.parametrize("role_id", [Role.ADMIN, Role.TEACHER])
-def test_admin_and_teacher_can_import(client, one_student_file, role_id):
+def test_admin_and_teacher_can_import(client, session, one_student_file, role_id):
     _login_as(role_id)
 
     response = _upload(client, one_student_file)
@@ -61,6 +61,7 @@ def test_admin_and_teacher_can_import(client, one_student_file, role_id):
     body = response.json()
     assert body["created"] == [
         {
+            "user_id": str(session.exec(select(User).where(User.student_code == "6751071001")).one().user_id),
             "student_code": "6751071001",
             "full_name": "Nguyễn Văn An",
             "email": "6751071001@st.utc2.edu.vn",

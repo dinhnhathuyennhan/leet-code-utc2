@@ -24,6 +24,12 @@ Provide:
 5. An optimization direction: WHAT idea or technique would make it faster or lighter, and WHY it works.
 6. The time and space complexity expected after applying that optimization.
 
+For each improvement, name the algorithm or data structure to change, explain why it
+reduces time or memory usage, and compare current and expected Big O complexity.
+If no valid asymptotic improvement is supported by the code, say so explicitly and
+offer only practical implementation improvements. Do not claim a lower complexity
+without explaining the required change.
+
 Rules:
 - Always write every text field in Vietnamese. Keep Big O notation and standard technical terms (hash set, two pointers, sqrt(n), ...).
 - Do NOT discuss correctness, bugs, edge cases or test results: the code is already accepted.

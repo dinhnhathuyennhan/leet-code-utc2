@@ -27,7 +27,6 @@ _DEFAULT_LANGUAGES: dict[str, dict] = {
     "java": {
         "judge0_id": 62,
         "cpu_time_factor": 2,
-        "memory_limit_kb": 6_144_000,
         "compiler_options": "-J-XX:CompressedClassSpaceSize=64m -J-XX:ReservedCodeCacheSize=64m -J-Xmx256m",
     },
 }

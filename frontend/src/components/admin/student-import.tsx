@@ -235,8 +235,8 @@ export function StudentImport() {
                   </thead>
                   <tbody>
                     {result.created.map((row) => (
-                      <tr key={row.user_id} className="border-t">
-                        <td className="px-4 py-3 font-medium">{row.user_id}</td>
+                      <tr key={row.student_code} className="border-t">
+                        <td className="px-4 py-3 font-medium">{row.student_code}</td>
                         <td className="px-4 py-3">{row.full_name}</td>
                         <td className="px-4 py-3">{row.class_id}</td>
                         <td className="px-4 py-3">{row.email}</td>
@@ -270,12 +270,12 @@ export function StudentImport() {
                 <tbody>
                   {result.skipped.map((row) => (
                     <tr
-                      key={`${row.sheet}-${row.row}-${row.user_id}`}
+                      key={`${row.sheet}-${row.row}-${row.student_code}`}
                       className="border-t border-amber-100"
                     >
                       <td className="px-4 py-3">{row.sheet}</td>
                       <td className="px-4 py-3">{row.row}</td>
-                      <td className="px-4 py-3">{row.user_id}</td>
+                      <td className="px-4 py-3">{row.student_code}</td>
                       <td className="px-4 py-3 text-amber-700">{row.reason}</td>
                     </tr>
                   ))}
@@ -302,12 +302,12 @@ export function StudentImport() {
                 <tbody>
                   {result.errors.map((row) => (
                     <tr
-                      key={`${row.sheet}-${row.row}-${row.user_id ?? ""}`}
+                      key={`${row.sheet}-${row.row}-${row.student_code ?? ""}`}
                       className="border-t border-rose-100"
                     >
                       <td className="px-4 py-3">{row.sheet}</td>
                       <td className="px-4 py-3">{row.row}</td>
-                      <td className="px-4 py-3">{row.user_id || "—"}</td>
+                      <td className="px-4 py-3">{row.student_code || "—"}</td>
                       <td className="px-4 py-3 text-rose-700">{row.reason}</td>
                     </tr>
                   ))}

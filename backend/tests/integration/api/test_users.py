@@ -11,6 +11,7 @@ import uuid
 
 import pytest
 from fastapi.testclient import TestClient
+from sqlmodel import select
 
 from app.core.database import get_session
 from app.core.dependencies import Role, get_current_user
@@ -128,3 +129,36 @@ def test_create_student_requires_login(client, class_68):
     response = client.post("/students", json=STUDENT_BODY)
 
     assert response.status_code == 401
+
+
+@pytest.mark.parametrize("endpoint, body", [("/teachers", TEACHER_BODY), ("/students", STUDENT_BODY)])
+@pytest.mark.parametrize("email", [
+    "account@gmail.com",
+    "account@utc2.edu.vn",
+    "account@tc.utc2.edu.vn",
+    "account@fake-st.utc2.edu.vn",
+    "account@sub.st.utc2.edu.vn",
+    "account@st.utc2.edu.vn.example.com",
+    "account@st.utc2.edu.vn@evil.com",
+    "not-an-email",
+])
+def test_create_account_rejects_invalid_email_domain(client, session, class_68, endpoint, body, email):
+    _login_as(Role.ADMIN)
+
+    response = client.post(endpoint, json={**body, "email": email})
+
+    assert response.status_code == 422
+    assert response.json()["error_code"] == "INVALID_FORMAT"
+    assert session.exec(select(User)).all() == []
+
+
+@pytest.mark.parametrize("endpoint, body", [("/teachers", TEACHER_BODY), ("/students", STUDENT_BODY)])
+def test_create_account_accepts_case_insensitive_email_domain(client, session, class_68, endpoint, body):
+    _login_as(Role.ADMIN)
+    email = "Account@ST.UTC2.EDU.VN"
+
+    response = client.post(endpoint, json={**body, "email": email})
+
+    assert response.status_code == 201, response.text
+    created_id = uuid.UUID(response.json()["user_id"])
+    assert session.get(User, created_id).email == email

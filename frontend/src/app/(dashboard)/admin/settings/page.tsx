@@ -1,5 +1,5 @@
-import { AdminPlaceholder } from "@/components/admin/admin-placeholder";
+import { AdminSettings } from "@/components/admin/admin-settings";
 
 export default function AdminSettingsPage() {
-  return <AdminPlaceholder title="Cấu hình" />;
+  return <AdminSettings />;
 }

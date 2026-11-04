@@ -1,6 +1,7 @@
 import {
   FileCheck2,
   BookOpenCheck,
+  BookOpen,
   GraduationCap,
   History,
   LayoutDashboard,
@@ -46,7 +47,9 @@ export const STUDENT_NAV: NavItem[] = [
 export const ADMIN_NAV: NavItem[] = [
   { label: "Tổng quan", labelKey: "nav.overview", href: "/admin/dashboard", icon: LayoutDashboard, exact: true },
   { label: "Lớp học phần", labelKey: "nav.courses", href: "/admin/courses", icon: GraduationCap },
+  { label: "Lớp hành chính", href: "/admin/classes", icon: BookOpen },
   { label: "Quản lý tài khoản", labelKey: "nav.accounts", href: "/admin/accounts", icon: Users },
   { label: "Bài nộp", labelKey: "nav.submissions", href: "/admin/submissions", icon: FileCheck2 },
+  { label: "Ngân hàng đề", href: "/admin/problem-bank", icon: BookOpenCheck },
   { label: "Cấu hình", labelKey: "nav.settings", href: "/admin/settings", icon: Settings },
 ];

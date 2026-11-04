@@ -1,6 +1,6 @@
-from typing import Literal
+from typing import Annotated, Literal
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, StringConstraints, field_validator
 
 # Giới hạn độ dài từng phần đưa vào prompt. Tổng (system prompt + đề + code +
 # phần model sinh ra) phải nằm trong OLLAMA_NUM_CTX, nếu không Ollama cắt đầu
@@ -18,7 +18,10 @@ class AIReviewRequest(BaseModel):
 
     model_config = ConfigDict(str_strip_whitespace=True)
 
-    code: str = Field(min_length=1, max_length=MAX_REVIEW_CODE_CHARS)
+    code: Annotated[str, StringConstraints(strip_whitespace=False)] = Field(
+        min_length=1,
+        max_length=MAX_REVIEW_CODE_CHARS,
+    )
     # language được nhúng thẳng vào prompt: chỉ cho tên ngôn ngữ (chữ, số, + # . _ -
     # và khoảng trắng) để không chèn được dòng chỉ thị mới vào prompt.
     language: str = Field(
@@ -37,6 +40,18 @@ class AIReviewRequest(BaseModel):
     # nộp đã pass testcase. Dùng để service chọn prompt trung tính (không nói
     # "đã pass ALL testcases"), vì code lúc đó chưa chắc đã được chấm.
     free_form: bool = False
+
+    @field_validator("code")
+    @classmethod
+    def validate_code(cls, value: str) -> str:
+        if not value.strip():
+            raise ValueError("Mã nguồn không được để trống")
+        return value
+
+    @field_validator("language")
+    @classmethod
+    def normalize_language(cls, value: str) -> str:
+        return value.strip()
 
 
 class AIReviewRequestBody(BaseModel):
@@ -70,6 +85,16 @@ class AIReviewFreeFormRequest(BaseModel):
         max_length=30,
         pattern=r"^[A-Za-z0-9+#._ -]+$",
     )
+
+
+class AdminPreviewReviewRequest(AIReviewRequest):
+    preview_token: str = Field(min_length=1)
+
+
+class AIConnectionResponse(BaseModel):
+    connected: bool
+    model: str
+    model_available: bool
 
 
 class OptimizationResult(BaseModel):

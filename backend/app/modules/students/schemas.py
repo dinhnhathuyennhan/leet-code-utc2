@@ -50,6 +50,7 @@ class StudentImportRow(BaseModel):
 class StudentImportCreatedRow(BaseModel):
     """Một sinh viên đã được tạo tài khoản."""
 
+    user_id: str
     student_code: str
     full_name: str
     email: str
@@ -60,6 +61,7 @@ class StudentImportCreatedRow(BaseModel):
 class StudentImportSkippedRow(BaseModel):
     """Một sinh viên bị bỏ qua vì đã có tài khoản (không phải lỗi)."""
 
+    user_id: str
     sheet: str
     row: int
     student_code: str

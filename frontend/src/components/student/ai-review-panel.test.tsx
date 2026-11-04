@@ -16,7 +16,7 @@ import { renderWithProviders } from "@/test/utils/render";
 import { LocaleProvider, resetLocaleStore, useLocale } from "@/lib/i18n";
 import type { AiReviewResult } from "@/lib/types/ai-review";
 
-const URL = "http://localhost:8000/submissions/:id/ai-review";
+const URL = "http://localhost:8000/ai/review/:id";
 
 const PRIME_REVIEW: AiReviewResult = {
   time_complexity: "O(n)",
@@ -120,7 +120,7 @@ describe("AiReviewSection — chỉ gọi AI khi bấm", () => {
     await user.click(reviewButton());
 
     await screen.findByTestId("ai-review-result");
-    expect(calls).toEqual(["http://localhost:8000/submissions/7/ai-review"]);
+    expect(calls).toEqual(["http://localhost:8000/ai/review/7"]);
   });
 
   it("bấm liên tục khi đang chạy cũng chỉ gửi 1 request", async () => {

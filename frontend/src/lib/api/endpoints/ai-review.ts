@@ -86,7 +86,7 @@ export async function reviewSubmission(
 ): Promise<AiReviewResult> {
   try {
     const response = await axiosInstance.post<AiReviewResult>(
-      `/submissions/${encodeURIComponent(String(submissionId))}/ai-review`,
+      `/ai/review/${encodeURIComponent(String(submissionId))}`,
       { locale },
       { timeout: AI_REVIEW_TIMEOUT_MS },
     );

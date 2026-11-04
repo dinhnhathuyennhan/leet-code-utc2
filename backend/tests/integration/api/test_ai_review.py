@@ -1,4 +1,4 @@
-"""Test tầng HTTP của ``POST /submissions/{id}/ai-review``.
+"""Test tầng HTTP của ``POST /ai/review/{id}``.
 
 Logic gọi Ollama đã có test ở ``test_ai_review_service.py``; file này kiểm tra
 điều kiện nghiệp vụ: chỉ sinh viên chủ bài nộp, chỉ bài đã pass hết testcase,
@@ -150,7 +150,7 @@ def test_body_chi_doi_duoc_locale_khong_doi_duoc_code(client, session, problem, 
 
 
 def _url(submission) -> str:
-    return f"/submissions/{submission.submission_id}/ai-review"
+    return f"/ai/review/{submission.submission_id}"
 
 
 def test_bai_pass_het_duoc_review_va_code_lay_tu_db(client, session, problem, student, captured):
@@ -228,7 +228,7 @@ def test_bai_cua_sinh_vien_khac_tra_404(client, session, problem, student, captu
 def test_bai_khong_ton_tai_tra_404(client, student, captured):
     _login(student)
 
-    response = client.post("/submissions/999999/ai-review")
+    response = client.post("/ai/review/999999")
 
     assert response.status_code == 404
 
@@ -255,6 +255,38 @@ def test_chua_dang_nhap_bi_chan(client, session, problem, student, captured):
     assert "data" not in captured
 
 
+# ─── Route free-form (admin/teacher): POST /ai/review ───────────────────────
+
+
+@pytest.mark.parametrize("role_id", [Role.ADMIN, Role.TEACHER, Role.STUDENT])
+def test_route_free_form_cho_phep_ca_3_vai_tro(client, session, captured, role_id):
+    _login(make_user(session, f"F{role_id}", role_id))
+
+    response = client.post("/ai/review", json={"code": "print(1)", "language": "python"})
+
+    assert response.status_code == 200
+    assert captured["data"].code == "print(1)"
+
+
+def test_route_free_form_role_la_bi_chan_403(client, session, captured):
+    _login(make_user(session, "F99", 99))
+
+    response = client.post("/ai/review", json={"code": "print(1)"})
+
+    assert response.status_code == 403
+    assert response.json()["error_code"] == "FORBIDDEN"
+    assert "data" not in captured
+
+
+def test_route_free_form_chua_dang_nhap_bi_chan(client, session, captured):
+    app.dependency_overrides.pop(get_current_user, None)
+
+    response = client.post("/ai/review", json={"code": "print(1)"})
+
+    assert response.status_code in (401, 403)
+    assert "data" not in captured
+
+
 def test_code_qua_dai_tra_422(client, session, problem, student, captured):
     submission = _submission(session, problem, student, code="x" * (MAX_REVIEW_CODE_CHARS + 1))
     _login(student)
@@ -266,13 +298,30 @@ def test_code_qua_dai_tra_422(client, session, problem, student, captured):
     assert "data" not in captured
 
 
-def test_endpoint_cu_da_bi_go(client, student):
-    """`POST /ai/review` nhận code tuỳ ý nên đã bỏ, tránh vượt qua điều kiện pass hết test."""
+def test_endpoint_nhan_code_tuy_y_quay_lai(client, student, captured):
+    """`POST /ai/review` (không có submission_id) review code tuỳ ý — route của admin.
+
+    Route này tồn tại ở develop (dùng cho admin/teacher), nên phải giữ lại.
+    Sinh viên vẫn dùng `/ai/review/{submission_id}` để review bài nộp đã pass.
+    """
     _login(student)
 
-    response = client.post("/ai/review", json={"code": "print(1)"})
+    response = client.post("/ai/review", json={"code": "print(1)", "language": "python"})
 
-    assert response.status_code in (404, 405)
+    assert response.status_code == 200
+    assert captured["data"].code == "print(1)"
+    assert captured["data"].language == "python"
+    # Code tuỳ ý chưa chắc đã pass testcase -> không giả định "passed ALL".
+    assert captured["data"].free_form is True
+
+
+def test_body_thieu_code_tra_422(client, student):
+    _login(student)
+
+    response = client.post("/ai/review", json={"language": "python"})
+
+    assert response.status_code == 422
+    assert response.json()["error_code"] == "VALIDATION_ERROR"
 
 
 def test_loi_service_di_qua_global_exception_handler(client, session, problem, student, monkeypatch):

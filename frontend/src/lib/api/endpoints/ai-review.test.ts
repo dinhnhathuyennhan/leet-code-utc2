@@ -40,7 +40,7 @@ describe("reviewSubmission", () => {
   it("POST đúng URL theo submission id, không gửi code và gắn Bearer token", async () => {
     let seen: { method: string; url: string; body: string; auth: string | null } | null = null;
     server.use(
-      http.post(`${API}/submissions/:id/ai-review`, async ({ request }) => {
+      http.post(`${API}/ai/review/:id`, async ({ request }) => {
         seen = {
           method: request.method,
           url: request.url,
@@ -57,7 +57,7 @@ describe("reviewSubmission", () => {
     expect(result).toEqual(REVIEW);
     expect(seen).not.toBeNull();
     expect(seen!.method).toBe("POST");
-    expect(seen!.url).toBe(`${API}/submissions/42/ai-review`);
+    expect(seen!.url).toBe(`${API}/ai/review/42`);
     // Backend tự lấy code từ DB: client chỉ gửi ngôn ngữ hiển thị, không gửi code.
     expect(JSON.parse(seen!.body)).toEqual({ locale: "vi" });
     expect(seen!.body).not.toContain("submitted_code");
@@ -67,7 +67,7 @@ describe("reviewSubmission", () => {
   it("encode submission id để không chèn được path khác", async () => {
     let url = "";
     server.use(
-      http.post(`${API}/submissions/:id/ai-review`, ({ request }) => {
+      http.post(`${API}/ai/review/:id`, ({ request }) => {
         url = request.url;
         return HttpResponse.json(REVIEW);
       }),
@@ -75,13 +75,13 @@ describe("reviewSubmission", () => {
 
     await reviewSubmission("1/../../admin");
 
-    expect(url).toContain("/submissions/1%2F..%2F..%2Fadmin/ai-review");
+    expect(url).toContain("/ai/review/1%2F..%2F..%2Fadmin");
   });
 
   it("gửi locale hiện tại trong body, mặc định là vi", async () => {
     const bodies: unknown[] = [];
     server.use(
-      http.post(`${API}/submissions/:id/ai-review`, async ({ request }) => {
+      http.post(`${API}/ai/review/:id`, async ({ request }) => {
         bodies.push(await request.json());
         return HttpResponse.json(REVIEW);
       }),
@@ -99,7 +99,7 @@ describe("reviewSubmission", () => {
       timeout = config.timeout;
       return config;
     });
-    server.use(http.post(`${API}/submissions/:id/ai-review`, () => HttpResponse.json(REVIEW)));
+    server.use(http.post(`${API}/ai/review/:id`, () => HttpResponse.json(REVIEW)));
 
     try {
       await reviewSubmission(1);
@@ -121,7 +121,7 @@ describe("reviewSubmission", () => {
     [404, "NOT_FOUND", "Không tìm thấy bài nộp"],
   ])("HTTP %i %s -> AiReviewError giữ nguyên code và message", async (status, code, message) => {
     server.use(
-      http.post(`${API}/submissions/:id/ai-review`, () =>
+      http.post(`${API}/ai/review/:id`, () =>
         HttpResponse.json({ error_code: code, message }, { status }),
       ),
     );
@@ -136,7 +136,7 @@ describe("reviewSubmission", () => {
 
   it("lỗi 5xx lạ không lộ chi tiết kỹ thuật lên UI", async () => {
     server.use(
-      http.post(`${API}/submissions/:id/ai-review`, () =>
+      http.post(`${API}/ai/review/:id`, () =>
         HttpResponse.json(
           { error_code: "INTERNAL_ERROR", message: "Traceback: sqlalchemy.exc.OperationalError" },
           { status: 500 },
@@ -152,7 +152,7 @@ describe("reviewSubmission", () => {
 
   it("404 không có body vẫn map thành NOT_FOUND", async () => {
     server.use(
-      http.post(`${API}/submissions/:id/ai-review`, () => new HttpResponse(null, { status: 404 })),
+      http.post(`${API}/ai/review/:id`, () => new HttpResponse(null, { status: 404 })),
     );
 
     const error = (await reviewSubmission(1).catch((e: unknown) => e)) as AiReviewError;
@@ -161,7 +161,7 @@ describe("reviewSubmission", () => {
   });
 
   it("mất mạng -> code NETWORK, isNetworkError = true", async () => {
-    server.use(http.post(`${API}/submissions/:id/ai-review`, () => HttpResponse.error()));
+    server.use(http.post(`${API}/ai/review/:id`, () => HttpResponse.error()));
 
     const error = (await reviewSubmission(1).catch((e: unknown) => e)) as AiReviewError;
 

@@ -124,6 +124,30 @@ def test_prompt_chua_language():
 
 def test_prompt_bao_code_da_pass_het_testcase():
     assert "passed ALL testcases" in build_prompt(_request())
+
+
+def test_prompt_free_form_khong_giam_dinh_code_da_pass():
+    """Code tuỳ ý (admin) chưa chắc đã chấm -> không nói "passed ALL testcases"."""
+    prompt = build_prompt(AIReviewRequest(code="print(1)", free_form=True))
+
+    assert "passed ALL testcases" not in prompt
+    assert "Source code (python)" in prompt
+
+
+def test_review_free_form_dung_prompt_trung_tinh():
+    """Route free-form dùng prompt của develop, không phải prompt theo locale."""
+    handler = _ollama_ok()
+    asyncio.run(
+        AIReviewService.review(
+            AIReviewRequest(code="print(1)", free_form=True),
+            httpx.MockTransport(handler),
+        )
+    )
+
+    sent = json.loads(handler.request.content)
+    assert sent["system"] == ai_service.SYSTEM_PROMPT
+    assert "passed ALL testcases" not in sent["prompt"]
+
 def test_prompt_boc_de_bai_va_rang_buoc_trong_hang_rao():
     data = AIReviewRequest(
         code="print(1)",

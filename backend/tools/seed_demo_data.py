@@ -30,6 +30,7 @@ from __future__ import annotations
 
 import os
 import sys
+import uuid
 from datetime import date, datetime, timedelta
 
 from dotenv import load_dotenv
@@ -71,33 +72,43 @@ DEMO_COURSE_ID_2 = "DEMO102-2025B"
 DEMO_COURSE_IDS = [DEMO_COURSE_ID, DEMO_COURSE_ID_2]
 
 TEACHER = {
-    "user_id": "1111111117",
+    "code": "1111111117",
     "full_name": "Giảng Viên Demo",
-    "date_of_birth": date(1987, 4, 9),
 }
 
 # Sinh viên chính để test — có bài nộp đủ mọi trạng thái.
 MAIN_STUDENT = {
-    "user_id": "6751071001",
+    "code": "6751071001",
     "full_name": "Đặng Minh Demo",
-    "date_of_birth": date(2005, 5, 15),
 }
 # Sinh viên cùng lớp, có ít bài nộp (test danh sách nhiều sinh viên).
 PEER_STUDENT = {
-    "user_id": "6751071003",
+    "code": "6751071003",
     "full_name": "Trần Văn Bạn Học",
-    "date_of_birth": date(2005, 11, 2),
 }
 # Sinh viên KHÔNG tham gia lớp nào -> test empty state.
 EMPTY_STUDENT = {
-    "user_id": "6751071002",
+    "code": "6751071002",
     "full_name": "Nguyễn Thị Trống",
-    "date_of_birth": date(2005, 8, 20),
 }
 
 DEMO_STUDENTS = [MAIN_STUDENT, PEER_STUDENT, EMPTY_STUDENT]
-ENROLLED_STUDENT_IDS = [MAIN_STUDENT["user_id"], PEER_STUDENT["user_id"]]
-DEMO_USER_IDS = [TEACHER["user_id"], *[s["user_id"] for s in DEMO_STUDENTS]]
+ENROLLED_STUDENT_CODES = [MAIN_STUDENT["code"], PEER_STUDENT["code"]]
+DEMO_USER_CODES = [TEACHER["code"], *[s["code"] for s in DEMO_STUDENTS]]
+
+
+def _demo_email(code: str) -> str:
+    return f"{code}@{EMAIL_DOMAIN}"
+
+
+def _user_uuid(session: Session, code: str) -> uuid.UUID:
+    """user_id là UUID; tài khoản demo được định danh bằng email."""
+    user_id = session.exec(
+        select(User.user_id).where(User.email == _demo_email(code))
+    ).first()
+    if user_id is None:
+        raise RuntimeError(f"Không tìm thấy user demo {code}")
+    return user_id
 
 IO_TYPE = "string"
 
@@ -330,61 +341,61 @@ PROBLEMS_2 = [
     },
 ]
 
-# (student_id, report_code, language, status, passed, compile_output, feedback, day_offset)
+# (student_code, report_code, language, status, passed, compile_output, feedback, day_offset)
 SUBMISSIONS = [
     (
-        MAIN_STUDENT["user_id"], "DEMO_SUM", "python", "accepted", 4, None,
+        MAIN_STUDENT["code"], "DEMO_SUM", "python", "accepted", 4, None,
         "Chính xác! Cách giải tối ưu.", -5,
     ),
     (
-        MAIN_STUDENT["user_id"], "DEMO_SUM", "cpp", "wrong_answer", 2, None,
+        MAIN_STUDENT["code"], "DEMO_SUM", "cpp", "wrong_answer", 2, None,
         "Sai ở testcase có số âm.", -4,
     ),
     (
-        MAIN_STUDENT["user_id"], "DEMO_SUM", "java", "compile_error", 0,
+        MAIN_STUDENT["code"], "DEMO_SUM", "java", "compile_error", 0,
         "Main.java:5: error: ';' expected\n        int a = 1\n                    ^",
         None, -4,
     ),
     (
-        MAIN_STUDENT["user_id"], "DEMO_FACT", "python", "runtime_error", 1,
+        MAIN_STUDENT["code"], "DEMO_FACT", "python", "runtime_error", 1,
         "Traceback (most recent call last):\n"
         "  File \"script.py\", line 4, in <module>\n"
         "RecursionError: maximum recursion depth exceeded",
         None, -3,
     ),
     (
-        MAIN_STUDENT["user_id"], "DEMO_FACT", "javascript", "time_limit_exceeded", 0,
+        MAIN_STUDENT["code"], "DEMO_FACT", "javascript", "time_limit_exceeded", 0,
         "Vượt quá giới hạn thời gian 1s", None, -3,
     ),
     (
-        MAIN_STUDENT["user_id"], "DEMO_PRIME", "python", "pending", 0, None, None, -2,
+        MAIN_STUDENT["code"], "DEMO_PRIME", "python", "pending", 0, None, None, -2,
     ),
     (
-        MAIN_STUDENT["user_id"], "DEMO_REV", "c", "accepted", 3, None,
+        MAIN_STUDENT["code"], "DEMO_REV", "c", "accepted", 3, None,
         "Tốt lắm!", -2,
     ),
     (
-        MAIN_STUDENT["user_id"], "DEMO_SORT", "python", "internal_error", 0,
+        MAIN_STUDENT["code"], "DEMO_SORT", "python", "internal_error", 0,
         "Hệ thống chấm bài gặp lỗi nội bộ", None, -1,
     ),
     (
-        MAIN_STUDENT["user_id"], "DEMO_SORT", "python", "error", 0,
+        MAIN_STUDENT["code"], "DEMO_SORT", "python", "error", 0,
         "Không kết nối được Judge0", None, -1,
     ),
     (
-        PEER_STUDENT["user_id"], "DEMO_SUM", "python", "accepted", 4, None,
+        PEER_STUDENT["code"], "DEMO_SUM", "python", "accepted", 4, None,
         "Đạt.", -3,
     ),
     (
-        PEER_STUDENT["user_id"], "DEMO_FACT", "cpp", "wrong_answer", 2, None,
+        PEER_STUDENT["code"], "DEMO_FACT", "cpp", "wrong_answer", 2, None,
         "Sai ở n = 0.", -2,
     ),
     (
-        MAIN_STUDENT["user_id"], "DEMO2_HELLO", "python", "accepted", 1, None,
+        MAIN_STUDENT["code"], "DEMO2_HELLO", "python", "accepted", 1, None,
         "Đạt.", -180,
     ),
     (
-        MAIN_STUDENT["user_id"], "DEMO2_SUMARR", "cpp", "wrong_answer", 1, None,
+        MAIN_STUDENT["code"], "DEMO2_SUMARR", "cpp", "wrong_answer", 1, None,
         "Sai khi mảng có số âm.", -150,
     ),
 ]
@@ -440,8 +451,10 @@ def _wipe(session: Session) -> None:
         if course:
             session.delete(course)
 
-    for user_id in DEMO_USER_IDS:
-        user = session.get(User, user_id)
+    for code in DEMO_USER_CODES:
+        user = session.exec(
+            select(User).where(User.email == _demo_email(code))
+        ).first()
         if user:
             session.delete(user)
 
@@ -476,15 +489,17 @@ def _seed_users(session: Session) -> None:
         *[{**student, "role_id": Role.STUDENT} for student in DEMO_STUDENTS],
     ]
     for row in rows:
-        if session.get(User, row["user_id"]):
-            print(f"  = User {row['user_id']} đã có")
+        if session.exec(
+            select(User).where(User.email == _demo_email(row["code"]))
+        ).first():
+            print(f"  = User {row['code']} đã có")
             continue
         session.add(
             User(
-                user_id=row["user_id"],
+                # MSSV chỉ áp dụng cho sinh viên; giảng viên không có student_code.
+                student_code=row["code"] if row["role_id"] == Role.STUDENT else None,
                 full_name=row["full_name"],
-                email=f"{row['user_id']}@{EMAIL_DOMAIN}",
-                date_of_birth=row["date_of_birth"],
+                email=_demo_email(row["code"]),
                 role_id=row["role_id"],
                 hashed_password=hashed,
                 # Tài khoản demo đăng nhập được ngay, không bị bắt đổi mật khẩu.
@@ -492,7 +507,7 @@ def _seed_users(session: Session) -> None:
                 class_id=DEMO_CLASS_ID,
             )
         )
-        print(f"  + User {row['user_id']} ({row['full_name']})")
+        print(f"  + User {row['code']} ({row['full_name']})")
     session.commit()
 
 
@@ -521,8 +536,8 @@ def _seed_course_and_enrollments(session: Session) -> None:
             session.add(
                 Course(
                     **course,
-                    created_by=TEACHER["user_id"],
-                    total_number_student=len(ENROLLED_STUDENT_IDS),
+                    created_by=_user_uuid(session, TEACHER["code"]),
+                    total_number_student=len(ENROLLED_STUDENT_CODES),
                 )
             )
             session.commit()
@@ -537,7 +552,8 @@ def _seed_course_and_enrollments(session: Session) -> None:
                 session.commit()
             print(f"  = Khoá {course['course_id']} đã có")
 
-    for student_id in ENROLLED_STUDENT_IDS:
+    for student_code in ENROLLED_STUDENT_CODES:
+        student_id = _user_uuid(session, student_code)
         for course_id in DEMO_COURSE_IDS:
             exists = session.exec(
                 select(Enrollment).where(
@@ -549,7 +565,7 @@ def _seed_course_and_enrollments(session: Session) -> None:
                 session.add(
                     Enrollment(course_id=course_id, student_id=student_id)
                 )
-                print(f"  + Ghi danh {student_id} -> {course_id}")
+                print(f"  + Ghi danh {student_code} -> {course_id}")
     session.commit()
 
 
@@ -668,7 +684,7 @@ def _seed_submissions(
     session: Session, problems: dict[str, Problem]
 ) -> None:
     for (
-        student_id,
+        student_code,
         report_code,
         language,
         status,
@@ -677,6 +693,7 @@ def _seed_submissions(
         feedback,
         day_offset,
     ) in SUBMISSIONS:
+        student_id = _user_uuid(session, student_code)
         problem = problems.get(report_code)
         if problem is None:
             print(f"  ! Bỏ qua bài nộp: không tìm thấy bài {report_code}")
@@ -740,7 +757,7 @@ def _refresh_counters(
             ).all()
             lesson.total_number_assignment = len(problems)
 
-        finished: set[str] | None = None
+        finished: set[uuid.UUID] | None = None
         for problem in problems:
             solved = {
                 submission.student_id
@@ -806,16 +823,16 @@ def main() -> int:
     print(f"Mật khẩu chung: {DEFAULT_PASSWORD}")
     print()
     print("SINH VIÊN CHÍNH (có bài nộp đủ 8 trạng thái):")
-    print(f"  {MAIN_STUDENT['user_id']}@{EMAIL_DOMAIN}   ({MAIN_STUDENT['full_name']})")
+    print(f"  {MAIN_STUDENT['code']}@{EMAIL_DOMAIN}   ({MAIN_STUDENT['full_name']})")
     print()
     print("SINH VIÊN CÙNG LỚP (có ít bài nộp):")
-    print(f"  {PEER_STUDENT['user_id']}@{EMAIL_DOMAIN}   ({PEER_STUDENT['full_name']})")
+    print(f"  {PEER_STUDENT['code']}@{EMAIL_DOMAIN}   ({PEER_STUDENT['full_name']})")
     print()
     print("SINH VIÊN KHÔNG CÓ LỚP (test empty state):")
-    print(f"  {EMPTY_STUDENT['user_id']}@{EMAIL_DOMAIN}   ({EMPTY_STUDENT['full_name']})")
+    print(f"  {EMPTY_STUDENT['code']}@{EMAIL_DOMAIN}   ({EMPTY_STUDENT['full_name']})")
     print()
     print("GIÁO VIÊN (chủ khoá demo):")
-    print(f"  {TEACHER['user_id']}@{EMAIL_DOMAIN}   ({TEACHER['full_name']})")
+    print(f"  {TEACHER['code']}@{EMAIL_DOMAIN}   ({TEACHER['full_name']})")
     print()
     print(f"Khoá học: {DEMO_COURSE_ID}  (HK1 2026-2027 — đang diễn ra)")
     print("  Buổi 1, 2 : đang mở")

@@ -16,7 +16,7 @@ const API = process.env.E2E_API_URL ?? "http://127.0.0.1:8000";
 const FRONTEND = process.env.UI_FRONTEND_URL ?? "http://localhost:3000";
 const TEACHER_EMAIL = process.env.E2E_TEACHER_EMAIL ?? "1111111117@st.utc2.edu.vn";
 const TEACHER_PASSWORD = process.env.E2E_TEACHER_PASSWORD ?? "Password@123";
-const CLASS_ID = process.env.E2E_CLASS_ID ?? "CQ.62.CNTT";
+const CLASS_ID = process.env.E2E_CLASS_ID ?? "CQ.67.CNTT";
 const NEW_PASSWORD = "E2eNew@2026";
 
 const here = dirname(fileURLToPath(import.meta.url));
@@ -24,8 +24,8 @@ const SHOTS = join(here, "..", "..", "docs", "ui-shots", "create-and-solve");
 mkdirSync(SHOTS, { recursive: true });
 
 const stamp = Date.now().toString().slice(-8);
-const STUDENT_ID = `99${stamp}`;
-const STUDENT_EMAIL = `${STUDENT_ID}@st.utc2.edu.vn`;
+const STUDENT_CODE = `99${stamp}`;
+const STUDENT_EMAIL = `${STUDENT_CODE}@st.utc2.edu.vn`;
 const COURSE_ID = `E2E${stamp}`;
 const PROBLEM_TITLE = `E2E Tong hai so ${stamp}`;
 
@@ -77,14 +77,17 @@ async function setupAsTeacher() {
   const student = await api("POST", "/students", {
     token,
     body: {
-      user_id: STUDENT_ID,
+      student_code: STUDENT_CODE,
       full_name: `Sinh Vien E2E ${stamp}`,
-      date_of_birth: "2004-05-06",
       email: STUDENT_EMAIL,
       class_id: CLASS_ID,
     },
   });
   check("tao tai khoan sinh vien", student.status === 201, `${STUDENT_EMAIL} status=${student.status}`);
+  // Dung som: khong co sinh vien thi cac buoc sau chi tao them du lieu rac.
+  if (student.status !== 201) throw new Error(`Khong tao duoc sinh vien: ${JSON.stringify(student.data)}`);
+  // Khoa ngoai toi user la UUID; MSSV chi nam o student_code.
+  const studentUuid = student.data.user_id;
 
   const course = await api("POST", "/courses", {
     token,
@@ -100,7 +103,7 @@ async function setupAsTeacher() {
 
   const enroll = await api("POST", `/courses/${COURSE_ID}/enrollments`, {
     token,
-    body: { student_id: STUDENT_ID },
+    body: { student_id: studentUuid },
   });
   check("them sinh vien vao lop", [200, 201].includes(enroll.status), `status=${enroll.status}`);
 
@@ -214,7 +217,7 @@ async function solveAsStudent({ lessonId, problemId }) {
     // 1. Dang nhap bang mat khau tam (= MSSV), bi buoc doi mat khau
     await open("/login");
     await page.fill('input[type="email"]', STUDENT_EMAIL);
-    await page.fill('input[type="password"]', STUDENT_ID);
+    await page.fill('input[type="password"]', STUDENT_CODE);
     await page.click('button[type="submit"]');
     await page.waitForURL(/\/(student|change-password)/, { timeout: 20000 }).catch(() => {});
     check("sinh vien moi dang nhap duoc (mat khau tam = MSSV)", /\/(student|change-password)/.test(page.url()), page.url());
@@ -224,7 +227,7 @@ async function solveAsStudent({ lessonId, problemId }) {
     // 2. Doi mat khau
     if (page.url().includes("/change-password")) {
       const fields = page.locator('input[type="password"]');
-      await fields.nth(0).fill(STUDENT_ID);
+      await fields.nth(0).fill(STUDENT_CODE);
       await fields.nth(1).fill(NEW_PASSWORD);
       await fields.nth(2).fill(NEW_PASSWORD);
       await page.locator('button[type="submit"]').click();
@@ -307,9 +310,9 @@ async function verifyAsTeacher() {
     body: { email: TEACHER_EMAIL, password: TEACHER_PASSWORD },
   });
   const token = login.data?.access_token;
-  const pending = await api("GET", `/submissions/pending?filter=all&limit=100&search=${encodeURIComponent(STUDENT_ID)}`, { token });
+  const pending = await api("GET", `/submissions/pending?filter=all&limit=100&search=${encodeURIComponent(STUDENT_CODE)}`, { token });
   const items = pending.data?.items ?? [];
-  const mine = items.filter((item) => JSON.stringify(item).includes(STUDENT_ID) || JSON.stringify(item).includes(COURSE_ID));
+  const mine = items.filter((item) => JSON.stringify(item).includes(STUDENT_CODE) || JSON.stringify(item).includes(COURSE_ID));
   check("giao vien thay bai nop cua sinh vien moi", mine.length >= 2, `${mine.length} bai (sai/loi, bai dung tu dong cham)`);
 
   const wrongRight = await api("GET", `/courses/${COURSE_ID}`, { token });

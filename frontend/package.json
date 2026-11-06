@@ -12,6 +12,7 @@
     "test:coverage": "vitest run --coverage",
     "test:ui": "node test/ui-test-student.mjs",
     "test:ui-ai-review": "node test/ui-test-ai-review.mjs",
+    "test:ui-admin": "node test/ui-test-admin.mjs",
     "test:e2e-create": "node test/e2e-create-and-solve.mjs"
   },
   "dependencies": {

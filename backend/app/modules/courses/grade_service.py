@@ -90,6 +90,7 @@ def build_grade_rows(lessons, problems_by_lesson, enrollments, best) -> list[dic
             session_scores[str(lesson.lesson_id)] = cells
         rows.append({
             "student_id": str(student.user_id),
+            "student_code": student.student_code,
             "full_name": student.full_name,
             "class_id": student.class_id,
             "overall_score": round(total, 1) if has_any else None,

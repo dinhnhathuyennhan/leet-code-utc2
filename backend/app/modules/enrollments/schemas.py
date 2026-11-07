@@ -8,17 +8,19 @@ class AddStudentToCourseResponse(BaseModel):
     enrollment_id: int
     course_id: str
     student_id: str
+    student_code: str | None = None
 
 
 class AddStudentToCourseRequest(BaseModel):
+    # Nhận UUID `user_id` hoặc MSSV (`student_code`, 10 chữ số).
     student_id: str
 
     @field_validator("student_id")
     @classmethod
     def validate_user_id(cls, v: str | None) -> str:
-        if v is None:
-            raise EmptyFieldError("user_id is required")
-        return v
+        if v is None or not str(v).strip():
+            raise EmptyFieldError("student_id is required")
+        return str(v).strip()
 
 
 class AddClassToCourseRequest(BaseModel):
@@ -36,5 +38,6 @@ class AddClassToCourseResponse(BaseModel):
 class GetStudentListResponse(BaseModel):
     enrollment_id: int
     student_id: str
+    student_code: str | None = None
     full_name: str
     email: AppEmailStr

@@ -37,7 +37,7 @@ export function AdminCourseDetail({ id }: { id: string }) {
   return <div className="space-y-6">
     <Link href="/admin/courses" className="inline-flex items-center gap-2 text-sm text-indigo-700 dark:text-indigo-300"><ArrowLeft className="size-4" />Lớp học phần</Link>
     <CourseHeaderCard course={detail} onCreateSession={() => setLessonEditor("new")} onEditCourse={() => setCourseEditor(true)} />
-    <p className="text-sm text-muted-foreground">Người tạo: <strong>{course.created_by}</strong> · Học kỳ: {course.term}</p>
+    <p className="text-sm text-muted-foreground">Người tạo: <strong>{course.created_by_name || "—"}</strong> · Học kỳ: {course.term}</p>
     <CourseDetailTabs value={tab} onValueChange={setTab}
       sessions={<div className="space-y-4">
         {!course.sessions?.length ? <EmptyState title="Chưa có buổi học" description="Tạo buổi học để bắt đầu giao bài tập." /> : [...course.sessions].sort((a, b) => a.order - b.order).map((session) =>
@@ -97,7 +97,7 @@ function AdminCourseRoster({ id }: { id: string }) {
   const query = useQuery({ queryKey: [...adminKeys.course(id), "enrollments"], queryFn: () => getAdminEnrollments(id) });
   const [search, setSearch] = useState("");
   const [adding, setAdding] = useState(false);
-  const rows = (query.data ?? []).filter((student) => `${student.student_id} ${student.full_name} ${student.email}`.toLowerCase().includes(search.trim().toLowerCase()));
+  const rows = (query.data ?? []).filter((student) => `${student.student_code ?? ""} ${student.full_name} ${student.email}`.toLowerCase().includes(search.trim().toLowerCase()));
   async function remove(studentId: string) {
     await deleteAdminEnrollment(id, studentId);
     await client.invalidateQueries({ queryKey: adminKeys.all });
@@ -105,14 +105,14 @@ function AdminCourseRoster({ id }: { id: string }) {
   }
   return <div className="space-y-4">
     <div className="flex flex-wrap gap-3">
-      <div className="relative w-full min-w-0 sm:min-w-64 sm:flex-1"><Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" /><Input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Tìm mã, tên hoặc email sinh viên..." aria-label="Tìm sinh viên trong lớp học phần" className="pl-9" /></div>
-      <Button variant="outline" disabled={!rows.length} onClick={() => downloadCsv(`sinh-vien-${id}.csv`, [["MSSV", "Họ tên", "Email"], ...rows.map((student) => [student.student_id, student.full_name, student.email])])}><Download className="size-4" />Xuất danh sách</Button>
+      <div className="relative w-full min-w-0 sm:min-w-64 sm:flex-1"><Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" /><Input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Tìm MSSV, tên hoặc email sinh viên..." aria-label="Tìm sinh viên trong lớp học phần" className="pl-9" /></div>
+      <Button variant="outline" disabled={!rows.length} onClick={() => downloadCsv(`sinh-vien-${id}.csv`, [["MSSV", "Họ tên", "Email"], ...rows.map((student) => [student.student_code ?? "", student.full_name, student.email])])}><Download className="size-4" />Xuất danh sách</Button>
       <Button className={ADMIN_PRIMARY} onClick={() => setAdding(true)}><Plus className="size-4" />Thêm sinh viên</Button>
     </div>
     {query.isPending ? <p className="p-8 text-center text-sm text-muted-foreground">Đang tải danh sách...</p> : query.error ? <ErrorState error={query.error} onRetry={() => void query.refetch()} /> : !rows.length ? <EmptyState icon={Users} title="Chưa có sinh viên phù hợp" /> :
       <Table className="min-w-[640px]"><TableHeader><TableRow><TableHead>MSSV</TableHead><TableHead>Họ tên</TableHead><TableHead>Email</TableHead><TableHead>Thao tác</TableHead></TableRow></TableHeader><TableBody>{rows.map((student) =>
-        <TableRow key={student.student_id}><TableCell className="font-medium">{student.student_id}</TableCell><TableCell>{student.full_name}</TableCell><TableCell>{student.email}</TableCell><TableCell>
-          <AdminConfirm label="Xóa khỏi lớp" title="Xóa sinh viên khỏi lớp học phần?" description={`${student.full_name} (${student.student_id}) sẽ được gỡ khỏi lớp ${id}. Tài khoản sinh viên vẫn được giữ lại.`} onConfirm={() => remove(student.student_id)} />
+        <TableRow key={student.student_id}><TableCell className="font-medium">{student.student_code || "—"}</TableCell><TableCell>{student.full_name}</TableCell><TableCell>{student.email}</TableCell><TableCell>
+          <AdminConfirm label="Xóa khỏi lớp" title="Xóa sinh viên khỏi lớp học phần?" description={`${student.full_name} (${student.student_code || student.email}) sẽ được gỡ khỏi lớp ${id}. Tài khoản sinh viên vẫn được giữ lại.`} onConfirm={() => remove(student.student_id)} />
         </TableCell></TableRow>)}</TableBody></Table>}
     {adding && <EnrollmentForm id={id} onClose={() => setAdding(false)} />}
   </div>;
@@ -140,11 +140,11 @@ function EnrollmentForm({ id, onClose }: { id: string; onClose: () => void }) {
   return <AdminDialog open title="Thêm sinh viên vào lớp học phần" description="Thêm một sinh viên hoặc toàn bộ sinh viên của một lớp hành chính." onClose={onClose} busy={busy}>
     <form onSubmit={(event) => void submit(event)} className="space-y-4">
       <div className="flex gap-2"><Button type="button" variant={mode === "student" ? "secondary" : "outline"} disabled={busy} onClick={() => setMode("student")}>Theo MSSV</Button><Button type="button" variant={mode === "class" ? "secondary" : "outline"} disabled={busy} onClick={() => setMode("class")}>Theo lớp hành chính</Button></div>
-      {mode === "student" ? <label className="block space-y-2 text-sm font-medium">MSSV<Input value={studentId} onChange={(event) => setStudentId(event.target.value)} required disabled={busy} /></label> : <>
+      {mode === "student" ? <label className="block space-y-2 text-sm font-medium">MSSV<Input value={studentId} onChange={(event) => setStudentId(event.target.value.replace(/\D/g, ""))} inputMode="numeric" maxLength={10} placeholder="10 chữ số" required disabled={busy} /></label> : <>
         <label className="block space-y-2 text-sm font-medium">Lớp hành chính<select className={`${ADMIN_SELECT} w-full`} value={classId} onChange={(event) => setClassId(event.target.value)} required disabled={busy || classes.isPending}><option value="">Chọn lớp</option>{classes.data?.map((item) => <option key={item.class_id} value={item.class_id}>{item.class_id} · {item.student_count} sinh viên</option>)}</select></label>
         {classes.error && <ErrorState error={classes.error} onRetry={() => void classes.refetch()} />}
       </>}
-      <div className="flex justify-end gap-2"><Button type="button" variant="outline" disabled={busy} onClick={onClose}>Hủy</Button><Button type="submit" disabled={busy || (mode === "student" ? !studentId.trim() : !classId)} className={ADMIN_PRIMARY}>{busy ? "Đang thêm..." : "Thêm vào lớp"}</Button></div>
+      <div className="flex justify-end gap-2"><Button type="button" variant="outline" disabled={busy} onClick={onClose}>Hủy</Button><Button type="submit" disabled={busy || (mode === "student" ? !/^\d{10}$/.test(studentId) : !classId)} className={ADMIN_PRIMARY}>{busy ? "Đang thêm..." : "Thêm vào lớp"}</Button></div>
     </form>
   </AdminDialog>;
 }

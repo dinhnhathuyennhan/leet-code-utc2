@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { Bell, Send } from "lucide-react";
+import { Bell } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import type { SessionDetailData } from "@/lib/types/course";
@@ -42,14 +42,6 @@ export function SessionDeadlineAlert({ alert, status, listHref }: Props) {
         <Button asChild variant="outline" className="h-10 bg-white font-semibold dark:bg-slate-800">
           <Link href={listHref}>Xem danh sách {alert.missing_students} SV</Link>
         </Button>
-        {open && (
-          // TODO: backend chưa có API gửi nhắc nhở. Khi có, bỏ `disabled` và gọi API tại onClick.
-          <span title="Chưa khả dụng: hệ thống chưa hỗ trợ gửi nhắc nhở">
-            <Button disabled className="pointer-events-none h-10 bg-[#facc15] font-semibold text-amber-950">
-              <Send className="size-4" /> Gửi nhắc nhở
-            </Button>
-          </span>
-        )}
       </div>
     </section>
   );

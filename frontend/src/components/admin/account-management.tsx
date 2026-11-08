@@ -490,12 +490,12 @@ export function AccountManagement() {
             <Plus className="size-4" />
             Cấp tài khoản
           </Button>
-          <Link href="/admin/accounts/import">
-            <Button className="bg-[#352078] hover:bg-[#29175f]">
+          <Button asChild className="bg-[#352078] hover:bg-[#29175f]">
+            <Link href="/admin/accounts/import">
               <Upload className="size-4" />
               Nhập danh sách từ Excel
-            </Button>
-          </Link>
+            </Link>
+          </Button>
         </div>
       </div>
 

@@ -26,6 +26,7 @@ def build_course_response(
         course_id=course.course_id, course_name=course.course_name, term=course.term,
         start_date=course.start_date, end_date=course.end_date, avt_link=course.avt_link,
         created_by=str(course.created_by), total_number_student=course.total_number_student,
+        teacher_name=course.creator.full_name if course.creator else None,
     )
     if session is None:
         return response

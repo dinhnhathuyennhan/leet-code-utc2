@@ -97,6 +97,8 @@ class StudentDashboardResponse(BaseModel):
     - ``total_problems``: tổng số bài tập của tất cả các lớp đang học.
     - ``average_score``: điểm trung bình (0-10) tính theo passed_count / total_number_testcase.
       Trả về ``None`` nếu sinh viên chưa có submission nào.
+    - ``due_this_week``: số bài đang mở, hạn nộp trong 7 ngày tới (tính cả hôm nay)
+      mà sinh viên chưa nộp đạt.
     - ``courses``: danh sách các lớp đang học (kèm thông tin cơ bản) để FE dựng grid card.
     """
 
@@ -104,6 +106,7 @@ class StudentDashboardResponse(BaseModel):
     completed_problems: int
     total_problems: int
     average_score: float | None
+    due_this_week: int = 0
     courses: list["CourseResponse"]
 
 class CourseResponse(BaseModel):
@@ -116,6 +119,8 @@ class CourseResponse(BaseModel):
     end_date: datetime
     avt_link: str | None
     created_by: str
+    # Tên hiển thị của người tạo lớp; `created_by` là UUID nên không dùng để hiển thị.
+    teacher_name: str | None = None
     total_number_student: int
     sessions: list[CourseLessonResponse] = Field(default_factory=list)
     grades: list[CourseGradeRowResponse] = Field(default_factory=list)

@@ -1,4 +1,5 @@
 import re
+from datetime import timedelta
 from uuid import UUID
 from sqlmodel import Session, func, or_, select
 
@@ -9,6 +10,7 @@ from app.core.exceptions import (
     NotFoundError,
 )
 from app.core.dependencies import Role
+from app.core.utils.datetime_utils import as_utc, now_utc, today_vn
 from app.modules.courses.schemas import (
     CourseResponse,
     CourseTermsResponse,
@@ -410,5 +412,37 @@ def get_student_dashboard(
         completed_problems=int(completed_problems),
         total_problems=int(total_problems),
         average_score=average_score,
+        due_this_week=_count_due_this_week(session, student_uuid, current_user),
         courses=course_responses,
     )
+
+
+def _count_due_this_week(session: Session, student_uuid: UUID, current_user: User) -> int:
+    """Đếm bài đang mở có hạn nộp trong 7 ngày tới mà sinh viên chưa nộp đạt."""
+    today = today_vn()
+    now = now_utc()
+    statement = (
+        select(Problem)
+        .join(Lesson, Lesson.lesson_id == Problem.lesson_id)
+        .join(Enrollment, Enrollment.course_id == Lesson.course_id)
+        .join(Course, Course.course_id == Lesson.course_id)
+        .where(
+            Enrollment.student_id == student_uuid,
+            Lesson.start_date <= today,
+            Lesson.end_date >= today,
+            Lesson.end_date <= today + timedelta(days=6),
+        )
+    )
+    if current_user.role_id == Role.TEACHER:
+        statement = statement.where(Course.created_by == current_user.user_id)
+    problems = [p for p in session.exec(statement).all() if as_utc(p.start_datetime) <= now]
+    if not problems:
+        return 0
+    solved = set(session.exec(
+        select(Submission.problem_id).where(
+            Submission.student_id == student_uuid,
+            Submission.status == "accepted",
+            Submission.problem_id.in_([p.problem_id for p in problems]),
+        )
+    ).all())
+    return sum(1 for p in problems if p.problem_id not in solved)

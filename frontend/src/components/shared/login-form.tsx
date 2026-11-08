@@ -2,7 +2,6 @@
 
 import * as React from "react";
 import Image from "next/image";
-import Link from "next/link";
 import {
   Controller,
   FormProvider,
@@ -205,17 +204,9 @@ export function LoginForm({ onSuccess }: LoginFormProps) {
               name="password"
               render={({ field }) => (
                 <FormItem className="flex w-full min-w-0 flex-col gap-1.5">
-                  <div className="flex items-baseline justify-between gap-2">
-                    <FormLabel className="text-slate-700 text-xs sm:text-sm font-semibold">
-                      {t("auth.login.password")} <span className="text-red-500">*</span>
-                    </FormLabel>
-                    <Link
-                      href="/forgot-password"
-                      className="text-slate-700 text-xs sm:text-sm font-semibold hover:text-blue-600 transition-colors"
-                    >
-                      {t("auth.login.forgot")}
-                    </Link>
-                  </div>
+                  <FormLabel className="text-slate-700 text-xs sm:text-sm font-semibold">
+                    {t("auth.login.password")} <span className="text-red-500">*</span>
+                  </FormLabel>
                   <FormControl>
                     <PasswordInput
                       {...field}

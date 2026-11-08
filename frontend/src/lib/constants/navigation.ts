@@ -6,7 +6,6 @@ import {
   History,
   LayoutDashboard,
   Settings,
-  ShieldCheck,
   Users,
   type LucideIcon,
 } from "lucide-react";
@@ -31,7 +30,6 @@ export const TEACHER_NAV: NavItem[] = [
   { label: "Lớp học phần", labelKey: "nav.courses", href: "/teacher/courses", icon: GraduationCap },
   { label: "Bài nộp", labelKey: "nav.submissions", href: "/teacher/submissions", icon: FileCheck2 },
   { label: "Ngân hàng đề", labelKey: "nav.problemBank", href: "/teacher/problem-bank", icon: BookOpenCheck },
-  { label: "Quản lý tài khoản", labelKey: "nav.accounts", href: "/teacher/accounts", icon: ShieldCheck },
 ];
 
 export const STUDENT_NAV: NavItem[] = [

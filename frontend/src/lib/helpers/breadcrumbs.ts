@@ -88,6 +88,19 @@ export function buildBreadcrumbs(
     }));
   }
 
+  if (segments[0] === "student") return buildStudentBreadcrumbs(segments, dynamicLabels?.course, t);
+
+  // Trang chấm một bài nộp: Bài nộp / <lớp> / <buổi> / <bài · Bài nộp #id>
+  if (segments[0] === "teacher" && segments[1] === "submissions" && segments[2]) {
+    const crumbs: Crumb[] = [{ label: t("nav.submissions"), href: "/teacher/submissions" }];
+    const course = resolveLabel(dynamicLabels?.course, t);
+    const session = resolveLabel(dynamicLabels?.session, t);
+    if (course) crumbs.push({ label: course, href: `/teacher/courses/${encodeURIComponent(course)}` });
+    if (session) crumbs.push({ label: session });
+    crumbs.push({ label: resolveLabel(dynamicLabels?.page, t) ?? `#${segments[2]}` });
+    return crumbs;
+  }
+
   if (segments[0] === "teacher" && segments[1] === "courses" && segments[2]) {
     const coursePath = `/teacher/courses/${segments[2]}`;
     const crumbs: Crumb[] = [
@@ -138,4 +151,36 @@ export function buildBreadcrumbs(
     visibleIndex += 1;
   });
   return crumbs;
+}
+
+/**
+ * Breadcrumb của sinh viên. Chỉ link tới route có thật: không có trang
+ * `/student/submissions` hay `/student/classes/:id/assignments`, nên các crumb đó
+ * trỏ về Lịch sử nộp bài / trang lớp. `pageLabel` là nhãn trang hiện tại do page
+ * đặt qua `useBreadcrumbLabel`.
+ */
+function buildStudentBreadcrumbs(segments: string[], pageLabel: DynamicLabel, t: Translate): Crumb[] {
+  const [, section, id, child] = segments;
+  const current = (fallback: string): Crumb => ({ label: resolveLabel(pageLabel, t) ?? fallback });
+  switch (section) {
+    case "dashboard":
+      return [{ label: t("nav.overview") }];
+    case "assignments":
+      return [{ label: t("nav.assignments") }];
+    case "history":
+      return [{ label: t("nav.history") }];
+    case "submissions":
+      return [{ label: t("nav.history"), href: "/student/history" }, current(`#${id ?? ""}`)];
+    case "classes": {
+      if (!id) return [{ label: t("nav.courses") }];
+      const courseCode = decodeURIComponent(id);
+      const classes: Crumb = { label: t("nav.courses"), href: "/student/classes" };
+      if (child === "assignments") {
+        return [classes, { label: courseCode, href: `/student/classes/${id}` }, current(t("nav.assignments"))];
+      }
+      return [classes, current(courseCode)];
+    }
+    default:
+      return [{ label: t("nav.overview"), href: "/student/dashboard" }];
+  }
 }

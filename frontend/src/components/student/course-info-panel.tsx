@@ -47,7 +47,7 @@ export function StudentCourseInfoPanel({ course }: { course: CourseDetail }) {
         const scores = gradeRow?.session_scores?.[String(session.id)] ?? [];
         return (
           <section key={session.id} className="overflow-hidden rounded-xl border bg-card">
-            <button type="button" onClick={() => setOpenId((current) => current === session.id ? undefined : session.id)} className="flex w-full items-center justify-between gap-4 px-4 py-3 text-left hover:bg-muted/40">
+            <button type="button" aria-expanded={openId === session.id} onClick={() => setOpenId((current) => current === session.id ? undefined : session.id)} className="flex w-full items-center justify-between gap-4 px-4 py-3 text-left hover:bg-muted/40">
               <span className="flex items-center gap-3"><span className={cn("size-2.5 rounded-full", meta.className)} /><span><strong className="block text-sm">{t("student.classDetail.sessionNo")} {session.order}: {session.title}</strong><span className="text-xs text-muted-foreground">{session.status === "upcoming" ? `${t("student.classDetail.opensAt")} ${formatDate(session.opens_at ?? session.deadline)}` : `${t("student.classDetail.deadline")} ${formatDate(session.deadline)}`}</span></span></span>
               <span className="flex items-center gap-3 text-xs text-muted-foreground"><span className="hidden sm:inline">{t(meta.labelKey)}</span><ChevronDown className={cn("size-4 transition-transform", openId === session.id && "rotate-180")} /></span>
             </button>

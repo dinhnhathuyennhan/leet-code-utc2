@@ -37,7 +37,7 @@ export function AdminCourseDetail({ id }: { id: string }) {
   return <div className="space-y-6">
     <Link href="/admin/courses" className="inline-flex items-center gap-2 text-sm text-indigo-700 dark:text-indigo-300"><ArrowLeft className="size-4" />Lớp học phần</Link>
     <CourseHeaderCard course={detail} onCreateSession={() => setLessonEditor("new")} onEditCourse={() => setCourseEditor(true)} />
-    <p className="text-sm text-muted-foreground">Người tạo: <strong>{course.created_by}</strong> · Học kỳ: {course.term}</p>
+    <p className="text-sm text-muted-foreground">Người tạo: <strong>{course.teacher_name || course.created_by}</strong> · Học kỳ: {course.term}</p>
     <CourseDetailTabs value={tab} onValueChange={setTab}
       sessions={<div className="space-y-4">
         {!course.sessions?.length ? <EmptyState title="Chưa có buổi học" description="Tạo buổi học để bắt đầu giao bài tập." /> : [...course.sessions].sort((a, b) => a.order - b.order).map((session) =>

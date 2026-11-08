@@ -11,6 +11,8 @@ export interface CourseApiRecord {
   course_name: string;
   avt_link: string | null;
   created_by: string;
+  /** Tên người tạo lớp (giảng viên); `created_by` là UUID, không dùng để hiển thị. */
+  teacher_name?: string | null;
   term: string;
   start_date: string;
   end_date: string;

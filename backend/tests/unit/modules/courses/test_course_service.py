@@ -493,6 +493,8 @@ class TestStudentCourseGrades:
         )
 
         assert response.sessions[0].problems == []
+        assert response.grades[0].student_id == str(student.user_id)
+        assert response.grades[0].student_code == student.student_code
         assert response.grades[0].session_scores[str(lesson.lesson_id)] == []
         assert future_problem.problem_id is not None
 

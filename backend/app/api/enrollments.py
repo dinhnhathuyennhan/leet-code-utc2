@@ -30,6 +30,7 @@ def add_student_to_course(
 ) -> AddStudentToCourseResponse:
     return enrollment_service.add_student_to_course(
         student_id=data.student_id,
+        student_code=data.student_code,
         course_id=course_id,
         session=session,
         current_user=current_user,

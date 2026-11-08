@@ -18,7 +18,8 @@ class GradeScoreResponse(BaseModel):
 
 
 class CourseGradeRowResponse(BaseModel):
-    student_id: str
+    student_id: str             # UUID của user (User.user_id)
+    student_code: str | None    # MSSV (User.student_code)
     full_name: str
     class_id: str | None
     overall_score: float | None

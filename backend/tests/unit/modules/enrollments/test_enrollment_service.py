@@ -4,7 +4,13 @@ import uuid
 
 import pytest
 
-from app.core.exceptions import ConflictError, ForbiddenError, NotFoundError
+from app.core.exceptions import (
+    ConflictError,
+    EmptyFieldError,
+    ForbiddenError,
+    InvalidFormatError,
+    NotFoundError,
+)
 from app.modules.enrollments.service import (
     add_student_to_course,
     delete_student_from_course,
@@ -99,6 +105,171 @@ class TestAddStudentToCourse:
         assert len(enrollments_of(session, course.course_id)) == 1
         assert counter_of(session, course) == 1
 
+    # response trả cả UUID lẫn MSSV, không nhập nhằng 2 khái niệm
+    def test_response_contains_student_code_alongside_uuid(
+        self, session, course, owner_teacher, student
+    ):
+        result = add_student_to_course(
+            student.user_id, course.course_id, session, owner_teacher
+        )
+
+        assert result.student_id == str(student.user_id)
+        assert result.student_code == student.student_code
+
+
+# 10 chữ số fullwidth (U+FF10..U+FF19): isdigit() = True nhưng không phải ASCII
+FULLWIDTH_CODE = "".join(chr(0xFF10 + int(c)) for c in "1234567890")
+
+
+class TestAddStudentToCourseByStudentCode:
+    # thêm sinh viên bằng MSSV: enrollment lưu đúng UUID, counter tăng
+    def test_adds_student_by_student_code(
+        self, session, course, owner_teacher, student
+    ):
+        result = add_student_to_course(
+            None,
+            course.course_id,
+            session,
+            owner_teacher,
+            student_code=student.student_code,
+        )
+
+        enrollments = enrollments_of(session, course.course_id)
+        assert len(enrollments) == 1
+        assert enrollments[0].student_id == student.user_id
+        assert result.student_id == str(student.user_id)
+        assert result.student_code == student.student_code
+        assert counter_of(session, course) == 1
+
+    # MSSV có khoảng trắng đầu/cuối vẫn được chấp nhận
+    def test_strips_whitespace_around_student_code(
+        self, session, course, owner_teacher, student
+    ):
+        add_student_to_course(
+            None,
+            course.course_id,
+            session,
+            owner_teacher,
+            student_code=f"  {student.student_code} ",
+        )
+
+        assert counter_of(session, course) == 1
+
+    # MSSV đúng định dạng nhưng không có ai → 404
+    def test_raises_not_found_when_student_code_does_not_exist(
+        self, session, course, owner_teacher, student
+    ):
+        missing_code = "0000000000"
+        assert student.student_code != missing_code
+
+        with pytest.raises(NotFoundError, match="Không tìm thấy sinh viên"):
+            add_student_to_course(
+                None,
+                course.course_id,
+                session,
+                owner_teacher,
+                student_code=missing_code,
+            )
+
+        assert counter_of(session, course) == 0
+
+    # MSSV sai định dạng → 422, không chạm DB
+    @pytest.mark.parametrize("bad_code", ["123456789", "12345678901", "12345abcde", FULLWIDTH_CODE])
+    def test_raises_invalid_format_for_malformed_student_code(
+        self, session, course, owner_teacher, bad_code
+    ):
+        with pytest.raises(InvalidFormatError):
+            add_student_to_course(
+                None, course.course_id, session, owner_teacher, student_code=bad_code
+            )
+
+        assert counter_of(session, course) == 0
+
+    # MSSV rỗng / toàn khoảng trắng → EmptyFieldError
+    @pytest.mark.parametrize("blank", ["", "   "])
+    def test_raises_empty_field_for_blank_student_code(
+        self, session, course, owner_teacher, blank
+    ):
+        with pytest.raises(EmptyFieldError):
+            add_student_to_course(
+                None, course.course_id, session, owner_teacher, student_code=blank
+            )
+
+    # không truyền student_id lẫn student_code → EmptyFieldError
+    def test_raises_empty_field_when_no_identifier_given(
+        self, session, course, owner_teacher
+    ):
+        with pytest.raises(EmptyFieldError):
+            add_student_to_course(None, course.course_id, session, owner_teacher)
+
+        assert counter_of(session, course) == 0
+
+    # truyền cả 2 → InvalidFormatError (không đoán cái nào đúng)
+    def test_raises_invalid_format_when_both_identifiers_given(
+        self, session, course, owner_teacher, student
+    ):
+        with pytest.raises(InvalidFormatError):
+            add_student_to_course(
+                student.user_id,
+                course.course_id,
+                session,
+                owner_teacher,
+                student_code=student.student_code,
+            )
+
+        assert counter_of(session, course) == 0
+
+    # teacher không sở hữu khoá → 403 dù MSSV hợp lệ
+    def test_raises_forbidden_when_teacher_does_not_own_course(
+        self, session, course, other_teacher, student
+    ):
+        with pytest.raises(ForbiddenError):
+            add_student_to_course(
+                None,
+                course.course_id,
+                session,
+                other_teacher,
+                student_code=student.student_code,
+            )
+
+        assert enrollments_of(session, course.course_id) == []
+
+    # đã thêm qua UUID rồi thêm lại qua MSSV → 409
+    def test_raises_conflict_when_already_enrolled_via_uuid(
+        self, session, course, owner_teacher, student
+    ):
+        add_student_to_course(student.user_id, course.course_id, session, owner_teacher)
+
+        with pytest.raises(ConflictError, match="Sinh viên đã có trong lớp học"):
+            add_student_to_course(
+                None,
+                course.course_id,
+                session,
+                owner_teacher,
+                student_code=student.student_code,
+            )
+
+        assert counter_of(session, course) == 1
+
+    # MSSV thuộc user không phải sinh viên (dữ liệu bất thường) → 404, chỉ whitelist STUDENT
+    def test_raises_not_found_when_code_belongs_to_non_student(
+        self, session, course, owner_teacher, other_teacher
+    ):
+        other_teacher.student_code = "9999999999"
+        session.add(other_teacher)
+        session.commit()
+
+        with pytest.raises(NotFoundError, match="Không tìm thấy sinh viên"):
+            add_student_to_course(
+                None,
+                course.course_id,
+                session,
+                owner_teacher,
+                student_code="9999999999",
+            )
+
+        assert enrollments_of(session, course.course_id) == []
+
 
 class TestDeleteStudentFromCourse:
     # giảng viên chủ khóa học xóa sinh viên khỏi khóa và giảm total_number_student
@@ -153,6 +324,7 @@ class TestGetCourseEnrollments:
 
         assert len(result) == 1
         assert result[0].student_id == str(student.user_id)
+        assert result[0].student_code == student.student_code
         assert result[0].full_name == student.full_name
         assert result[0].email == student.email
 

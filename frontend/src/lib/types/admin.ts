@@ -11,7 +11,10 @@ export interface AdminClass {
 
 export interface AdminEnrollment {
   enrollment_id: number;
+  /** UUID `user_id` — chỉ dùng để gọi API, không hiển thị. */
   student_id: string;
+  /** MSSV hiển thị cho người dùng. */
+  student_code: string | null;
   full_name: string;
   email: string;
 }

@@ -6,7 +6,7 @@
 
 - Client gửi datetime bắt buộc có UTC offset (vd: `"2026-09-07T00:00:00+07:00"`). Backend chấp nhận offset tường minh và trả thời gian theo `Asia/Ho_Chi_Minh` với offset `+07:00`.
 - Database lưu các thời điểm dưới dạng `timestamptz` theo UTC. Khi đọc, backend chuyển sang giờ Việt Nam có timezone.
-- Field kiểu `date` của Lesson (`start_date`, `end_date`) và `date_of_birth` là ngày lịch, không có giờ hay offset. Course dùng `datetime`. Lesson mở lúc 00:00 giờ Việt Nam ngày `start_date`, hết hạn lúc 23:59:59.999999 ngày `end_date`; `opens_at` và `deadline` trả giờ Việt Nam kèm `+07:00`.
+- Field kiểu `date` của Lesson (`start_date`, `end_date`) là ngày lịch, không có giờ hay offset. Course dùng `datetime`. Lesson mở lúc 00:00 giờ Việt Nam ngày `start_date`, hết hạn lúc 23:59:59.999999 ngày `end_date`; `opens_at` và `deadline` trả giờ Việt Nam kèm `+07:00`.
 - Với Problem, `start_datetime` quyết định lúc mở đề; `end_datetime` chỉ chặn Submit, không chặn xem đề.
 - Phía FE hiển thị theo `Asia/Ho_Chi_Minh` để không phụ thuộc múi giờ trình duyệt.
 

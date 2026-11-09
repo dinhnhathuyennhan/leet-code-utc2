@@ -31,11 +31,24 @@ def get_course_enrollments(
         GetStudentListResponse(
             enrollment_id=enrollment.enrollment_id,
             student_id=str(student.user_id),
+            student_code=student.student_code,
             full_name=student.full_name,
             email=student.email,
         )
         for enrollment, student in enrollments
     ]
+
+
+def _find_student(session: Session, identifier: str) -> User | None:
+    """Tra sinh viên theo UUID `user_id` hoặc theo MSSV (`student_code`)."""
+    value = str(identifier).strip()
+    try:
+        student = session.get(User, UUID(value))
+    except (TypeError, ValueError, AttributeError):
+        student = session.exec(select(User).where(User.student_code == value)).first()
+    if not student or student.role_id != Role.STUDENT:
+        return None
+    return student
 
 
 def add_student_to_course(
@@ -51,13 +64,10 @@ def add_student_to_course(
         "Bạn không có quyền thêm sinh viên vào lớp này",
     )
 
-    try:
-        student_uuid = UUID(str(student_id))
-    except (TypeError, ValueError, AttributeError):
-        raise NotFoundError("Không tìm thấy sinh viên") from None
-    student = session.get(User, student_uuid)
-    if not student or student.role_id != Role.STUDENT:
+    student = _find_student(session, student_id)
+    if not student:
         raise NotFoundError("Không tìm thấy sinh viên")
+    student_uuid = student.user_id
 
     if find_enrollment(session, course_id, student_uuid):
         raise ConflictError("Sinh viên đã có trong lớp học")
@@ -70,6 +80,7 @@ def add_student_to_course(
 
     return AddStudentToCourseResponse(
         student_id=str(student_uuid),
+        student_code=student.student_code,
         course_id=course_id,
         enrollment_id=enrollment.enrollment_id,
     )

@@ -69,7 +69,7 @@ def main() -> int:
 
         # --- 1. Review VI ---
         start = time.monotonic()
-        response = client.post(f"/submissions/{submission_id}/ai-review", headers=headers, json={"locale": "vi"})
+        response = client.post(f"/ai/review/{submission_id}", headers=headers, json={"locale": "vi"})
         elapsed = time.monotonic() - start
         check("POST ai-review (vi)", response.status_code == 200,
               f"status={response.status_code} time={elapsed:.1f}s")
@@ -89,7 +89,7 @@ def main() -> int:
 
         # --- 2. Review EN ---
         start = time.monotonic()
-        response = client.post(f"/submissions/{submission_id}/ai-review", headers=headers, json={"locale": "en"})
+        response = client.post(f"/ai/review/{submission_id}", headers=headers, json={"locale": "en"})
         elapsed = time.monotonic() - start
         check("POST ai-review (en)", response.status_code == 200,
               f"status={response.status_code} time={elapsed:.1f}s")
@@ -107,7 +107,7 @@ def main() -> int:
               "summary khac nhau")
 
         # --- 4. Body rong -> mac dinh VI ---
-        response = client.post(f"/submissions/{submission_id}/ai-review", headers=headers)
+        response = client.post(f"/ai/review/{submission_id}", headers=headers)
         check("POST ai-review (body rong)", response.status_code == 200,
               f"status={response.status_code}")
 
@@ -116,15 +116,15 @@ def main() -> int:
         all_items = (response.json() if response.status_code == 200 else {}).get("items") or []
         wrong = [i for i in all_items if i.get("status") == "wrong_answer"]
         if wrong:
-            response = client.post(f"/submissions/{wrong[0]['id']}/ai-review", headers=headers)
+            response = client.post(f"/ai/review/{wrong[0]['id']}", headers=headers)
             check("bai chua pass -> 409", response.status_code == 409, f"status={response.status_code}")
 
         # --- 6. Bai nop nguoi khac -> 404 ---
-        response = client.post("/submissions/999999/ai-review", headers=headers)
+        response = client.post("/ai/review/999999", headers=headers)
         check("bai nop khong ton tai -> 404", response.status_code == 404, f"status={response.status_code}")
 
         # --- 7. Thieu token -> 401 ---
-        response = client.post(f"/submissions/{submission_id}/ai-review")
+        response = client.post(f"/ai/review/{submission_id}")
         check("thieu token -> 401/403", response.status_code in (401, 403), f"status={response.status_code}")
 
     print("=" * 92)

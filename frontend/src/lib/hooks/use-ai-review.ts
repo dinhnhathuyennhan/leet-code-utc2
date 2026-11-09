@@ -20,7 +20,7 @@ import type { AiReviewResult } from "@/lib/types/ai-review";
  */
 export function useAiReview(submissionId: number | string, locale: Locale) {
   return useMutation<AiReviewResult, unknown, void>({
-    mutationKey: ["submissions", "ai-review", submissionId, locale],
+    mutationKey: ["ai", "review", submissionId, locale],
     mutationFn: () => reviewSubmission(submissionId, locale),
     retry: false,
   });

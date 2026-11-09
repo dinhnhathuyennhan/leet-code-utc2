@@ -6,7 +6,6 @@ import { BookOpen, Clock, FileText, Search } from "lucide-react";
 
 import { useBreadcrumbLabel } from "@/components/shared/breadcrumb-context";
 import { EmptyState, ErrorState } from "@/components/shared/page-state";
-import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { formatDeadline } from "@/lib/helpers/datetime";
 import { useCourses } from "@/lib/hooks/use-courses";
@@ -114,10 +113,14 @@ export default function StudentAssignmentsPage() {
 
 /* ─── Helpers ─────────────────────────────────────────────────────────────── */
 
-const LEVEL_TONE: Record<string, string> = {
-  easy: "bg-emerald-100 text-emerald-800 dark:bg-emerald-500/20 dark:text-emerald-300",
-  medium: "bg-amber-100 text-amber-800 dark:bg-amber-500/20 dark:text-amber-300",
-  hard: "bg-red-100 text-red-700 dark:bg-red-500/20 dark:text-red-300",
+/**
+ * Mức độ hiển thị dạng chữ thuần (không nền) cho đỡ chói mắt.
+ * Màu nền theo mức độ từng khiến card rối mắt nên bỏ hẳn, chỉ giữ màu chữ.
+ */
+const LEVEL_TEXT_TONE: Record<string, string> = {
+  easy: "text-emerald-700 dark:text-emerald-400",
+  medium: "text-amber-700 dark:text-amber-400",
+  hard: "text-red-700 dark:text-red-400",
 };
 
 function AssignmentCard({ row }: { row: AssignmentRow }) {
@@ -141,9 +144,14 @@ function AssignmentCard({ row }: { row: AssignmentRow }) {
             </p>
             <h2 className="mt-0.5 truncate text-sm font-semibold">{problem.title}</h2>
           </div>
-          <Badge className={cn("shrink-0 capitalize", LEVEL_TONE[problem.level] ?? LEVEL_TONE.easy)}>
+          <span
+            className={cn(
+              "shrink-0 text-xs font-medium capitalize",
+              LEVEL_TEXT_TONE[problem.level] ?? LEVEL_TEXT_TONE.easy,
+            )}
+          >
             {problem.level}
-          </Badge>
+          </span>
         </div>
 
         <p className="truncate text-xs text-muted-foreground">

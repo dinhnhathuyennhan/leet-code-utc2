@@ -6,10 +6,17 @@ CLAUDE.md
 .chamcode-api.bruno_collection.json
 .tmp-admin-playwright/
 
-# judge0.conf chỉ dùng khi self-host Judge0 thủ công (xem docs/judge0-setup.md).
-# Stack local đã gộp vào docker-compose.yml gốc nên không cần file này.
+# judge0.conf: cấu hình cho 4 service Judge0 trong docker-compose.yml (env_file).
+# Chứa mật khẩu nội bộ + token nên KHÔNG commit. Mẫu nằm trong docs/judge0-setup.md.
 judge0/judge0.conf
 judge0.conf
+
+# Override compose cho máy cgroup v2 — tự tạo theo docs/judge0-setup.md
+docker-compose.cgroupv2.yml
+
+# Script test cục bộ viết bằng PowerShell. Nhóm đang test bằng Postman/Python
+# nên các script .ps1 chỉ dùng ở máy mình, không commit lên git.
+*.ps1
 
 # Dependencies
 node_modules/
@@ -38,3 +45,9 @@ docs/_*.jpg
 docs/_*.html
 /backend/bruno
 CLAUDE.md
+
+# Cấu hình/dữ liệu cục bộ của công cụ cá nhân (Postman CLI, VS Code, graphify)
+postman/
+.postman/
+.vscode/
+graphify-out/

@@ -8,7 +8,7 @@ export interface AiReviewOptimization {
   expected_space_complexity: string;
 }
 
-/** Response của `POST /submissions/{id}/ai-review` (khớp `AIReviewResponse` ở backend). */
+/** Response của `POST /ai/review/{submission_id}` (khớp `AIReviewResponse` ở backend). */
 export interface AiReviewResult {
   time_complexity: string;
   space_complexity: string;

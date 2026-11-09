@@ -16,7 +16,7 @@ import { renderWithProviders } from "@/test/utils/render";
 import { LocaleProvider, resetLocaleStore, useLocale } from "@/lib/i18n";
 import type { AiReviewResult } from "@/lib/types/ai-review";
 
-const URL = "http://localhost:8000/submissions/:id/ai-review";
+const URL = "http://localhost:8000/ai/review/:id";
 
 const PRIME_REVIEW: AiReviewResult = {
   time_complexity: "O(n)",
@@ -75,7 +75,7 @@ afterEach(() => {
   vi.useRealTimers();
 });
 
-describe("AiReviewSection — điều kiện hiện nút", () => {
+describe("AiReviewSection — button visibility conditions", () => {
   it.each([
     ["wrong_answer", 2, 3],
     ["compile_error", 0, 3],
@@ -85,7 +85,7 @@ describe("AiReviewSection — điều kiện hiện nút", () => {
     ["processing", 0, 3],
     ["accepted", 2, 3],
     ["accepted", 0, 0],
-  ])("không render gì khi status=%s, passed=%i/%i", (status, passed, total) => {
+  ])("renders nothing when status=%s, passed=%i/%i", (status, passed, total) => {
     const calls = mockReview();
     const { container } = renderSection({ id: 1, status, passed_count: passed, total_testcases: total });
 
@@ -94,12 +94,12 @@ describe("AiReviewSection — điều kiện hiện nút", () => {
     expect(calls).toHaveLength(0);
   });
 
-  it("không render khi chưa có bài nộp", () => {
+  it("renders nothing when there is no submission", () => {
     const { container } = renderSection(null);
     expect(container).toBeEmptyDOMElement();
   });
 
-  it("hiện nút + lời mời khi pass hết testcase", () => {
+  it("shows the button and the prompt when all testcases passed", () => {
     renderSection();
 
     expect(reviewButton()).toBeEnabled();
@@ -107,8 +107,8 @@ describe("AiReviewSection — điều kiện hiện nút", () => {
   });
 });
 
-describe("AiReviewSection — chỉ gọi AI khi bấm", () => {
-  it("không gọi API khi mount, chỉ gọi đúng 1 lần sau khi bấm", async () => {
+describe("AiReviewSection — calls AI only when clicked", () => {
+  it("does not call the API on mount, calls exactly once after the click", async () => {
     const calls = mockReview();
     const user = userEvent.setup();
     renderSection();
@@ -120,10 +120,10 @@ describe("AiReviewSection — chỉ gọi AI khi bấm", () => {
     await user.click(reviewButton());
 
     await screen.findByTestId("ai-review-result");
-    expect(calls).toEqual(["http://localhost:8000/submissions/7/ai-review"]);
+    expect(calls).toEqual(["http://localhost:8000/ai/review/7"]);
   });
 
-  it("bấm liên tục khi đang chạy cũng chỉ gửi 1 request", async () => {
+  it("clicking repeatedly while running still sends a single request", async () => {
     const calls = mockReview(async () => {
       await delay(150);
       return HttpResponse.json(PRIME_REVIEW);
@@ -142,7 +142,7 @@ describe("AiReviewSection — chỉ gọi AI khi bấm", () => {
     expect(calls).toHaveLength(1);
   });
 
-  it("lỗi thì không tự retry", async () => {
+  it("does not auto retry after an error", async () => {
     const calls = mockReview(() =>
       HttpResponse.json({ error_code: "AI_BUSY", message: "bận" }, { status: 503 }),
     );
@@ -157,8 +157,8 @@ describe("AiReviewSection — chỉ gọi AI khi bấm", () => {
   });
 });
 
-describe("AiReviewSection — đang chạy", () => {
-  it("hiện skeleton, vùng kết quả aria-busy và nhắc khởi động sau 15 giây", async () => {
+describe("AiReviewSection — running state", () => {
+  it("shows the skeleton, the aria-busy result region and the warmup hint after 15 seconds", async () => {
     vi.useFakeTimers({ shouldAdvanceTime: true });
     mockReview(async () => {
       await delay("infinite");
@@ -185,7 +185,7 @@ describe("AiReviewSection — đang chạy", () => {
   });
 });
 
-describe("AiReviewSection — kết quả", () => {
+describe("AiReviewSection — results", () => {
   async function openReview(review: AiReviewResult = PRIME_REVIEW) {
     mockReview(() => HttpResponse.json(review));
     const user = userEvent.setup();
@@ -195,7 +195,7 @@ describe("AiReviewSection — kết quả", () => {
     return { user, card };
   }
 
-  it("bài tối ưu được: hiện trước → sau ở thẻ thời gian, bộ nhớ không đổi thì không có mũi tên", async () => {
+  it("optimizable submission: shows before → after in the time card, no arrow when space is unchanged", async () => {
     await openReview();
 
     const time = screen.getByTestId("ai-review-time");
@@ -208,7 +208,7 @@ describe("AiReviewSection — kết quả", () => {
     expect(within(space).queryByLabelText("→")).toBeNull();
   });
 
-  it("hiện tóm tắt, giải thích, điểm chưa tối ưu (bỏ dòng rỗng) và hướng cải thiện", async () => {
+  it("shows the summary, the explanation, the issues (blank entries dropped) and the improvement advice", async () => {
     await openReview();
 
     expect(screen.getByText("Code đúng nhưng chưa tối ưu.")).toBeInTheDocument();
@@ -223,12 +223,12 @@ describe("AiReviewSection — kết quả", () => {
     expect(screen.queryByText("Code đã ở mức tối ưu hợp lý")).toBeNull();
   });
 
-  it("luôn có chú thích AI không ảnh hưởng điểm", async () => {
+  it("always shows the AI note stating it does not affect the grade", async () => {
     await openReview();
     expect(screen.getByText(/Không ảnh hưởng tới điểm/)).toBeInTheDocument();
   });
 
-  it("bài đã tối ưu: không có mũi tên, không có danh sách vấn đề, hiện khối 'đã tối ưu'", async () => {
+  it("already optimal submission: no arrow, no issues list, shows the optimal block", async () => {
     await openReview(OPTIMAL_REVIEW);
 
     expect(screen.queryByLabelText("→")).toBeNull();
@@ -238,7 +238,7 @@ describe("AiReviewSection — kết quả", () => {
     expect(screen.queryByText("Hướng cải thiện")).toBeNull();
   });
 
-  it("is_optimizable=true nhưng độ phức tạp sau giống trước (khác hoa thường/khoảng trắng) thì không hiện mũi tên", async () => {
+  it("is_optimizable=true but the new complexity equals the old one (case/whitespace differences) shows no arrow", async () => {
     await openReview({
       ...PRIME_REVIEW,
       time_complexity: "O(n log n)",
@@ -248,7 +248,7 @@ describe("AiReviewSection — kết quả", () => {
     expect(within(screen.getByTestId("ai-review-time")).queryByLabelText("→")).toBeNull();
   });
 
-  it("nội dung AI hiển thị dạng text thuần, không render HTML", async () => {
+  it("AI content renders as plain text, no HTML is rendered", async () => {
     await openReview({
       ...PRIME_REVIEW,
       summary: '<img src=x onerror="alert(1)"><b>đậm</b>',
@@ -260,7 +260,7 @@ describe("AiReviewSection — kết quả", () => {
     expect(screen.getByText('<img src=x onerror="alert(1)"><b>đậm</b>')).toBeInTheDocument();
   });
 
-  it("nút Đóng ẩn kết quả và quay về nút Review code", async () => {
+  it("the Close button hides the result and returns to the Review code button", async () => {
     const { user } = await openReview();
 
     await user.click(screen.getByRole("button", { name: "Đóng AI review" }));
@@ -269,7 +269,7 @@ describe("AiReviewSection — kết quả", () => {
     expect(reviewButton()).toBeEnabled();
   });
 
-  it("Review lại gửi request mới", async () => {
+  it("Review again sends a new request", async () => {
     const calls = mockReview(() => HttpResponse.json(PRIME_REVIEW));
     const user = userEvent.setup();
     renderSection();
@@ -283,7 +283,7 @@ describe("AiReviewSection — kết quả", () => {
   });
 });
 
-describe("AiReviewSection — lỗi", () => {
+describe("AiReviewSection — errors", () => {
   it.each([
     [503, "AI_BUSY", "AI đang phân tích bài khác, vui lòng thử lại sau.", true],
     [503, "AI_UNAVAILABLE", "Không thể kết nối AI Server.", true],
@@ -293,7 +293,7 @@ describe("AiReviewSection — lỗi", () => {
     [409, "SUBMISSION_NOT_ACCEPTED", "Bài nộp phải pass toàn bộ testcase mới được review code.", false],
     [422, "CODE_TOO_LONG", "Mã nguồn quá dài, AI không review được.", false],
     [404, "NOT_FOUND", "Không tìm thấy bài nộp.", false],
-  ])("HTTP %i %s -> thông báo đúng, có nút Thử lại = %s", async (status, code, text, retry) => {
+  ])("HTTP %i %s -> shows the right message, retry button present = %s", async (status, code, text, retry) => {
     mockReview(() => HttpResponse.json({ error_code: code, message: "x" }, { status }));
     const user = userEvent.setup();
     renderSection();
@@ -310,7 +310,7 @@ describe("AiReviewSection — lỗi", () => {
     }
   });
 
-  it("mất mạng -> báo mất kết nối", async () => {
+  it("network failure -> shows the connection lost message", async () => {
     mockReview(() => HttpResponse.error());
     const user = userEvent.setup();
     renderSection();
@@ -320,7 +320,7 @@ describe("AiReviewSection — lỗi", () => {
     expect(await screen.findByRole("alert")).toHaveTextContent("Mất kết nối, vui lòng thử lại.");
   });
 
-  it("Thử lại sau lỗi gọi lại API và hiện kết quả khi thành công", async () => {
+  it("Retry after an error calls the API again and renders the result on success", async () => {
     let attempt = 0;
     const calls = mockReview(() => {
       attempt += 1;
@@ -341,8 +341,8 @@ describe("AiReviewSection — lỗi", () => {
   });
 });
 
-describe("AiReviewSection — đổi bài nộp", () => {
-  it("đổi sang bài nộp khác (key mới) thì kết quả cũ bị xoá", async () => {
+describe("AiReviewSection — changing submission", () => {
+  it("switching to another submission (new key) clears the old result", async () => {
     mockReview();
     const user = userEvent.setup();
     const { rerender } = renderWithProviders(<AiReviewSection key={7} submission={ACCEPTED} />);
@@ -355,7 +355,7 @@ describe("AiReviewSection — đổi bài nộp", () => {
     expect(reviewButton()).toBeEnabled();
   });
 
-  it("lần nộp mới chưa pass thì nút biến mất", async () => {
+  it("the button disappears when the new submission has not passed", async () => {
     mockReview();
     const { rerender } = renderWithProviders(<AiReviewSection key={7} submission={ACCEPTED} />);
     expect(reviewButton()).toBeInTheDocument();
@@ -378,7 +378,7 @@ describe("AiReviewSection — i18n", () => {
     );
   }
 
-  it("đổi sang tiếng Anh thì nhãn panel đổi theo", async () => {
+  it("switching to English updates the panel labels", async () => {
     mockReview();
     const user = userEvent.setup();
     renderWithProviders(
@@ -442,8 +442,8 @@ function renderWithLocaleToggle() {
   );
 }
 
-describe("AiReviewSection — ngôn ngữ của prompt", () => {
-  it("lần review đầu gửi locale đang xem (vi)", async () => {
+describe("AiReviewSection — prompt locale", () => {
+  it("the first review sends the locale currently in use (vi)", async () => {
     const locales = mockReviewByLocale();
     const user = userEvent.setup();
     renderWithLocaleToggle();
@@ -455,7 +455,7 @@ describe("AiReviewSection — ngôn ngữ của prompt", () => {
     expect(screen.getByText("summary-vi")).toBeInTheDocument();
   });
 
-  it("đang ở EN thì review đầu gửi locale en", async () => {
+  it("when in EN the first review sends locale en", async () => {
     const locales = mockReviewByLocale();
     const user = userEvent.setup();
     renderWithLocaleToggle();
@@ -468,7 +468,7 @@ describe("AiReviewSection — ngôn ngữ của prompt", () => {
     expect(screen.getByText("summary-en")).toBeInTheDocument();
   });
 
-  it("chưa bấm review thì đổi ngôn ngữ không gọi AI", async () => {
+  it("changing the language before reviewing does not call AI", async () => {
     const locales = mockReviewByLocale();
     const user = userEvent.setup();
     renderWithLocaleToggle();
@@ -480,7 +480,7 @@ describe("AiReviewSection — ngôn ngữ của prompt", () => {
     expect(locales).toEqual([]);
   });
 
-  it("đổi ngôn ngữ sau khi review thì sinh lại bằng ngôn ngữ mới", async () => {
+  it("changing the language after a review regenerates it in the new language", async () => {
     const locales = mockReviewByLocale();
     const user = userEvent.setup();
     renderWithLocaleToggle();
@@ -494,7 +494,7 @@ describe("AiReviewSection — ngôn ngữ của prompt", () => {
     expect(locales).toEqual(["vi", "en"]);
   });
 
-  it("quay lại ngôn ngữ đã có kết quả thì hiện cache, không gọi lại AI", async () => {
+  it("returning to a language that already has a result shows the cache without calling AI again", async () => {
     const locales = mockReviewByLocale();
     const user = userEvent.setup();
     renderWithLocaleToggle();
@@ -512,7 +512,7 @@ describe("AiReviewSection — ngôn ngữ của prompt", () => {
     expect(locales).toEqual(["vi", "en"]);
   });
 
-  it("chuyển ngôn ngữ liên tục chỉ gọi AI 1 lần cho mỗi ngôn ngữ", async () => {
+  it("switching languages repeatedly calls AI only once per language", async () => {
     const locales = mockReviewByLocale();
     const user = userEvent.setup();
     renderWithLocaleToggle();
@@ -533,7 +533,7 @@ describe("AiReviewSection — ngôn ngữ của prompt", () => {
     expect(locales).toEqual(["vi", "en"]);
   });
 
-  it("đang chạy ở ngôn ngữ mới mà quay lại ngôn ngữ cũ thì hiện kết quả cũ ngay", async () => {
+  it("while running in the new language, switching back shows the old result immediately", async () => {
     const locales: string[] = [];
     let releaseEn: (() => void) | undefined;
     server.use(
@@ -573,7 +573,7 @@ describe("AiReviewSection — ngôn ngữ của prompt", () => {
     expect(locales).toEqual(["vi", "en"]);
   });
 
-  it("lỗi được giữ theo ngôn ngữ: quay lại ngôn ngữ lỗi không tự gọi lại", async () => {
+  it("errors are kept per language: returning to the errored language does not call AI again", async () => {
     const locales: string[] = [];
     server.use(
       http.post(URL, async ({ request }) => {
@@ -602,7 +602,7 @@ describe("AiReviewSection — ngôn ngữ của prompt", () => {
     expect(locales).toEqual(["vi", "en"]);
   });
 
-  it("đóng panel rồi đổi ngôn ngữ thì không bật lại kết quả cũ", async () => {
+  it("changing the language after closing the panel does not reopen the old result", async () => {
     const locales = mockReviewByLocale();
     const user = userEvent.setup();
     renderWithLocaleToggle();

@@ -80,7 +80,7 @@ def main() -> int:
         for locale in ("vi", "en"):
             start = time.monotonic()
             response = client.post(
-                f"/submissions/{submission_id}/ai-review", headers=headers, json={"locale": locale}
+                f"/ai/review/{submission_id}", headers=headers, json={"locale": locale}
             )
             elapsed = time.monotonic() - start
             print(f"\n--- review [{locale}] status={response.status_code} ({elapsed:.1f}s) ---")

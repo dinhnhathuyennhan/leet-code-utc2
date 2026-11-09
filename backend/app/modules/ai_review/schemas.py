@@ -36,6 +36,10 @@ class AIReviewRequest(BaseModel):
     # Ngôn ngữ mong muốn của phần văn xuôi trong kết quả. Mặc định "vi" để
     # request cũ (không gửi locale) vẫn chạy như trước.
     locale: Locale = "vi"
+    # True = code tuỳ ý do client gửi lên (`POST /ai/review`), không phải bài
+    # nộp đã pass testcase. Dùng để service chọn prompt trung tính (không nói
+    # "đã pass ALL testcases"), vì code lúc đó chưa chắc đã được chấm.
+    free_form: bool = False
 
     @field_validator("code")
     @classmethod
@@ -61,6 +65,26 @@ class AIReviewRequestBody(BaseModel):
     model_config = ConfigDict(extra="ignore")
 
     locale: Locale = "vi"
+
+
+class AIReviewFreeFormRequest(BaseModel):
+    """Body của ``POST /ai/review`` — review code tuỳ ý (admin/teacher).
+
+    Giữ đúng shape như develop: chỉ ``code`` + ``language``. Không có
+    ``locale`` vì endpoint này luôn trả review tiếng Việt (như develop).
+    """
+
+    model_config = ConfigDict(str_strip_whitespace=True)
+
+    code: str = Field(min_length=1, max_length=MAX_REVIEW_CODE_CHARS)
+    # language được nhúng thẳng vào prompt: chỉ cho tên ngôn ngữ (chữ, số, + # . _ -
+    # và khoảng trắng) để không chèn được dòng chỉ thị mới vào prompt.
+    language: str = Field(
+        default="python",
+        min_length=1,
+        max_length=30,
+        pattern=r"^[A-Za-z0-9+#._ -]+$",
+    )
 
 
 class AdminPreviewReviewRequest(AIReviewRequest):

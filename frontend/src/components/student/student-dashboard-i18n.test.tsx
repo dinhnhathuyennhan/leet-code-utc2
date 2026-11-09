@@ -54,7 +54,7 @@ function LanguageToggle() {
   );
 }
 
-describe("i18n — LanguageToggle đổi nội dung thật", () => {
+describe("i18n — LanguageToggle really changes the content", () => {
   beforeEach(() => {
     window.localStorage.clear();
     // Store locale sống ở module scope → reset giữa các test.
@@ -62,7 +62,7 @@ describe("i18n — LanguageToggle đổi nội dung thật", () => {
     vi.clearAllMocks();
   });
 
-  it("dashboard đổi từ tiếng Việt sang tiếng Anh", async () => {
+  it("the dashboard switches from Vietnamese to English", async () => {
     const user = userEvent.setup();
     renderWithProviders(
       <LocaleProvider>
@@ -100,7 +100,7 @@ describe("i18n — LanguageToggle đổi nội dung thật", () => {
     expect(screen.getByPlaceholderText("Tìm kiếm lớp học phần…")).toBeInTheDocument();
   });
 
-  it("nhãn học kỳ hiển thị theo ngôn ngữ", async () => {
+  it("the semester label follows the current language", async () => {
     const user = userEvent.setup();
     renderWithProviders(
       <LocaleProvider>

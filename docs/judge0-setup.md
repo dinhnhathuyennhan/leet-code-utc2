@@ -10,8 +10,73 @@ Stack local đã **gộp sẵn Judge0 vào `docker-compose.yml` ở thư mục g
 làm các bước 1–7 bên dưới (bước đó dành cho khi cần dựng Judge0 trên VM riêng
 để chia sẻ cho cả nhóm).
 
+### Bước 1: tạo file `judge0.conf` ở thư mục gốc
+
+`docker-compose.yml` đọc cấu hình Judge0 bằng `env_file: ./judge0.conf`, giống
+các nhánh khác của nhóm. File này **không commit lên git** (đã có trong
+`.gitignore`), nên mỗi người tự tạo một bản.
+
+Copy nội dung mẫu dưới đây thành `judge0.conf`, rồi điền 3 giá trị
+`<...>`:
+
 ```bash
-cp .env.example .env      # điền JUDGE0_AUTH_TOKEN, mật khẩu Postgres/Redis
+# judge0.conf (thư mục gốc)
+REDIS_HOST=judge0-redis
+REDIS_PORT=6379
+REDIS_PASSWORD=<mật khẩu Redis>
+POSTGRES_HOST=judge0-db
+POSTGRES_PORT=5432
+POSTGRES_DB=judge0
+POSTGRES_USER=judge0
+POSTGRES_PASSWORD=<mật khẩu Postgres của Judge0>
+
+# Xác thực: backend gửi header X-Auth-Token
+AUTHN_HEADER=X-Auth-Token
+AUTHN_TOKEN=<token giống JUDGE0_AUTH_TOKEN trong .env>
+
+# Hành vi API
+ENABLE_WAIT_RESULT=false
+MAX_QUEUE_SIZE=200
+ENABLE_PER_PROCESS_AND_THREAD_TIME_LIMIT=true
+ENABLE_PER_PROCESS_AND_THREAD_MEMORY_LIMIT=true
+
+# Giới hạn thời gian (giây) — hai trần MAX phải >=
+# JUDGE0_MAX_CPU_TIME_SECONDS / JUDGE0_MAX_WALL_TIME_SECONDS trong
+# backend/app/core/config.py
+CPU_TIME_LIMIT=15
+MAX_CPU_TIME_LIMIT=15
+WALL_TIME_LIMIT=20
+MAX_WALL_TIME_LIMIT=20
+
+# Giới hạn bộ nhớ (KB) — trần bộ nhớ phải >= memory_limit_kb của ngôn ngữ
+# nặng nhất trong backend/app/core/config.py (Java: 6_144_000 KB)
+MEMORY_LIMIT=128000
+MAX_MEMORY_LIMIT=6144000
+```
+
+Sinh 2 mật khẩu ngẫu nhiên:
+
+```bash
+openssl rand -hex 16   # dùng cho REDIS_PASSWORD và POSTGRES_PASSWORD
+openssl rand -hex 24   # dùng cho AUTHN_TOKEN
+```
+
+### Bước 2: khai báo token trong `.env`
+
+Backend đọc `JUDGE0_AUTH_TOKEN` (header `X-Auth-Token` gửi kèm mỗi request)
+từ `backend/.env`. Giá trị này **phải khớp** với `AUTHN_TOKEN` trong
+`judge0.conf`, nếu không Judge0 sẽ trả 401.
+
+Mật khẩu Postgres/Redis của Judge0 chỉ nằm trong `judge0.conf` — backend không
+dùng tới, nên không cần khai báo ở `.env`.
+
+```bash
+cp .env.example .env      # điền JUDGE0_AUTH_TOKEN
+```
+
+### Bước 3: chạy
+
+```bash
 docker compose up -d
 ```
 
@@ -23,9 +88,6 @@ docker compose up -d
 | `postgres` / `migrate` | 5432 | DB chính của ứng dụng + chạy migration |
 | `pgadmin` | 5050 | Giao diện quản trị DB |
 
-**Cấu hình Judge0 truyền qua biến môi trường** (`environment:` trong compose),
-không dùng file `judge0.conf` — image đọc cấu hình bằng ENV trực tiếp
-(xem `app/helpers/config.rb` trong Judge0).
 
 ### Chuyển giữa Judge0 local và Judge0 trên AWS/VPS
 
@@ -56,17 +118,32 @@ Bản Judge0 chính thức (`judge0/judge0:1.13.1`) dùng sandbox `isolate` ch�
 được trên **cgroup v1**. Docker Desktop / WSL2 / Ubuntu ≥ 22.04 đều dùng
 **cgroup v2** → mọi bài nộp sẽ trả `Internal Error (13)`.
 
-Vì vậy compose dùng image **`mrkushalsm/judge0:cgv2`** (đã patch cho cgroup v2),
-kèm mount `/sys/fs/cgroup:/sys/fs/cgroup:rw` cho worker. Kiểm tra máy đang dùng
-loại nào:
+Mặc định compose dùng image chính thức `judge0/judge0:1.13.1` (giống các nhánh
+khác của nhóm). Nếu máy bạn chạy cgroup v2 thì dùng thêm file override
+`docker-compose.cgroupv2.yml` (file này **không commit**, tự tạo theo mẫu bên
+dưới):
+
+```yaml
+# docker-compose.cgroupv2.yml
+services:
+  judge0-server:
+    image: mrkushalsm/judge0:cgv2
+  judge0-workers:
+    image: mrkushalsm/judge0:cgv2
+    volumes:
+      - /sys/fs/cgroup:/sys/fs/cgroup:rw   # isolate cần quyền ghi vào cgroup
+```
+
+```bash
+docker compose -f docker-compose.yml -f docker-compose.cgroupv2.yml up -d
+```
+
+Kiểm tra máy đang dùng loại nào:
 
 ```bash
 docker run --rm --entrypoint sh mrkushalsm/judge0:cgv2 -c "stat -fc %T /sys/fs/cgroup/"
 # cgroup2fs = cgroup v2 (dùng image cgv2) | tmpfs = cgroup v1 (image chính thức cũng được)
 ```
-
-Nếu chạy trên Linux cgroup v1, đổi `image:` của `judge0-server` và
-`judge0-workers` sang `judge0/judge0:1.13.1` là được (bỏ luôn volume cgroup).
 
 ### Kiểm tra nhanh sau khi dựng
 

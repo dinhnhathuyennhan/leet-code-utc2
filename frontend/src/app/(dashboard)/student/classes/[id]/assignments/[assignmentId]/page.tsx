@@ -3,10 +3,11 @@
 import { useMemo, useState } from "react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
-import { ArrowLeft, Clock, FileCode2, FlaskConical, Send, TriangleAlert } from "lucide-react";
+import { ArrowLeft, Clock, FileCode2, FlaskConical, PlayCircle, Send, TriangleAlert } from "lucide-react";
 import { toast } from "sonner";
 
 import { AiReviewSection } from "@/components/student/ai-review-panel";
+import { CheckAnswerPanel } from "@/components/student/check-answer-panel";
 import { CodeEditor } from "@/components/student/code-editor";
 import { GradingResultPanel } from "@/components/student/grading-result-panel";
 import { useBreadcrumbLabel } from "@/components/shared/breadcrumb-context";
@@ -21,9 +22,11 @@ import { useLocale } from "@/lib/i18n";
 import {
   useCourseWithProblem,
   useProblemDetail,
+  useRunCode,
   useSubmitAssignment,
   useSubmissionResult,
 } from "@/lib/hooks/use-submissions";
+import type { RunCodeResponse } from "@/lib/api/endpoints/submissions";
 import type { StudentSubmissionDetail } from "@/lib/types/submission";
 
 /**
@@ -48,8 +51,11 @@ export default function StudentAssignmentDetailPage() {
   const [submittedId, setSubmittedId] = useState<number | null>(null);
   /** Bài đã nạp mã mẫu — dùng để nạp lại code khi đổi bài (tránh setState trong effect). */
   const [loadedProblemId, setLoadedProblemId] = useState<number | null>(null);
+  /** Kết quả lần chạy "Kiểm tra đáp án" gần nhất (null = chưa chạy). */
+  const [checkResult, setCheckResult] = useState<RunCodeResponse | null>(null);
 
   const submitMutation = useSubmitAssignment(courseId, lessonId, problemId);
+  const runMutation = useRunCode(courseId, lessonId, problemId);
   const resultQuery = useSubmissionResult(submittedId ?? undefined);
   const { t } = useLocale();
 
@@ -87,6 +93,29 @@ export default function StudentAssignmentDetailPage() {
           toast.success(t("student.assignment.toastSubmitted"));
         },
         onError: (error) => {
+          toast.error(getErrorMessage(error));
+        },
+      },
+    );
+  }
+
+  /**
+   * "Kiểm tra đáp án": chạy code với testcase MẪU (`POST .../run`).
+   * Không tạo bài nộp và không ảnh hưởng điểm — chỉ để sinh viên tự soát.
+   */
+  function handleCheckAnswer() {
+    if (!code.trim()) {
+      toast.error(t("student.assignment.emptySource"));
+      return;
+    }
+    runMutation.mutate(
+      { code, language },
+      {
+        onSuccess: (data) => {
+          setCheckResult(data);
+        },
+        onError: (error) => {
+          setCheckResult(null);
           toast.error(getErrorMessage(error));
         },
       },
@@ -226,12 +255,25 @@ export default function StudentAssignmentDetailPage() {
             disabled={isGrading}
           />
 
-          <div className="flex items-center justify-end gap-3">
+          <div className="flex flex-wrap items-center justify-end gap-3">
             {isGrading && (
               <p className="text-xs text-muted-foreground">
                 {t("student.assignment.gradingWait")}
               </p>
             )}
+            {/* "Kiểm tra đáp án": chạy testcase mẫu, không tạo bài nộp. */}
+            <Button
+              size="lg"
+              variant="outline"
+              onClick={handleCheckAnswer}
+              disabled={isGrading || runMutation.isPending}
+              className="font-semibold"
+            >
+              <PlayCircle className="size-4" />
+              {runMutation.isPending
+                ? t("student.assignment.checking")
+                : t("student.assignment.checkAnswer")}
+            </Button>
             <Button
               size="lg"
               onClick={handleSubmit}
@@ -244,6 +286,13 @@ export default function StudentAssignmentDetailPage() {
           </div>
         </div>
       </div>
+
+      {/* ─── Kết quả kiểm tra đáp án (chạy testcase mẫu) ───────────────── */}
+      {checkResult && (
+        <section className="space-y-3">
+          <CheckAnswerPanel result={checkResult} />
+        </section>
+      )}
 
       {/* ─── Kết quả chấm ──────────────────────────────────────────────── */}
       {submittedId !== null && resultQuery.data && (

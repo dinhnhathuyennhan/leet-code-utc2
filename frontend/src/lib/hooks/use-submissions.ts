@@ -9,6 +9,7 @@ import {
   runCode,
   submitAssignment,
 } from "@/lib/api/endpoints/submissions";
+import type { RunCodeResponse } from "@/lib/api/endpoints/submissions";
 import { getCourseById, getProblemDetail } from "@/lib/api/endpoints/courses";
 import type {
   SubmitCodePayload,
@@ -107,7 +108,7 @@ export function useRunCode(
   lessonId: string | number | undefined,
   problemId: string | number | undefined,
 ) {
-  return useMutation<unknown, unknown, SubmitCodePayload>({
+  return useMutation<RunCodeResponse, unknown, SubmitCodePayload>({
     mutationFn: (payload) =>
       runCode(
         courseId as string,

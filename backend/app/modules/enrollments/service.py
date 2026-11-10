@@ -2,7 +2,12 @@ from uuid import UUID
 from sqlmodel import Session, select
 
 from app.core.dependencies import Role
-from app.core.exceptions import ConflictError, NotFoundError
+from app.core.exceptions import (
+    ConflictError,
+    EmptyFieldError,
+    InvalidFormatError,
+    NotFoundError,
+)
 from app.models import Class, Enrollment, User
 from app.modules.courses.access import (
     find_enrollment,
@@ -14,6 +19,7 @@ from app.modules.enrollments.schemas import (
     AddStudentToCourseResponse,
     GetStudentListResponse,
 )
+from app.modules.users.schemas import _validate_student_code
 
 
 def get_course_enrollments(
@@ -39,23 +45,53 @@ def get_course_enrollments(
     ]
 
 
-def _find_student(session: Session, identifier: str) -> User | None:
-    """Tra sinh viên theo UUID `user_id` hoặc theo MSSV (`student_code`)."""
-    value = str(identifier).strip()
-    try:
-        student = session.get(User, UUID(value))
-    except (TypeError, ValueError, AttributeError):
-        student = session.exec(select(User).where(User.student_code == value)).first()
-    if not student or student.role_id != Role.STUDENT:
-        return None
+def _blank_to_none(value: str | UUID | None) -> str | None:
+    text = str(value).strip() if value is not None else ""
+    return text or None
+
+
+def _find_student(
+    session: Session, student_id: str | UUID | None, student_code: str | None
+) -> User:
+    """Tìm sinh viên theo MỘT định danh: ``student_id`` hoặc ``student_code`` (MSSV).
+
+    - ``student_code``: MSSV, validate đúng 10 chữ số trước khi tra.
+    - ``student_id``: UUID ``User.user_id``. Để tương thích form FE hiện tại (gửi MSSV
+      vào ``student_id``), giá trị không phải UUID được tra như MSSV.
+    Chuỗi rỗng / toàn khoảng trắng được coi như không truyền.
+    """
+    student_id = _blank_to_none(student_id)
+    student_code = _blank_to_none(student_code)
+    if student_id is None and student_code is None:
+        raise EmptyFieldError("Cần nhập student_id (UUID) hoặc student_code (MSSV)")
+    if student_id is not None and student_code is not None:
+        raise InvalidFormatError(
+            "Chỉ được truyền một trong hai: student_id (UUID) hoặc student_code (MSSV)"
+        )
+
+    if student_code is not None:
+        code = _validate_student_code(student_code)
+        student = session.exec(select(User).where(User.student_code == code)).first()
+    else:
+        try:
+            student = session.get(User, UUID(student_id))
+        except (TypeError, ValueError, AttributeError):
+            student = session.exec(
+                select(User).where(User.student_code == student_id)
+            ).first()
+
+    # Whitelist đúng role STUDENT; role khác (kể cả role lạ) coi như không tìm thấy.
+    if student is None or student.role_id != Role.STUDENT:
+        raise NotFoundError("Không tìm thấy sinh viên")
     return student
 
 
 def add_student_to_course(
-    student_id: str,
+    student_id: str | UUID | None,
     course_id: str,
     session: Session,
     current_user: User,
+    student_code: str | None = None,
 ) -> AddStudentToCourseResponse:
     course = get_manageable_course(
         course_id,
@@ -64,22 +100,19 @@ def add_student_to_course(
         "Bạn không có quyền thêm sinh viên vào lớp này",
     )
 
-    student = _find_student(session, student_id)
-    if not student:
-        raise NotFoundError("Không tìm thấy sinh viên")
-    student_uuid = student.user_id
+    student = _find_student(session, student_id, student_code)
 
-    if find_enrollment(session, course_id, student_uuid):
+    if find_enrollment(session, course_id, student.user_id):
         raise ConflictError("Sinh viên đã có trong lớp học")
 
-    enrollment = Enrollment(course_id=course_id, student_id=student_uuid)
+    enrollment = Enrollment(course_id=course_id, student_id=student.user_id)
     course.total_number_student += 1
     session.add(enrollment)
     session.commit()
     session.refresh(enrollment)
 
     return AddStudentToCourseResponse(
-        student_id=str(student_uuid),
+        student_id=str(student.user_id),
         student_code=student.student_code,
         course_id=course_id,
         enrollment_id=enrollment.enrollment_id,

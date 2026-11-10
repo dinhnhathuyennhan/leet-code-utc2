@@ -51,3 +51,4 @@ postman/
 .postman/
 .vscode/
 graphify-out/
+.graphifyignore

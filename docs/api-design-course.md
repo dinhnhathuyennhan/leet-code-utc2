@@ -126,7 +126,10 @@ Field gửi lên với giá trị `null` sẽ bị **bỏ qua** (giữ nguyên g
 
 | Field | Kiểu | Bắt buộc | Ghi chú |
 |---|---|---|---|
-| student_id | string | có | `user_id` của Sinh viên |
+| student_id | string | một trong hai | `user_id` (UUID) của Sinh viên. Để tương thích FE hiện tại, giá trị không phải UUID được tra như MSSV |
+| student_code | string | một trong hai | MSSV, đúng 10 chữ số (nhận cả số JSON) |
+
+Truyền **đúng một** trong `student_id` / `student_code`. Chuỗi rỗng hoặc toàn khoảng trắng được coi như không truyền.
 
 **Response 201 Created**
 
@@ -134,14 +137,18 @@ Field gửi lên với giá trị `null` sẽ bị **bỏ qua** (giữ nguyên g
 |---|---|---|
 | enrollment_id | int | |
 | course_id | string | |
-| student_id | string | |
+| student_id | string | UUID của Sinh viên |
+| student_code | string \| null | MSSV |
 
 **Response lỗi**
 
 | Status | Khi nào | Body |
 |---|---|---|
+| 422 | Không truyền `student_id` lẫn `student_code` | `{"error_code": "EMPTY_FIELD", "message": "Cần nhập student_id (UUID) hoặc student_code (MSSV)"}` |
+| 422 | Truyền cả `student_id` và `student_code` | `{"error_code": "INVALID_FORMAT", "message": "Chỉ được truyền một trong hai: ..."}` |
+| 422 | `student_code` không đúng 10 chữ số ASCII | `{"error_code": "INVALID_FORMAT", "message": "Mã sinh viên phải gồm đúng 10 chữ số"}` (hoặc "...chỉ được gồm chữ số (0-9)") |
 | 404 | `course_id` không tồn tại | `{"error_code": "NOT_FOUND", "message": "Không tìm thấy lớp học"}` |
-| 404 | `student_id` không tồn tại/không phải Sinh viên (use-case bước 4a) | `{"error_code": "NOT_FOUND", "message": "Không tìm thấy sinh viên"}` |
+| 404 | `student_id` / `student_code` không khớp Sinh viên nào, hoặc thuộc tài khoản không phải Sinh viên (use-case bước 4a) | `{"error_code": "NOT_FOUND", "message": "Không tìm thấy sinh viên"}` |
 | 403 | Teacher không phải chủ lớp (use-case bước 3a) | `{"error_code": "FORBIDDEN", "message": "Bạn không có quyền thêm sinh viên vào lớp này"}` |
 | 409 | Sinh viên đã có trong lớp học (use-case bước 5a) | `{"error_code": "CONFLICT", "message": "Sinh viên đã có trong lớp học"}` |
 
@@ -156,7 +163,7 @@ Field gửi lên với giá trị `null` sẽ bị **bỏ qua** (giữ nguyên g
 
 | Field | Kiểu | Ghi chú |
 |---|---|---|
-| (mảng object) | | mỗi phần tử: `enrollment_id`, `student_id`, `full_name`, `email` |
+| (mảng object) | | mỗi phần tử: `enrollment_id`, `student_id` (UUID), `student_code` (MSSV, có thể null), `full_name`, `email` |
 
 **Response lỗi**
 

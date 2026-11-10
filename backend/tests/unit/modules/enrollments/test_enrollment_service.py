@@ -54,6 +54,18 @@ class TestAddStudentToCourse:
 
         assert counter_of(session, course) == 1
 
+    # admin nhập MSSV (student_code) thay cho UUID vẫn thêm được sinh viên
+    def test_admin_can_add_student_by_student_code(
+        self, session, course, admin, student
+    ):
+        result = add_student_to_course(
+            student.student_code, course.course_id, session, admin
+        )
+
+        assert result.student_id == str(student.user_id)
+        assert result.student_code == student.student_code
+        assert counter_of(session, course) == 1
+
     # raise forbidden nếu giảng viên không phải chủ khóa học
     def test_raises_forbidden_when_teacher_does_not_own_course(
         self, session, course, other_teacher, student

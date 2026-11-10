@@ -6,12 +6,15 @@ from app.core.utils.validation import AppEmailStr
 class AddStudentToCourseResponse(BaseModel):
     enrollment_id: int
     course_id: str
-    student_id: str             # UUID của user (User.user_id)
-    student_code: str | None    # MSSV (User.student_code)
+    student_id: str                     # UUID của user (User.user_id)
+    student_code: str | None = None     # MSSV (User.student_code)
 
 
 class AddStudentToCourseRequest(BaseModel):
-    """Truyền đúng MỘT trong hai: ``student_id`` (UUID) hoặc ``student_code`` (MSSV).
+    """Truyền MỘT trong hai: ``student_id`` hoặc ``student_code`` (MSSV).
+
+    ``student_id`` nhận UUID; để tương thích form FE hiện tại, giá trị không phải
+    UUID được tra như MSSV.
 
     Không validate ở đây: service tự kiểm tra và raise ``AppError`` để lỗi đi
     qua Global Exception Handler với đúng ``error_code``.
@@ -44,7 +47,7 @@ class AddClassToCourseResponse(BaseModel):
 
 class GetStudentListResponse(BaseModel):
     enrollment_id: int
-    student_id: str             # UUID của user (User.user_id)
-    student_code: str | None    # MSSV (User.student_code)
+    student_id: str                     # UUID của user (User.user_id)
+    student_code: str | None = None     # MSSV (User.student_code)
     full_name: str
     email: AppEmailStr

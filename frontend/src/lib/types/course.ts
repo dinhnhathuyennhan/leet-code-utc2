@@ -10,7 +10,9 @@ export interface CourseApiRecord {
   course_id: string;
   course_name: string;
   avt_link: string | null;
+  /** UUID người tạo — không hiển thị, dùng `created_by_name`. */
   created_by: string;
+  created_by_name?: string | null;
   term: string;
   start_date: string;
   end_date: string;
@@ -184,7 +186,10 @@ export interface CourseStudentSubmission {
 }
 
 export interface GradeRow {
+  /** UUID `user_id` — chỉ dùng làm khoá/gọi API, không hiển thị. */
   student_id: string;
+  /** MSSV hiển thị cho người dùng. */
+  student_code?: string | null;
   full_name: string;
   class_id: string | null;
   problem_scores: Array<number | null>;

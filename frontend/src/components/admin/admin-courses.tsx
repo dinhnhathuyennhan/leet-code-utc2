@@ -56,7 +56,7 @@ export function AdminCourseForm({ course, onClose }: { course?: AdminCourse; onC
         <label className="space-y-2 text-sm font-medium">Ngày bắt đầu<Input type="date" value={form.start_date} onChange={(event) => set("start_date", event.target.value)} required /></label>
         <label className="space-y-2 text-sm font-medium">Ngày kết thúc<Input type="date" value={form.end_date} min={form.start_date} onChange={(event) => set("end_date", event.target.value)} required /></label>
       </fieldset>
-      {course && <p className="text-xs text-muted-foreground">Người tạo: {course.created_by}. Mã lớp và người tạo được giữ theo dữ liệu gốc.</p>}
+      {course && <p className="text-xs text-muted-foreground">Người tạo: {course.created_by_name || "—"}. Mã lớp và người tạo được giữ theo dữ liệu gốc.</p>}
       <div className="flex justify-end gap-2"><Button type="button" variant="outline" disabled={busy} onClick={onClose}>Hủy</Button><Button type="submit" disabled={busy} className={ADMIN_PRIMARY}>{busy ? "Đang lưu..." : "Lưu lớp học phần"}</Button></div>
     </form>
   </AdminDialog>;

@@ -18,8 +18,8 @@ class GradeScoreResponse(BaseModel):
 
 
 class CourseGradeRowResponse(BaseModel):
-    student_id: str             # UUID của user (User.user_id)
-    student_code: str | None    # MSSV (User.student_code)
+    student_id: str                     # UUID của user (User.user_id)
+    student_code: str | None = None     # MSSV (User.student_code)
     full_name: str
     class_id: str | None
     overall_score: float | None
@@ -117,6 +117,7 @@ class CourseResponse(BaseModel):
     end_date: datetime
     avt_link: str | None
     created_by: str
+    created_by_name: str | None = None
     total_number_student: int
     sessions: list[CourseLessonResponse] = Field(default_factory=list)
     grades: list[CourseGradeRowResponse] = Field(default_factory=list)

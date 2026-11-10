@@ -44,7 +44,8 @@ export function AppShell({ navItems, homeHref, user, onLogout, children }: AppSh
 
         <div className="lg:pl-[16.6667vw]">
           <Topbar homeHref={homeHref} onMenuClick={() => setMenuOpen(true)} onLogout={onLogout} />
-          <main className="w-full p-4 sm:p-6 lg:p-6">{children}</main>
+          {/* pb-24: chừa chỗ để nút BackToTop không che nội dung cuối trang (vd nút phân trang). */}
+          <main className="w-full px-4 pt-4 pb-24 sm:px-6 sm:pt-6">{children}</main>
         </div>
 
         <BackToTop />

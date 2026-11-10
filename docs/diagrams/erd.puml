@@ -18,11 +18,11 @@ entity "class\n(Lớp hành chính)" as e_class {
 }
 
 entity "user\n(Tài khoản)" as e_user {
-  * <b>user_id</b> : varchar(50) <<PK>>
+  * <b>user_id</b> : uuid <<PK>>
   --
+  student_code : varchar(20) <<UNIQUE>>
   * full_name : varchar
   avt_link : varchar(2048)
-  date_of_birth : date
   * email : varchar(255) <<UNIQUE>>
   * hashed_password : varchar
   * must_change_password : bool
@@ -36,7 +36,7 @@ entity "course\n(Lớp học phần)" as e_course {
   --
   * course_name : varchar
   avt_link : varchar(2048)
-  * created_by : varchar(50) <<FK>>
+  * created_by : uuid <<FK>>
   * term : varchar
   * start_date : timestamptz
   * end_date : timestamptz
@@ -47,7 +47,7 @@ entity "enrollment\n(Ghi danh)" as e_enrollment {
   * <b>enrollment_id</b> : int <<PK>>
   --
   * course_id : varchar(50) <<FK>>
-  * student_id : varchar(50) <<FK>>
+  * student_id : uuid <<FK>>
 }
 
 entity "lesson\n(Buổi học)" as e_lesson {
@@ -95,7 +95,7 @@ entity "submission\n(Bài nộp)" as e_submission {
   * <b>submission_id</b> : int <<PK>>
   --
   * problem_id : int <<FK>>
-  * student_id : varchar(50) <<FK>>
+  * student_id : uuid <<FK>>
   * language : varchar
   * submitted_code : text
   * status : varchar

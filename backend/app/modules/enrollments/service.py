@@ -53,10 +53,12 @@ def _blank_to_none(value: str | UUID | None) -> str | None:
 def _find_student(
     session: Session, student_id: str | UUID | None, student_code: str | None
 ) -> User:
-    """Tìm sinh viên theo đúng MỘT định danh: UUID (``student_id``) hoặc MSSV (``student_code``).
+    """Tìm sinh viên theo MỘT định danh: ``student_id`` hoặc ``student_code`` (MSSV).
 
-    ``student_id`` luôn là ``User.user_id`` (UUID), không bao giờ là MSSV.
-    Chuỗi rỗng / toàn khoảng trắng được coi như không truyền (form FE hay gửi kèm field rỗng).
+    - ``student_code``: MSSV, validate đúng 10 chữ số trước khi tra.
+    - ``student_id``: UUID ``User.user_id``. Để tương thích form FE hiện tại (gửi MSSV
+      vào ``student_id``), giá trị không phải UUID được tra như MSSV.
+    Chuỗi rỗng / toàn khoảng trắng được coi như không truyền.
     """
     student_id = _blank_to_none(student_id)
     student_code = _blank_to_none(student_code)
@@ -72,10 +74,11 @@ def _find_student(
         student = session.exec(select(User).where(User.student_code == code)).first()
     else:
         try:
-            student_uuid = UUID(str(student_id))
+            student = session.get(User, UUID(student_id))
         except (TypeError, ValueError, AttributeError):
-            raise NotFoundError("Không tìm thấy sinh viên") from None
-        student = session.get(User, student_uuid)
+            student = session.exec(
+                select(User).where(User.student_code == student_id)
+            ).first()
 
     # Whitelist đúng role STUDENT; role khác (kể cả role lạ) coi như không tìm thấy.
     if student is None or student.role_id != Role.STUDENT:

@@ -6,7 +6,7 @@
 
 - Client gửi datetime bắt buộc có UTC offset (vd: `"2026-09-07T00:00:00+07:00"`). Backend chấp nhận offset tường minh và trả thời gian theo `Asia/Ho_Chi_Minh` với offset `+07:00`.
 - Database lưu các thời điểm dưới dạng `timestamptz` theo UTC. Khi đọc, backend chuyển sang giờ Việt Nam có timezone.
-- Field kiểu `date` của Lesson (`start_date`, `end_date`) và `date_of_birth` là ngày lịch, không có giờ hay offset. Course dùng `datetime`. Lesson mở lúc 00:00 giờ Việt Nam ngày `start_date`, hết hạn lúc 23:59:59.999999 ngày `end_date`; `opens_at` và `deadline` trả giờ Việt Nam kèm `+07:00`.
+- Field kiểu `date` của Lesson (`start_date`, `end_date`) là ngày lịch, không có giờ hay offset. Course dùng `datetime`. Lesson mở lúc 00:00 giờ Việt Nam ngày `start_date`, hết hạn lúc 23:59:59.999999 ngày `end_date`; `opens_at` và `deadline` trả giờ Việt Nam kèm `+07:00`.
 - Với Problem, `start_datetime` quyết định lúc mở đề; `end_datetime` chỉ chặn Submit, không chặn xem đề.
 - Phía FE hiển thị theo `Asia/Ho_Chi_Minh` để không phụ thuộc múi giờ trình duyệt.
 
@@ -126,7 +126,7 @@ Field gửi lên với giá trị `null` sẽ bị **bỏ qua** (giữ nguyên g
 
 | Field | Kiểu | Bắt buộc | Ghi chú |
 |---|---|---|---|
-| student_id | string (UUID) | một trong hai | `user_id` (UUID) của Sinh viên. **Không** phải MSSV |
+| student_id | string | một trong hai | `user_id` (UUID) của Sinh viên. Để tương thích FE hiện tại, giá trị không phải UUID được tra như MSSV |
 | student_code | string | một trong hai | MSSV, đúng 10 chữ số (nhận cả số JSON) |
 
 Truyền **đúng một** trong `student_id` / `student_code`. Chuỗi rỗng hoặc toàn khoảng trắng được coi như không truyền.
@@ -148,7 +148,7 @@ Truyền **đúng một** trong `student_id` / `student_code`. Chuỗi rỗng ho
 | 422 | Truyền cả `student_id` và `student_code` | `{"error_code": "INVALID_FORMAT", "message": "Chỉ được truyền một trong hai: ..."}` |
 | 422 | `student_code` không đúng 10 chữ số ASCII | `{"error_code": "INVALID_FORMAT", "message": "Mã sinh viên phải gồm đúng 10 chữ số"}` (hoặc "...chỉ được gồm chữ số (0-9)") |
 | 404 | `course_id` không tồn tại | `{"error_code": "NOT_FOUND", "message": "Không tìm thấy lớp học"}` |
-| 404 | `student_id` không phải UUID hợp lệ (vd gửi nhầm MSSV), hoặc `student_id`/`student_code` không tồn tại/không phải Sinh viên (use-case bước 4a) | `{"error_code": "NOT_FOUND", "message": "Không tìm thấy sinh viên"}` |
+| 404 | `student_id` / `student_code` không khớp Sinh viên nào, hoặc thuộc tài khoản không phải Sinh viên (use-case bước 4a) | `{"error_code": "NOT_FOUND", "message": "Không tìm thấy sinh viên"}` |
 | 403 | Teacher không phải chủ lớp (use-case bước 3a) | `{"error_code": "FORBIDDEN", "message": "Bạn không có quyền thêm sinh viên vào lớp này"}` |
 | 409 | Sinh viên đã có trong lớp học (use-case bước 5a) | `{"error_code": "CONFLICT", "message": "Sinh viên đã có trong lớp học"}` |
 

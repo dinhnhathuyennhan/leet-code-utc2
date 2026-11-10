@@ -82,8 +82,8 @@ class TestAddStudentRoute:
         assert response.status_code == 201, response.text
         assert response.json()["student_code"] == student.student_code
 
-    # MSSV gửi nhầm vào student_id → 404 (student_id chỉ nhận UUID)
-    def test_student_code_sent_as_student_id_returns_404(
+    # Tương thích form FE hiện tại: MSSV gửi qua student_id vẫn thêm được
+    def test_student_code_sent_as_student_id_returns_201(
         self, client, as_user, course, owner_teacher, student
     ):
         as_user(owner_teacher)
@@ -91,6 +91,22 @@ class TestAddStudentRoute:
         response = client.post(
             f"/courses/{course.course_id}/enrollments",
             json={"student_id": student.student_code},
+        )
+
+        assert response.status_code == 201, response.text
+        body = response.json()
+        assert body["student_id"] == str(student.user_id)
+        assert body["student_code"] == student.student_code
+
+    # student_id không phải UUID và không khớp MSSV nào → 404
+    def test_unknown_non_uuid_student_id_returns_404(
+        self, client, as_user, course, owner_teacher
+    ):
+        as_user(owner_teacher)
+
+        response = client.post(
+            f"/courses/{course.course_id}/enrollments",
+            json={"student_id": "0000000000"},
         )
 
         assert response.status_code == 404

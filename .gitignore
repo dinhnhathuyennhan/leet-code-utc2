@@ -44,6 +44,7 @@ docs/_*.png
 docs/_*.jpg
 docs/_*.html
 /backend/bruno
+CLAUDE.md
 
 # Cấu hình/dữ liệu cục bộ của công cụ cá nhân (Postman CLI, VS Code, graphify)
 postman/

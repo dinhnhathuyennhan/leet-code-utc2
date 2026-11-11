@@ -1,3 +1,5 @@
+from datetime import datetime
+
 from sqlmodel import Session, func, select, or_
 
 from app.core.utils.datetime_utils import as_utc, now_utc, vn_day_end, vn_day_start
@@ -180,6 +182,20 @@ def list_problems(
     )
 
 
+def lesson_problem_window(lesson: Lesson) -> tuple[datetime, datetime]:
+    """Lịch của bài trong buổi luôn theo buổi: 00:00 ngày bắt đầu -> 23:59:59 ngày kết thúc (giờ VN)."""
+    return vn_day_start(lesson.start_date), vn_day_end(lesson.end_date)
+
+
+def sync_problem_schedule(session: Session, lesson: Lesson) -> None:
+    """Đồng bộ một chiều Lesson -> Problem. Không commit: để hàm gọi commit chung một transaction."""
+    start_dt, end_dt = lesson_problem_window(lesson)
+    for problem in session.exec(select(Problem).where(Problem.lesson_id == lesson.lesson_id)).all():
+        problem.start_datetime = start_dt
+        problem.end_datetime = end_dt
+        session.add(problem)
+
+
 def copy_problems_to_lesson(
     session: Session, problem_ids: list[int], lesson: Lesson, current_user: User
 ) -> list[Problem]:
@@ -200,8 +216,7 @@ def copy_problems_to_lesson(
     if empty_problems:
         raise InvalidFormatError("Problem phải có ít nhất một testcase trước khi gắn vào Lesson")
 
-    start_dt = vn_day_start(lesson.start_date)
-    end_dt = vn_day_end(lesson.end_date)
+    start_dt, end_dt = lesson_problem_window(lesson)
     result: list[Problem] = []
     for pid in problem_ids:
         src = sources[pid]
@@ -393,7 +408,12 @@ def update_problem(
     lesson = get_lesson_in_course(session, course_id, lesson_id)
     problem = get_problem_in_lesson(session, lesson, problem_id)
 
-    updates = data.model_dump(exclude_unset=True, exclude={"testcases", "starter_code", "starter_codes"})
+    # Lịch của bài trong buổi do ngày của buổi quyết định (sync_problem_schedule): bỏ qua
+    # start_datetime/end_datetime client gửi lên để lịch bài không lệch khỏi buổi.
+    updates = data.model_dump(
+        exclude_unset=True,
+        exclude={"testcases", "starter_code", "starter_codes", "start_datetime", "end_datetime"},
+    )
     # Chỉ chặn khi giá trị gửi lên KHÁC giá trị đang lưu: client gửi lại nguyên trạng
     # các trường này trong mọi lần lưu, nên so sánh theo giá trị mới biết có sửa thật hay không.
     current_starter_codes = problem.starter_codes or {}
@@ -415,11 +435,6 @@ def update_problem(
     )
     if has_grading_changes and _has_submissions(session, problem.problem_id):
         raise ConflictError("Bài đã có bài nộp, không thể sửa thông tin ảnh hưởng đến chấm")
-
-    new_start = updates.get("start_datetime") or problem.start_datetime
-    new_end = updates.get("end_datetime") or problem.end_datetime
-    if updates.get("start_datetime") is not None or updates.get("end_datetime") is not None:
-        validate_problem_schedule(new_start, new_end)  # kiểm tra TRƯỚC khi gán
 
     nullable_fields = {"hint", "complexity", "report"}
     for field, value in updates.items():

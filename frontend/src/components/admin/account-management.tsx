@@ -507,13 +507,13 @@ export function AccountManagement() {
           tone="indigo"
         />
         <StatCard
-          label="Sinh viên (Role 3)"
+          label="Sinh viên"
           value={studentCountQuery.data}
           icon={<Users className="size-5" />}
           tone="blue"
         />
         <StatCard
-          label="Giảng viên (Role 2)"
+          label="Giảng viên"
           value={teacherCountQuery.data}
           icon={<KeyRound className="size-5" />}
           tone="amber"

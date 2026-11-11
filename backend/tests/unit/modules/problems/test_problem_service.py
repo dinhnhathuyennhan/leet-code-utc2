@@ -468,20 +468,83 @@ class TestUpdateProblem:
         assert problem_record.function_name == "two_sum"
         assert problem_record.starter_codes == original_starter_codes
 
-    def test_update_problem_rejects_invalid_schedule_before_saving_new_values(
+    def test_update_bank_problem_rejects_invalid_schedule_before_saving_new_values(
+        self, session, problem_bank_problem
+    ):
+        # Bài trong buổi không còn nhận lịch từ client (xem TestLessonProblemScheduleIsOwnedByLesson);
+        # chỉ bài ngân hàng còn validate lịch.
+        with pytest.raises(InvalidFormatError, match="start_datetime"):
+            problem_service.update_bank_problem(
+                session,
+                problem_bank_problem.problem_id,
+                ProblemUpdateRequest(start_datetime=datetime(2027, 1, 1, tzinfo=VN_TZ)),
+            )
+        session.refresh(problem_bank_problem)
+        assert problem_bank_problem.start_datetime == datetime(2026, 1, 1, tzinfo=VN_TZ)
+
+
+class TestLessonProblemScheduleIsOwnedByLesson:
+    """Chặn chiều ngược Problem -> Lesson: lịch của bài trong buổi chỉ đổi qua ngày của buổi."""
+
+    def test_update_problem_ignores_schedule_but_applies_other_fields(
         self, session, problem_teacher, problem_course, problem_lesson, problem_record
     ):
-        with pytest.raises(InvalidFormatError, match="start_datetime"):
-            problem_service.update_problem(
-                session,
-                problem_course.course_id,
-                problem_lesson.lesson_id,
-                problem_record.problem_id,
-                ProblemUpdateRequest(start_datetime=datetime(2027, 1, 1, tzinfo=VN_TZ)),
-                problem_teacher,
-            )
+        start, end = problem_record.start_datetime, problem_record.end_datetime
+        lesson_dates = (problem_lesson.start_date, problem_lesson.end_date)
+
+        problem_service.update_problem(
+            session,
+            problem_course.course_id,
+            problem_lesson.lesson_id,
+            problem_record.problem_id,
+            ProblemUpdateRequest(
+                title="Renamed",
+                start_datetime=datetime(2026, 3, 1, 9, 0, tzinfo=VN_TZ),
+                end_datetime=datetime(2026, 3, 2, 11, 30, tzinfo=VN_TZ),
+            ),
+            problem_teacher,
+        )
+
         session.refresh(problem_record)
-        assert problem_record.start_datetime == datetime(2026, 1, 1, tzinfo=VN_TZ)
+        session.refresh(problem_lesson)
+        assert problem_record.title == "Renamed"
+        assert (problem_record.start_datetime, problem_record.end_datetime) == (start, end)
+        # Không có chiều ngược Problem -> Lesson.
+        assert (problem_lesson.start_date, problem_lesson.end_date) == lesson_dates
+
+    def test_update_problem_ignores_reversed_schedule_without_error(
+        self, session, problem_teacher, problem_course, problem_lesson, problem_record
+    ):
+        """Trước đây start >= end bị báo InvalidFormatError; giờ lịch bị bỏ qua nên không còn lỗi."""
+        start, end = problem_record.start_datetime, problem_record.end_datetime
+
+        problem_service.update_problem(
+            session,
+            problem_course.course_id,
+            problem_lesson.lesson_id,
+            problem_record.problem_id,
+            ProblemUpdateRequest(
+                start_datetime=datetime(2026, 3, 2, tzinfo=VN_TZ),
+                end_datetime=datetime(2026, 3, 1, tzinfo=VN_TZ),
+            ),
+            problem_teacher,
+        )
+
+        session.refresh(problem_record)
+        assert (problem_record.start_datetime, problem_record.end_datetime) == (start, end)
+
+    def test_bank_problem_schedule_is_still_editable(self, session, problem_bank_problem):
+        """Bài ngân hàng không thuộc buổi nào, nên vẫn được sửa lịch như cũ."""
+        new_end = datetime(2026, 6, 1, tzinfo=VN_TZ)
+
+        problem_service.update_bank_problem(
+            session,
+            problem_bank_problem.problem_id,
+            ProblemUpdateRequest(end_datetime=new_end),
+        )
+
+        session.refresh(problem_bank_problem)
+        assert problem_bank_problem.end_datetime == new_end
 
 
 class TestReplaceTestcases:

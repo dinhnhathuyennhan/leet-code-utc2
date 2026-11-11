@@ -1,9 +1,12 @@
-from datetime import date
+from datetime import UTC, date, datetime, timedelta
 
 import pytest
 from sqlmodel import Session, select
 
 from app.core.exceptions import ConflictError, ForbiddenError, InvalidFormatError
+from app.core.utils.datetime_utils import VN_TZ, vn_day_end, vn_day_start
+from app.modules.submissions.judge0 import service as judge_service
+from app.modules.submissions.judge0.schemas import CodeRequest
 from app.modules.lessons.schemas import (
     LessonCreateRequest,
     LessonDuplicateRequest,
@@ -92,6 +95,275 @@ class TestUpdateLesson:
             )
         session.refresh(lesson_record)
         assert lesson_record.start_date == date(2026, 1, 1)
+
+
+class TestUpdateLessonSyncsProblemSchedule:
+    """Ngày của buổi học là nguồn chuẩn: đổi ngày buổi thì ghi đè lịch mọi bài trong buổi
+    thành 00:00 ngày bắt đầu -> 23:59:59 ngày kết thúc (giờ VN). Đồng bộ một chiều Lesson -> Problem."""
+
+    @staticmethod
+    def _update(session, course, lesson, teacher, **fields):
+        return lesson_service.update_lesson(
+            session, course.course_id, lesson.lesson_id, LessonUpdateRequest(**fields), teacher
+        )
+
+    def test_changing_end_date_overwrites_schedule_of_every_problem_in_lesson(
+        self, session, lesson_teacher, lesson_course, lesson_record, lesson_problem_factory
+    ):
+        # lesson_record: 2026-01-01 -> 2026-01-31
+        default_problem = lesson_problem_factory(
+            lesson_record,
+            start_datetime=vn_day_start(date(2026, 1, 1)),
+            end_datetime=vn_day_end(date(2026, 1, 31)),
+        )
+        custom_time_problem = lesson_problem_factory(
+            lesson_record,
+            title="Custom time",
+            start_datetime=datetime(2026, 1, 5, 9, 0, tzinfo=VN_TZ),
+            end_datetime=datetime(2026, 1, 6, 11, 30, tzinfo=VN_TZ),
+        )
+
+        self._update(session, lesson_course, lesson_record, lesson_teacher, end_date=date(2026, 2, 15))
+
+        for problem in (default_problem, custom_time_problem):
+            session.refresh(problem)
+            assert problem.start_datetime == vn_day_start(date(2026, 1, 1))
+            assert problem.end_datetime == vn_day_end(date(2026, 2, 15))
+
+    def test_changing_start_date_overwrites_opening_time_of_problems(
+        self, session, lesson_teacher, lesson_course, lesson_record, lesson_problem_factory
+    ):
+        problem = lesson_problem_factory(
+            lesson_record,
+            start_datetime=vn_day_start(date(2026, 1, 1)),
+            end_datetime=vn_day_end(date(2026, 1, 31)),
+        )
+
+        self._update(session, lesson_course, lesson_record, lesson_teacher, start_date=date(2026, 1, 10))
+
+        session.refresh(problem)
+        assert problem.start_datetime == vn_day_start(date(2026, 1, 10))
+        assert problem.end_datetime == vn_day_end(date(2026, 1, 31))
+
+    def test_renaming_lesson_only_keeps_problem_schedule(
+        self, session, lesson_teacher, lesson_course, lesson_record, lesson_problem_factory
+    ):
+        start = datetime(2026, 1, 5, 9, 0, tzinfo=VN_TZ)
+        end = datetime(2026, 1, 6, 11, 30, tzinfo=VN_TZ)
+        problem = lesson_problem_factory(lesson_record, start_datetime=start, end_datetime=end)
+
+        self._update(session, lesson_course, lesson_record, lesson_teacher, lesson_name="Renamed")
+
+        session.refresh(problem)
+        assert (problem.start_datetime, problem.end_datetime) == (start, end)
+
+    def test_resending_same_dates_keeps_problem_schedule(
+        self, session, lesson_teacher, lesson_course, lesson_record, lesson_problem_factory
+    ):
+        """FE thường gửi lại nguyên trạng cả form: ngày không đổi thì không được ghi đè lịch bài."""
+        start = datetime(2026, 1, 5, 9, 0, tzinfo=VN_TZ)
+        end = datetime(2026, 1, 6, 11, 30, tzinfo=VN_TZ)
+        problem = lesson_problem_factory(lesson_record, start_datetime=start, end_datetime=end)
+
+        self._update(
+            session, lesson_course, lesson_record, lesson_teacher,
+            lesson_name="Same dates", start_date=date(2026, 1, 1), end_date=date(2026, 1, 31),
+        )
+
+        session.refresh(problem)
+        assert (problem.start_datetime, problem.end_datetime) == (start, end)
+
+    def test_problems_outside_the_lesson_are_not_touched(
+        self,
+        session,
+        lesson_teacher,
+        lesson_course,
+        lesson_record,
+        lesson_factory,
+        lesson_problem_factory,
+        lesson_bank_problem,
+    ):
+        sibling_lesson = lesson_factory(lesson_course, lesson_name="Lesson 2", lesson_number=2)
+        start = datetime(2026, 1, 5, 9, 0, tzinfo=VN_TZ)
+        end = datetime(2026, 1, 6, 11, 30, tzinfo=VN_TZ)
+        sibling_problem = lesson_problem_factory(sibling_lesson, start_datetime=start, end_datetime=end)
+        bank_start, bank_end = lesson_bank_problem.start_datetime, lesson_bank_problem.end_datetime
+        lesson_problem_factory(lesson_record)
+
+        self._update(session, lesson_course, lesson_record, lesson_teacher, end_date=date(2026, 2, 15))
+
+        session.refresh(sibling_problem)
+        session.refresh(lesson_bank_problem)
+        assert (sibling_problem.start_datetime, sibling_problem.end_datetime) == (start, end)
+        assert (lesson_bank_problem.start_datetime, lesson_bank_problem.end_datetime) == (
+            bank_start,
+            bank_end,
+        )
+
+    def test_reversed_dates_are_rejected_without_touching_problem_schedule(
+        self, session, lesson_teacher, lesson_course, lesson_record, lesson_problem_factory
+    ):
+        start = datetime(2026, 1, 5, 9, 0, tzinfo=VN_TZ)
+        end = datetime(2026, 1, 6, 11, 30, tzinfo=VN_TZ)
+        problem = lesson_problem_factory(lesson_record, start_datetime=start, end_datetime=end)
+
+        with pytest.raises(InvalidFormatError, match="start_date"):
+            self._update(session, lesson_course, lesson_record, lesson_teacher, start_date=date(2026, 2, 1))
+
+        # Kiểm tra trên object trong session (không refresh): bắt cả trường hợp đã gán lịch
+        # cho bài rồi mới validate ngày của buổi.
+        assert (problem.start_datetime, problem.end_datetime) == (start, end)
+
+    def test_lesson_without_problems_updates_dates_without_error(
+        self, session, lesson_teacher, lesson_course, lesson_record
+    ):
+        result = self._update(
+            session, lesson_course, lesson_record, lesson_teacher, end_date=date(2026, 2, 15)
+        )
+
+        session.refresh(lesson_record)
+        assert lesson_record.end_date == date(2026, 2, 15)
+        assert result.sessions[0].problems == []
+
+    def test_changing_dates_and_attaching_problems_in_one_request_aligns_all_problems(
+        self,
+        session,
+        lesson_teacher,
+        lesson_course,
+        lesson_record,
+        lesson_problem_factory,
+        lesson_bank_problem,
+        lesson_testcase_factory,
+    ):
+        """FE lưu form buổi học gửi ngày kèm problem_ids trong cùng một request."""
+        existing = lesson_problem_factory(
+            lesson_record,
+            start_datetime=datetime(2026, 1, 5, 9, 0, tzinfo=VN_TZ),
+            end_datetime=datetime(2026, 1, 6, 11, 30, tzinfo=VN_TZ),
+        )
+        lesson_testcase_factory(lesson_bank_problem)
+
+        self._update(
+            session, lesson_course, lesson_record, lesson_teacher,
+            start_date=date(2026, 2, 1), end_date=date(2026, 2, 15),
+            problem_ids=[lesson_bank_problem.problem_id],
+        )
+
+        problems = session.exec(
+            select(Problem).where(Problem.lesson_id == lesson_record.lesson_id)
+        ).all()
+        assert existing in problems and len(problems) == 2
+        for problem in problems:
+            session.refresh(problem)
+            assert problem.start_datetime == vn_day_start(date(2026, 2, 1))
+            assert problem.end_datetime == vn_day_end(date(2026, 2, 15))
+
+    def test_problem_with_submissions_still_gets_new_deadline(
+        self,
+        session,
+        lesson_teacher,
+        lesson_student,
+        lesson_course,
+        lesson_record,
+        lesson_problem_factory,
+        lesson_submission_factory,
+    ):
+        problem = lesson_problem_factory(lesson_record)
+        lesson_submission_factory(problem, lesson_student)
+
+        self._update(session, lesson_course, lesson_record, lesson_teacher, end_date=date(2026, 2, 15))
+
+        session.refresh(problem)
+        assert problem.end_datetime == vn_day_end(date(2026, 2, 15))
+
+
+class TestLessonDeadlineAppliesToSubmission:
+    """Hồi quy end-to-end ở tầng service: hạn mới của buổi phải có hiệu lực khi sinh viên nộp bài."""
+
+    @pytest.fixture(autouse=True)
+    def frozen_today(self, monkeypatch):
+        """Cố định "bây giờ" lúc 12:00 giờ VN để test không flaky khi chạy vắt qua nửa đêm."""
+        today = date(2026, 5, 15)
+        noon_utc = datetime(2026, 5, 15, 12, 0, tzinfo=VN_TZ).astimezone(UTC)
+        monkeypatch.setattr(judge_service, "now_utc", lambda: noon_utc)
+        return today
+
+    @staticmethod
+    def _open_lesson_with_problem(lesson_factory, lesson_problem_factory, course, start_day, end_day):
+        lesson = lesson_factory(course, start_date=start_day, end_date=end_day)
+        problem = lesson_problem_factory(
+            lesson,
+            start_datetime=vn_day_start(start_day),
+            end_datetime=vn_day_end(end_day),
+            total_number_testcase=0,  # dừng submit ở bước "chưa có testcase", không gọi Judge0
+        )
+        return lesson, problem
+
+    @staticmethod
+    def _submit(session, course, lesson, problem, student):
+        return judge_service.submit(
+            session,
+            course.course_id,
+            lesson.lesson_id,
+            problem.problem_id,
+            CodeRequest(language="python", code="class Solution: pass"),
+            student,
+        )
+
+    def test_moving_end_date_to_the_past_closes_submission(
+        self,
+        session,
+        lesson_teacher,
+        lesson_student,
+        lesson_course,
+        lesson_factory,
+        lesson_problem_factory,
+        lesson_enrollment_factory,
+        frozen_today,
+    ):
+        today = frozen_today
+        lesson_enrollment_factory(lesson_course, lesson_student)
+        lesson, problem = self._open_lesson_with_problem(
+            lesson_factory, lesson_problem_factory, lesson_course,
+            today - timedelta(days=10), today + timedelta(days=10),
+        )
+
+        lesson_service.update_lesson(
+            session, lesson_course.course_id, lesson.lesson_id,
+            LessonUpdateRequest(end_date=today - timedelta(days=1)), lesson_teacher,
+        )
+
+        with pytest.raises(judge_service.SubmissionClosedError, match="hết hạn"):
+            self._submit(session, lesson_course, lesson, problem, lesson_student)
+
+    @pytest.mark.parametrize("new_end_offset_days", [0, 5], ids=["until-end-of-today", "future"])
+    def test_extending_end_date_reopens_submission(
+        self,
+        session,
+        lesson_teacher,
+        lesson_student,
+        lesson_course,
+        lesson_factory,
+        lesson_problem_factory,
+        lesson_enrollment_factory,
+        frozen_today,
+        new_end_offset_days,
+    ):
+        today = frozen_today
+        lesson_enrollment_factory(lesson_course, lesson_student)
+        lesson, problem = self._open_lesson_with_problem(
+            lesson_factory, lesson_problem_factory, lesson_course,
+            today - timedelta(days=10), today - timedelta(days=2),
+        )
+
+        lesson_service.update_lesson(
+            session, lesson_course.course_id, lesson.lesson_id,
+            LessonUpdateRequest(end_date=today + timedelta(days=new_end_offset_days)), lesson_teacher,
+        )
+
+        # Qua được bước kiểm tra hạn -> dừng ở bước kế tiếp (bài chưa có testcase).
+        with pytest.raises(ConflictError, match="chưa có testcase"):
+            self._submit(session, lesson_course, lesson, problem, lesson_student)
 
 
 class TestAddProblemsToLesson:

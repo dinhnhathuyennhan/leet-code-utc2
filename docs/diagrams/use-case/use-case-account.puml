@@ -23,7 +23,7 @@ rectangle "Quản lý tài khoản" {
   usecase "Đặt lại mật khẩu" as Reset
   usecase "Xem danh sách tài khoản" as ListUsers
   usecase "Lọc theo vai trò / lớp hành chính" as Filter
-  usecase "Sinh mật khẩu tạm\n(SV = MSSV, GV = ngày sinh)" as TempPw
+  usecase "Sinh mật khẩu tạm\n(SV = MSSV, GV/Admin = email)" as TempPw
 }
 
 Admin --> CreateTeacher

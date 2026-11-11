@@ -41,7 +41,8 @@ export function AdminClasses() {
           <TableBody>{rows.map((item) => <TableRow key={item.class_id}>
             <TableCell className="font-semibold">{item.class_id}</TableCell><TableCell>{item.type}</TableCell><TableCell>{item.course_number}</TableCell><TableCell>{item.department}</TableCell><TableCell>{item.student_count}</TableCell>
             <TableCell><div className="flex gap-2"><Button variant="outline" size="sm" onClick={() => setSelected(item.class_id)}>Xem sinh viên</Button>
-              <AdminConfirm label="Xóa lớp" title={`Xóa lớp ${item.class_id}?`} description="Chỉ lớp không có sinh viên mới được xóa." disabled={item.student_count > 0} onConfirm={() => remove(item.class_id)} /></div></TableCell>
+              <AdminConfirm label="Xóa lớp" title={`Xóa lớp ${item.class_id}?`} description="Chỉ lớp không có sinh viên mới được xóa." disabled={item.student_count > 0} onConfirm={() => remove(item.class_id)} /></div>
+              {item.student_count > 0 && <p className="mt-1 text-xs text-muted-foreground">Không thể xóa: lớp còn {item.student_count} sinh viên.</p>}</TableCell>
           </TableRow>)}</TableBody></Table>}
     </section>
     {creating && <ClassForm onClose={() => setCreating(false)} />}
@@ -82,7 +83,7 @@ function ClassRoster({ classId, onClose }: { classId: string; onClose: () => voi
   const query = useQuery({ queryKey: [...adminKeys.classes, classId, "students", page], queryFn: () => listUsers({ class_id: classId, role_id: 3, page, page_size: 20 }) });
   return <AdminDialog open title={`Sinh viên lớp ${classId}`} description="Danh sách tài khoản sinh viên thuộc lớp hành chính." onClose={onClose}>
     {query.isPending ? <p>Đang tải sinh viên...</p> : query.error ? <ErrorState error={query.error} onRetry={() => void query.refetch()} /> : !query.data?.items.length ? <EmptyState title="Lớp chưa có sinh viên" /> :
-      <><Table><TableHeader><TableRow><TableHead>MSSV</TableHead><TableHead>Họ tên</TableHead><TableHead>Email</TableHead></TableRow></TableHeader><TableBody>{query.data.items.map((user) => <TableRow key={user.user_id}><TableCell>{user.user_id}</TableCell><TableCell>{user.full_name}</TableCell><TableCell>{user.email}</TableCell></TableRow>)}</TableBody></Table>
+      <><Table><TableHeader><TableRow><TableHead>MSSV</TableHead><TableHead>Họ tên</TableHead><TableHead>Email</TableHead></TableRow></TableHeader><TableBody>{query.data.items.map((user) => <TableRow key={user.user_id}><TableCell>{user.student_code || "—"}</TableCell><TableCell>{user.full_name}</TableCell><TableCell>{user.email}</TableCell></TableRow>)}</TableBody></Table>
         <div className="flex items-center justify-between gap-2 text-sm"><Button variant="outline" disabled={page === 1} onClick={() => setPage(page - 1)}>Trước</Button><span>Trang {page} · Tổng {query.data.total} sinh viên</span><Button variant="outline" disabled={page * 20 >= query.data.total} onClick={() => setPage(page + 1)}>Sau</Button></div></>}
   </AdminDialog>;
 }

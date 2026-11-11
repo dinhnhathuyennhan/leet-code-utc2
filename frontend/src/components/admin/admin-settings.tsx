@@ -55,7 +55,7 @@ export function AdminSettings() {
       <section className="space-y-5 rounded-2xl border bg-card p-6 shadow-sm">
         <h2 className="flex items-center gap-2 font-bold"><ShieldCheck className="size-5 text-indigo-600" />Tài khoản quản trị</h2>
         {profile.error ? <ErrorState error={profile.error} onRetry={() => void profile.refetch()} /> : profile.isPending ? <p>Đang tải tài khoản...</p> :
-          <dl className="grid grid-cols-[auto_minmax(0,1fr)] gap-x-5 gap-y-3 text-sm"><dt className="text-muted-foreground">Họ tên</dt><dd>{profile.data?.full_name}</dd><dt className="text-muted-foreground">Mã tài khoản</dt><dd className="break-all">{profile.data?.user_id}</dd><dt className="text-muted-foreground">Email</dt><dd className="break-all">{profile.data?.email}</dd><dt className="text-muted-foreground">Vai trò</dt><dd>Quản trị viên</dd></dl>}
+          <dl className="grid grid-cols-[auto_minmax(0,1fr)] gap-x-5 gap-y-3 text-sm"><dt className="text-muted-foreground">Họ tên</dt><dd>{profile.data?.full_name}</dd><dt className="text-muted-foreground">Email</dt><dd className="break-all">{profile.data?.email}</dd><dt className="text-muted-foreground">Vai trò</dt><dd>Quản trị viên</dd></dl>}
         <Button variant="outline" onClick={() => setPasswordOpen(true)}><KeyRound className="size-4" />Đổi mật khẩu</Button>
       </section>
       <section className="space-y-5 rounded-2xl border bg-card p-6 shadow-sm">

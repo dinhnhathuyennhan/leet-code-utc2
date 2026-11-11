@@ -17,6 +17,15 @@ def lesson_status(lesson: Lesson) -> str:
     return "open"
 
 
+def _creator_name(course: Course) -> str | None:
+    """Tên người tạo lớp (UUID `created_by` không nên hiển thị cho người dùng)."""
+    try:
+        creator = course.creator
+    except Exception:  # course đã tách khỏi session
+        return None
+    return creator.full_name if creator else None
+
+
 def build_course_response(
     course: Course,
     session: Session | None = None,

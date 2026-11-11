@@ -90,7 +90,7 @@ def make_problem(
         "python": "class Solution:\n    def two_sum(self, nums, target): pass",
         "c": "int two_sum(void) { return 0; }",
         "cpp": "int two_sum() { return 0; }",
-        "java": "class Solution { int two_sum() { return 0; } }",
+        "javascript": "function two_sum() { return []; }",
     }
     fields: dict[str, Any] = {
         "lesson_id": lesson.lesson_id if lesson else None,
@@ -180,12 +180,17 @@ def make_problem_create_request(**overrides: Any) -> ProblemCreateRequest:
             "python": "class Solution:\n    def solve(self): pass",
             "c": "int solve(void) { return 0; }",
             "cpp": "int solve() { return 0; }",
-            "java": "class Solution { int solve() { return 0; } }",
+            "javascript": "function solve() { return 0; }",
         },
         "start_datetime": datetime(2026, 1, 1, tzinfo=VN_TZ),
         "end_datetime": datetime(2026, 2, 1, tzinfo=VN_TZ),
         "testcases": [
-            {"input": [1, 2], "expected_output": 3, "is_sample": True},
+            {
+                "input": [index, index + 1],
+                "expected_output": (2 * index) + 1,
+                "is_sample": index < 3,
+            }
+            for index in range(10)
         ],
     }
     payload.update(overrides)

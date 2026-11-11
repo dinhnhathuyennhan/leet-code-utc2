@@ -32,7 +32,7 @@
 
 ## GET /courses/{course_id}/lessons/{lesson_id} — Chi tiết buổi học
 
-**Response 200 OK**: `LessonDetailResponse`, gồm thông tin Lesson, thống kê và exercises. Mỗi exercise trả `function_name`, testcase JSON (`input` là mảng đối số, `expected_output` là giá trị), `starter_codes` theo các khóa `python`, `c`, `cpp`, `java`; trường `starter_code` tiếp tục giữ template Python để tương thích.
+**Response 200 OK**: `LessonDetailResponse`, gồm thông tin Lesson, thống kê và exercises. Mỗi exercise trả `function_name`, testcase theo kiểu chấm (mảng đối số/JSON cho function-call hoặc chuỗi cho stdin/stdout), `starter_codes` theo ngôn ngữ đã cấu hình; trường `starter_code` tiếp tục giữ template Python để tương thích.
 
 **Quy tắc theo vai trò**
 

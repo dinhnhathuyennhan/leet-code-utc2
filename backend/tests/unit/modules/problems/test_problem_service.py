@@ -24,6 +24,17 @@ from app.models.entities import Problem, Submission, Testcase as CaseModel
 pytest_plugins = ("tests.support.fixtures.problem_fixtures",)
 
 
+def _valid_testcase_updates(start: int = 0) -> list[ProblemTestcaseUpdate]:
+    return [
+        ProblemTestcaseUpdate(
+            input=[start + index, start + index + 1],
+            expected_output=(2 * (start + index)) + 1,
+            is_sample=index < 3,
+        )
+        for index in range(10)
+    ]
+
+
 class TestCreateBankProblem:
     def test_create_bank_problem_stores_nullable_lesson_and_json_testcase(
         self, session, problem_create_request_factory
@@ -33,16 +44,19 @@ class TestCreateBankProblem:
         )
 
         saved = session.get(Problem, result.id)
-        testcase = session.exec(
-            select(CaseModel).where(CaseModel.problem_id == result.id)
-        ).one()
+        testcases = session.exec(
+            select(CaseModel)
+            .where(CaseModel.problem_id == result.id)
+            .order_by(CaseModel.testcase_id)
+        ).all()
         assert saved.lesson_id is None
         assert result.lesson_id is None and result.course_id is None
         assert saved.title == "Bank Problem"
-        assert saved.total_number_testcase == 1
-        assert testcase.input == "[1,2]"
-        assert testcase.expected_output == "3"
-        assert result.testcases[0].input == [1, 2]
+        assert saved.total_number_testcase == 10
+        assert len(testcases) == 10
+        assert testcases[0].input == "[0,1]"
+        assert testcases[0].expected_output == "1"
+        assert result.testcases[0].input == [0, 1]
 
 
 class TestListProblems:
@@ -246,6 +260,7 @@ class TestCopyProblemsToLesson:
         assert copied[0].problem_id == problem_record.problem_id
         assert copied[1].problem_id != problem_bank_problem.problem_id
         assert copied[1].lesson_id == problem_lesson.lesson_id
+        assert copied[1].report == problem_bank_problem.report
         assert copied[1].total_number_testcase == 1
         clone_case = session.exec(
             select(CaseModel).where(CaseModel.problem_id == copied[1].problem_id)
@@ -402,11 +417,19 @@ class TestUpdateProblem:
         problem_testcase_factory,
     ):
         problem_testcase_factory(problem_record)
+        replacement_testcases = [
+            ProblemTestcaseUpdate(
+                input=[5] if index == 0 else [index + 5],
+                expected_output=5 if index == 0 else index + 5,
+                is_sample=index < 3,
+            )
+            for index in range(10)
+        ]
         new_codes = {
             "python": "def two_sum(): pass",
             "c": "int two_sum(void) { return 0; }",
             "cpp": "int two_sum() { return 0; }",
-            "java": "class Solution { int two_sum() { return 0; } }",
+            "javascript": "function two_sum() { return []; }",
         }
         result = problem_service.update_problem(
             session,
@@ -415,9 +438,7 @@ class TestUpdateProblem:
             problem_record.problem_id,
             ProblemUpdateRequest(
                 starter_codes=new_codes,
-                testcases=[
-                    ProblemTestcaseUpdate(input=[5], expected_output=5, is_sample=True)
-                ],
+                testcases=replacement_testcases,
             ),
             problem_teacher,
         )
@@ -427,8 +448,8 @@ class TestUpdateProblem:
         ).all()
         assert problem_record.starter_codes == new_codes
         assert problem_record.start_format_code == new_codes["python"]
-        assert problem_record.total_number_testcase == 1
-        assert len(cases) == 1 and cases[0].input == "[5]"
+        assert problem_record.total_number_testcase == 10
+        assert len(cases) == 10 and cases[0].input == "[5]"
         assert result.testcases[0].expected_output == 5
 
     def test_update_problem_rejects_grading_metadata_changes_after_submission_without_mutating_problem(
@@ -444,10 +465,10 @@ class TestUpdateProblem:
         problem_submission_factory(problem_record, problem_student)
         original_starter_codes = problem_record.starter_codes.copy()
         updated_starter_codes = {
-            "python": "class Solution: pass",
-            "c": "int twoSum(void) { return 0; }",
-            "cpp": "int twoSum() { return 0; }",
-            "java": "class Solution { int twoSum() { return 0; } }",
+            "python": "def two_sum(*args): pass",
+            "c": "int two_sum(void) { return 0; }",
+            "cpp": "int two_sum() { return 0; }",
+            "javascript": "function two_sum() { return []; }",
         }
 
         with pytest.raises(ConflictError, match="ảnh hưởng đến chấm"):
@@ -457,7 +478,6 @@ class TestUpdateProblem:
                 problem_lesson.lesson_id,
                 problem_record.problem_id,
                 ProblemUpdateRequest(
-                    function_name="two_sum_v2",
                     time_limit_seconds=3,
                     starter_codes=updated_starter_codes,
                 ),
@@ -471,8 +491,6 @@ class TestUpdateProblem:
     def test_update_bank_problem_rejects_invalid_schedule_before_saving_new_values(
         self, session, problem_bank_problem
     ):
-        # Bài trong buổi không còn nhận lịch từ client (xem TestLessonProblemScheduleIsOwnedByLesson);
-        # chỉ bài ngân hàng còn validate lịch.
         with pytest.raises(InvalidFormatError, match="start_datetime"):
             problem_service.update_bank_problem(
                 session,
@@ -483,13 +501,14 @@ class TestUpdateProblem:
         assert problem_bank_problem.start_datetime == datetime(2026, 1, 1, tzinfo=VN_TZ)
 
 
-class TestLessonProblemScheduleIsOwnedByLesson:
-    """Chặn chiều ngược Problem -> Lesson: lịch của bài trong buổi chỉ đổi qua ngày của buổi."""
+class TestProblemScheduleUpdates:
+    """Problem nhận lịch hợp lệ trực tiếp; Lesson vẫn không bị cập nhật ngược."""
 
-    def test_update_problem_ignores_schedule_but_applies_other_fields(
+    def test_update_problem_applies_valid_schedule_but_not_to_lesson(
         self, session, problem_teacher, problem_course, problem_lesson, problem_record
     ):
-        start, end = problem_record.start_datetime, problem_record.end_datetime
+        new_start = datetime(2026, 3, 1, 9, 0, tzinfo=VN_TZ)
+        new_end = datetime(2026, 3, 2, 11, 30, tzinfo=VN_TZ)
         lesson_dates = (problem_lesson.start_date, problem_lesson.end_date)
 
         problem_service.update_problem(
@@ -499,8 +518,8 @@ class TestLessonProblemScheduleIsOwnedByLesson:
             problem_record.problem_id,
             ProblemUpdateRequest(
                 title="Renamed",
-                start_datetime=datetime(2026, 3, 1, 9, 0, tzinfo=VN_TZ),
-                end_datetime=datetime(2026, 3, 2, 11, 30, tzinfo=VN_TZ),
+                start_datetime=new_start,
+                end_datetime=new_end,
             ),
             problem_teacher,
         )
@@ -508,27 +527,27 @@ class TestLessonProblemScheduleIsOwnedByLesson:
         session.refresh(problem_record)
         session.refresh(problem_lesson)
         assert problem_record.title == "Renamed"
-        assert (problem_record.start_datetime, problem_record.end_datetime) == (start, end)
-        # Không có chiều ngược Problem -> Lesson.
+        assert (problem_record.start_datetime, problem_record.end_datetime) == (new_start, new_end)
         assert (problem_lesson.start_date, problem_lesson.end_date) == lesson_dates
 
-    def test_update_problem_ignores_reversed_schedule_without_error(
+    def test_update_problem_rejects_reversed_schedule_without_mutating(
         self, session, problem_teacher, problem_course, problem_lesson, problem_record
     ):
-        """Trước đây start >= end bị báo InvalidFormatError; giờ lịch bị bỏ qua nên không còn lỗi."""
+        """start_datetime phải trước end_datetime."""
         start, end = problem_record.start_datetime, problem_record.end_datetime
 
-        problem_service.update_problem(
-            session,
-            problem_course.course_id,
-            problem_lesson.lesson_id,
-            problem_record.problem_id,
-            ProblemUpdateRequest(
-                start_datetime=datetime(2026, 3, 2, tzinfo=VN_TZ),
-                end_datetime=datetime(2026, 3, 1, tzinfo=VN_TZ),
-            ),
-            problem_teacher,
-        )
+        with pytest.raises(InvalidFormatError, match="start_datetime"):
+            problem_service.update_problem(
+                session,
+                problem_course.course_id,
+                problem_lesson.lesson_id,
+                problem_record.problem_id,
+                ProblemUpdateRequest(
+                    start_datetime=datetime(2026, 3, 2, tzinfo=VN_TZ),
+                    end_datetime=datetime(2026, 3, 1, tzinfo=VN_TZ),
+                ),
+                problem_teacher,
+            )
 
         session.refresh(problem_record)
         assert (problem_record.start_datetime, problem_record.end_datetime) == (start, end)
@@ -563,11 +582,20 @@ class TestReplaceTestcases:
             problem_course.course_id,
             problem_lesson.lesson_id,
             problem_record.problem_id,
-            [{"input": [3], "expected_output": 9, "is_sample": True}],
+            [
+                {
+                    "input": [index + 3],
+                    "expected_output": (index + 3) * 3,
+                    "is_sample": index < 3,
+                    "input_type": "json_args",
+                    "expected_output_type": "json",
+                }
+                for index in range(10)
+            ],
             problem_teacher,
         )
         session.refresh(problem_record)
-        assert problem_record.total_number_testcase == 1
+        assert problem_record.total_number_testcase == 10
 
     def test_replace_testcases_is_locked_after_submission(
         self,
@@ -586,7 +614,16 @@ class TestReplaceTestcases:
                 problem_course.course_id,
                 problem_lesson.lesson_id,
                 problem_record.problem_id,
-                [{"input": [1], "expected_output": 1, "is_sample": False}],
+                [
+                    {
+                        "input": [index],
+                        "expected_output": index,
+                        "is_sample": index < 3,
+                        "input_type": "json_args",
+                        "expected_output_type": "json",
+                    }
+                    for index in range(10)
+                ],
                 problem_teacher,
             )
 
@@ -652,7 +689,13 @@ class TestUpdateProblemWithSubmissions:
         problem_submission_factory,
         problem_testcase_factory,
     ):
-        problem_testcase_factory(problem_record)
+        for index in range(10):
+            problem_testcase_factory(
+                problem_record,
+                input_value=f"[{index},{index + 1}]",
+                expected_output=str((2 * index) + 1),
+                is_sample=index < 3,
+            )
         problem_submission_factory(problem_record, problem_student)
         return problem_record
 
@@ -670,12 +713,25 @@ class TestUpdateProblemWithSubmissions:
                 function_name=graded_problem.function_name,
                 time_limit_seconds=graded_problem.time_limit_seconds,
                 starter_codes=dict(graded_problem.starter_codes),
-                testcases=[ProblemTestcaseUpdate(input=[[2, 7, 11, 15], 9], expected_output=[0, 1])],
+                testcases=_valid_testcase_updates(),
             ),
             problem_teacher,
         )
 
         assert result.description == "Mô tả đã sửa"
+
+    def test_changing_testcase_content_still_conflicts(
+        self, session, problem_teacher, problem_course, problem_lesson, graded_problem
+    ):
+        with pytest.raises(ConflictError, match="ảnh hưởng đến chấm"):
+            problem_service.update_problem(
+                session,
+                problem_course.course_id,
+                problem_lesson.lesson_id,
+                graded_problem.problem_id,
+                ProblemUpdateRequest(testcases=_valid_testcase_updates(start=100)),
+                problem_teacher,
+            )
 
     def test_changing_time_limit_still_conflicts(
         self, session, problem_teacher, problem_course, problem_lesson, graded_problem
@@ -690,20 +746,8 @@ class TestUpdateProblemWithSubmissions:
                 problem_teacher,
             )
 
-    def test_changing_testcase_content_still_conflicts(
-        self, session, problem_teacher, problem_course, problem_lesson, graded_problem
-    ):
-        with pytest.raises(ConflictError, match="ảnh hưởng đến chấm"):
-            problem_service.update_problem(
-                session,
-                problem_course.course_id,
-                problem_lesson.lesson_id,
-                graded_problem.problem_id,
-                ProblemUpdateRequest(
-                    testcases=[ProblemTestcaseUpdate(input=[[1, 2], 3], expected_output=[0, 1])]
-                ),
-                problem_teacher,
-            )
+        session.refresh(graded_problem)
+        assert graded_problem.time_limit_seconds == 2
 
     def test_adding_a_testcase_still_conflicts(
         self, session, problem_teacher, problem_course, problem_lesson, graded_problem
@@ -716,8 +760,8 @@ class TestUpdateProblemWithSubmissions:
                 graded_problem.problem_id,
                 ProblemUpdateRequest(
                     testcases=[
-                        ProblemTestcaseUpdate(input=[[2, 7, 11, 15], 9], expected_output=[0, 1]),
-                        ProblemTestcaseUpdate(input=[[1, 2], 3], expected_output=[0, 1]),
+                        *_valid_testcase_updates(),
+                        ProblemTestcaseUpdate(input=[50, 51], expected_output=101),
                     ]
                 ),
                 problem_teacher,

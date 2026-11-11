@@ -67,22 +67,24 @@ export function CourseStudentsTable({
     (s) => !enrolled.has(s.user_id),
   );
   const rows = students.filter((s) =>
-    `${s.student_id} ${s.full_name} ${s.email}`
+    `${s.student_code ?? ""} ${s.full_name} ${s.email}`
       .toLowerCase()
       .includes(query.toLowerCase()),
   );
   const [importing, setImporting] = useState(false);
   const [adding, setAdding] = useState(false);
   const addingRef = useRef(false);
-  const [pendingDelete, setPendingDelete] = useState<CourseStudent | null>(null);
+  const [pendingDelete, setPendingDelete] = useState<CourseStudent | null>(
+    null,
+  );
   const [deleting, setDeleting] = useState(false);
   async function importFile(file: File) {
     setImporting(true);
     try {
       const result = await importStudents(file);
       const importedStudentIds = [
-        ...result.created.map((student) => student.user_id),
-        ...result.skipped.map((student) => student.user_id),
+        ...result.created.map((student) => student.student_code),
+        ...result.skipped.map((student) => student.student_code),
       ];
       await Promise.all(
         importedStudentIds.map((studentId) =>
@@ -125,7 +127,10 @@ export function CourseStudentsTable({
       toast.error(
         error instanceof Error ? error.message : "Không thể thêm sinh viên.",
       );
-    } finally { addingRef.current = false; setAdding(false); }
+    } finally {
+      addingRef.current = false;
+      setAdding(false);
+    }
   }
   async function remove(student: CourseStudent) {
     setPendingDelete(student);
@@ -141,7 +146,10 @@ export function CourseStudentsTable({
       toast.error(
         error instanceof Error ? error.message : "Không thể xóa sinh viên.",
       );
-    } finally { setDeleting(false); setPendingDelete(null); }
+    } finally {
+      setDeleting(false);
+      setPendingDelete(null);
+    }
   }
   return (
     <section className="space-y-4 rounded-xl bg-card p-4 shadow-sm">
@@ -183,7 +191,7 @@ export function CourseStudentsTable({
               downloadCsv(`sinh-vien-${courseId}.csv`, [
                 ["MSSV", "Họ tên", "Email", "Tiến độ (%)"],
                 ...students.map((s) => [
-                  s.student_id,
+                  s.student_code ?? "",
                   s.full_name,
                   s.email,
                   s.progress_percent,
@@ -257,7 +265,7 @@ export function CourseStudentsTable({
                             >
                               <strong>{s.full_name}</strong>
                               <span className="ml-2 text-muted-foreground">
-                                {s.user_id} · {s.email}
+                                {s.student_code ?? "Không có MSSV"} · {s.email}
                               </span>
                             </div>
                           ))}
@@ -280,11 +288,23 @@ export function CourseStudentsTable({
               </div>
               <div className="flex justify-end">
                 <Button
-                  disabled={adding || (mode === "class" ? !classId || classStudents.isPending || !candidates.length : !studentId.trim())}
+                  disabled={
+                    adding ||
+                    (mode === "class"
+                      ? !classId ||
+                        classStudents.isPending ||
+                        !candidates.length
+                      : !studentId.trim())
+                  }
                   onClick={() => void add()}
                   className="bg-[#34227a] text-white"
                 >
-                  {adding ? <Loader2 className="size-4 animate-spin" /> : <Plus className="size-4" />} {adding ? "Đang thêm..." : "Thêm"}
+                  {adding ? (
+                    <Loader2 className="size-4 animate-spin" />
+                  ) : (
+                    <Plus className="size-4" />
+                  )}{" "}
+                  {adding ? "Đang thêm..." : "Thêm"}
                 </Button>
               </div>
             </DialogContent>
@@ -307,7 +327,7 @@ export function CourseStudentsTable({
               <tr key={student.student_id} className="border-t">
                 <td className="px-4 py-3">{index + 1}</td>
                 <td className="px-4 py-3 font-semibold">
-                  {student.student_id}
+                  {student.student_code ?? "—"}
                 </td>
                 <td className="px-4 py-3">
                   <div className="font-semibold">{student.full_name}</div>
@@ -340,10 +360,35 @@ export function CourseStudentsTable({
           </tbody>
         </table>
       </div>
-      <AlertDialog open={Boolean(pendingDelete)} onOpenChange={(next) => { if (!next && !deleting) setPendingDelete(null); }}>
+      <AlertDialog
+        open={Boolean(pendingDelete)}
+        onOpenChange={(next) => {
+          if (!next && !deleting) setPendingDelete(null);
+        }}
+      >
         <AlertDialogContent>
-          <AlertDialogHeader><AlertDialogTitle>Xác nhận xóa sinh viên</AlertDialogTitle><AlertDialogDescription>Bạn có chắc muốn xóa sinh viên <strong>{pendingDelete?.full_name}</strong> ({pendingDelete?.student_id}) khỏi lớp này không? Thao tác này không thể hoàn tác.</AlertDialogDescription></AlertDialogHeader>
-          <AlertDialogFooter><AlertDialogCancel disabled={deleting}>Hủy</AlertDialogCancel><AlertDialogAction disabled={deleting} onClick={(event) => { event.preventDefault(); void confirmRemove(); }}>{deleting && <Loader2 className="size-4 animate-spin" />} {deleting ? "Đang xóa..." : "Xác nhận xóa"}</AlertDialogAction></AlertDialogFooter>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Xác nhận xóa sinh viên</AlertDialogTitle>
+            <AlertDialogDescription>
+              Bạn có chắc muốn xóa sinh viên{" "}
+              <strong>{pendingDelete?.full_name}</strong> (
+              {pendingDelete?.student_code ?? "không có MSSV"}) khỏi lớp này
+              không? Thao tác này không thể hoàn tác.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={deleting}>Hủy</AlertDialogCancel>
+            <AlertDialogAction
+              disabled={deleting}
+              onClick={(event) => {
+                event.preventDefault();
+                void confirmRemove();
+              }}
+            >
+              {deleting && <Loader2 className="size-4 animate-spin" />}{" "}
+              {deleting ? "Đang xóa..." : "Xác nhận xóa"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
     </section>

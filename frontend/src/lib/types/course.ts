@@ -136,6 +136,7 @@ export interface LessonMutationRequest {
 
 export interface StudentSearchResult {
   user_id: string;
+  student_code: string | null;
   full_name: string;
   email: string;
   class_id: string | null;
@@ -159,6 +160,7 @@ export interface GradeSessionColumn {
 export interface CourseStudent {
   enrollment_id: number;
   student_id: string;
+  student_code: string | null;
   full_name: string;
   email: string;
   submitted_lessons: number;

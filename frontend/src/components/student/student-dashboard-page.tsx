@@ -2,7 +2,6 @@
 
 import { useMemo, useState, useSyncExternalStore } from "react";
 import {
-  Bell,
   BookCheck,
   CalendarClock,
   CalendarDays,
@@ -13,7 +12,7 @@ import {
 } from "lucide-react";
 
 import { CourseCard } from "@/components/shared/course-card";
-import { MiniStat } from "@/components/student/dashboard-course-card";
+import { MiniStat } from "@/components/student/mini-stat";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useAuth } from "@/context/auth-context";
 import { useStudentOverview } from "@/lib/hooks/use-dashboard";
@@ -96,7 +95,7 @@ export function StudentDashboardPage() {
       progress: overview.data
         ? `${overview.data.completed_problems}/${overview.data.total_problems}`
         : "—",
-      dueThisWeek: 2, // mock — BE chưa trả
+      dueThisWeek: overview.data?.due_this_week ?? 0,
     };
   }, [overview.data]);
 
@@ -216,7 +215,7 @@ export function StudentDashboardPage() {
           ))}
         </div>
       ) : (
-        <EmptyState mounted={mounted} />
+        <EmptyState mounted={mounted} noMatch={coursesWithMeta.length > 0} />
       )}
     </div>
   );
@@ -248,7 +247,8 @@ function CoursesGridSkeleton() {
   );
 }
 
-function EmptyState({ mounted }: { mounted: boolean }) {
+/** `noMatch`: SV có lớp nhưng bộ lọc/tìm kiếm không khớp — khác với chưa ghi danh lớp nào. */
+function EmptyState({ mounted, noMatch }: { mounted: boolean; noMatch: boolean }) {
   const { t } = useLocale();
   return (
     <div className="rounded-2xl border border-dashed border-border bg-card p-10 text-center">
@@ -256,14 +256,12 @@ function EmptyState({ mounted }: { mounted: boolean }) {
         <CalendarDays className="size-6" />
       </div>
       <h3 className="mt-3 text-base font-semibold text-foreground">
-        {mounted ? t("student.dashboard.empty.title") : " "}
+        {mounted ? t(noMatch ? "student.classes.empty.noMatch" : "student.dashboard.empty.title") : " "}
       </h3>
       <p className="mt-1 text-sm text-muted-foreground">
-        {t("student.dashboard.empty.desc")}
+        {t(noMatch ? "student.classes.empty.noMatchDesc" : "student.dashboard.empty.desc")}
       </p>
     </div>
   );
 }
 
-// ─── Re-exports (cho callers cũ) ──────────────────────────────────
-export { Bell };

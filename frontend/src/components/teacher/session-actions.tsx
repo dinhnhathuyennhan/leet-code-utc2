@@ -26,9 +26,15 @@ function toMessage(error: unknown, fallback: string) {
   return fallback;
 }
 
-type Props = { courseId: string; sessionId: string; exerciseCount: number };
+type Props = {
+  courseId: string;
+  sessionId: string;
+  exerciseCount: number;
+  /** Nếu có: gọi thay vì điều hướng về trang lớp (dùng khi đang ở sẵn trang lớp). */
+  onDone?: () => void;
+};
 
-export function SessionActions({ courseId, sessionId, exerciseCount }: Props) {
+export function SessionActions({ courseId, sessionId, exerciseCount, onDone }: Props) {
   const router = useRouter();
   const [dialog, setDialog] = useState<"delete" | "duplicate" | null>(null);
   const [busy, setBusy] = useState(false);
@@ -46,6 +52,12 @@ export function SessionActions({ courseId, sessionId, exerciseCount }: Props) {
     setError(null);
     try {
       const nextCourseId = await task();
+      if (onDone && nextCourseId === courseId) {
+        setBusy(false);
+        setDialog(null);
+        onDone();
+        return;
+      }
       router.push(`/teacher/courses/${nextCourseId}`);
       router.refresh();
     } catch (e) {

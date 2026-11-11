@@ -95,6 +95,8 @@ export interface StudentOverviewRaw {
   total_problems: number;
   /** 0-10; `null` khi SV chưa có submission nào. */
   average_score: number | null;
+  /** Số bài đang mở, hạn nộp trong 7 ngày tới, sinh viên chưa nộp đạt. */
+  due_this_week?: number;
   courses: CourseApiRecord[];
 }
 
@@ -104,5 +106,6 @@ export interface StudentOverview {
   completed_problems: number;
   total_problems: number;
   average_score: number | null;
+  due_this_week: number;
   courses: CourseSummary[];
 }

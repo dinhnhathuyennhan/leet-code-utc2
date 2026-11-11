@@ -3,7 +3,7 @@ import type { ReactNode } from "react";
 
 /**
  * Khung nền dùng chung cho các màn hình chưa đăng nhập
- * (login, change-password, forgot-password): ảnh nền + thanh tiêu đề + footer.
+ * (login, change-password): ảnh nền + thanh tiêu đề + footer.
  *
  * Ảnh cần có trong `public/images/`:
  *   - login-bg.jpg  (ảnh toà nhà UTC2)

@@ -89,6 +89,7 @@ export async function getStudentOverview(studentId: string): Promise<StudentOver
       completed_problems: raw.completed_problems ?? 0,
       total_problems: raw.total_problems ?? 0,
       average_score: raw.average_score ?? null,
+      due_this_week: raw.due_this_week ?? 0,
       // Phải transform từ shape thô (course_id) sang CourseSummary (id),
       // nếu không `course.id` sẽ undefined -> sai key React + sai link lớp.
       courses: (raw.courses ?? []).map(toCourseSummary),

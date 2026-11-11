@@ -68,7 +68,7 @@ export function SessionList({ sessions, studentCount, courseId = "JAVA01", onCha
           case "open":
             return <div key={session.id} className="flex items-center gap-2">{handle}<div className="min-w-0 flex-1"><OpenSessionCard session={session} courseId={courseId} studentCount={studentCount} onSelect={() => router.push(`/teacher/courses/${courseId}/sessions/${session.id}`)} /></div></div>;
           case "upcoming":
-            return <div key={session.id} className="flex items-center gap-2">{handle}<div className="min-w-0 flex-1"><UpcomingSessionCard session={session} courseId={courseId} onSelect={() => router.push(`/teacher/courses/${courseId}/sessions/${session.id}`)} /></div></div>;
+            return <div key={session.id} className="flex items-center gap-2">{handle}<div className="min-w-0 flex-1"><UpcomingSessionCard session={session} courseId={courseId} onChanged={onChanged} onSelect={() => router.push(`/teacher/courses/${courseId}/sessions/${session.id}`)} /></div></div>;
           case "closed":
             return <div key={session.id} className="flex items-center gap-2">{handle}<div className="min-w-0 flex-1"><ClosedSessionCard session={session} courseId={courseId} studentCount={studentCount} onSelect={() => router.push(`/teacher/courses/${courseId}/sessions/${session.id}`)} /></div></div>;
         }

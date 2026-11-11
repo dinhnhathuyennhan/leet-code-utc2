@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { BookOpenCheck, Plus, Search } from "lucide-react";
@@ -36,7 +37,7 @@ export function AdminProblemBank() {
       <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">{query.data.items.map((problem) => <article key={problem.id} className="space-y-3 rounded-xl border bg-card p-5 shadow-sm">
         <div className="flex justify-between gap-2"><p className="text-xs font-medium text-muted-foreground">{problem.code || `#${problem.id}`}</p><span className="rounded-md bg-indigo-50 px-2 py-1 text-xs text-indigo-700 dark:bg-indigo-500/20 dark:text-indigo-300">{adminLevelLabel(problem.level)}</span></div>
         <h2 className="font-semibold">{problem.title}</h2><p className="text-sm text-muted-foreground">{problem.total_number_testcase} testcase · {problem.lesson_id === null ? "Đề nguồn" : `Thuộc buổi #${problem.lesson_id}`}</p>
-        <div className="flex gap-2"><Button asChild size="sm" variant="outline"><a href={`/admin/problem-bank/${problem.id}`}>Xem chi tiết</a></Button>{problem.lesson_id === null && <Button size="sm" variant="ghost" onClick={async () => { if (!window.confirm("Xóa đề nguồn này?")) return; try { await deleteAdminBankProblem(problem.id); await client.invalidateQueries({ queryKey: adminKeys.problems }); toast.success("Đã xóa đề nguồn."); } catch (error) { toast.error(String(error)); } }}>Xóa</Button>}</div>
+        <div className="flex gap-2"><Button asChild size="sm" variant="outline"><Link href={`/admin/problem-bank/${problem.id}`}>Xem chi tiết</Link></Button>{problem.lesson_id === null && <Button size="sm" variant="ghost" onClick={async () => { if (!window.confirm("Xóa đề nguồn này?")) return; try { await deleteAdminBankProblem(problem.id); await client.invalidateQueries({ queryKey: adminKeys.problems }); toast.success("Đã xóa đề nguồn."); } catch (error) { toast.error(String(error)); } }}>Xóa</Button>}</div>
       </article>)}</div>
       <div className="flex items-center justify-between gap-3 text-sm text-muted-foreground"><span>Tổng {query.data.total} bài tập</span><div className="flex items-center gap-2"><Button variant="outline" disabled={page === 1} onClick={() => setPage(page - 1)}>Trước</Button><span>Trang {page}</span><Button variant="outline" disabled={page * 20 >= query.data.total} onClick={() => setPage(page + 1)}>Sau</Button></div></div>
     </>}

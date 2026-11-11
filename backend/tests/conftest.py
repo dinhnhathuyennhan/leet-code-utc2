@@ -119,7 +119,6 @@ def engine():
 @pytest.fixture(autouse=True)
 def disable_application_seed_during_tests(monkeypatch):
     """Keep TestClient startup from writing to the configured application DB."""
-    monkeypatch.setattr("app.main.seed_data", lambda: None)
     monkeypatch.setattr("app.main.start_grading", lambda: None)
 
 @pytest.fixture()

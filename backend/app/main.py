@@ -27,20 +27,13 @@ from fastapi.middleware.cors import CORSMiddleware  # noqa: E402
 from app.core.exception_handlers import register_exception_handlers  # noqa: E402
 
 from app.api.router import api_router  # noqa: E402
-from app.seed.seed_data import seed_data  # noqa: E402
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     startup_started_at = time.monotonic()
-    app_logger.info("Application startup: starting seed data")
     try:
-        # Seed and queue recovery use synchronous SQLAlchemy sessions.
-        await asyncio.to_thread(seed_data)
-        app_logger.info(
-            "Application startup: seed data finished in %.2fs",
-            time.monotonic() - startup_started_at,
-        )
+        #queue recovery use synchronous SQLAlchemy sessions.
         grading_started_at = time.monotonic()
         app_logger.info("Application startup: starting grading queue recovery")
         await asyncio.to_thread(start_grading)

@@ -75,11 +75,14 @@ export function SessionProblemEditor({ courseId, sessionId, exercise, onSaved, o
 
   function addTestcase() {
     if (hasSubmissions) return;
-    setDraft((current) => ({ ...current, testcases: [...current.testcases, { id: -Date.now(), input: "[]", expected_output: "0", is_sample: false }] }));
+    if (draft.testcases.length >= 50) { toast.error("Problem chỉ được có tối đa 50 testcase."); return; }
+    const functionMode = draft.function_name !== null;
+    setDraft((current) => ({ ...current, testcases: [...current.testcases, { id: -Date.now(), input: functionMode ? "[]" : "", expected_output: functionMode ? "0" : "", is_sample: false }] }));
   }
 
   function removeTestcase(index: number) {
     if (hasSubmissions) return;
+    if (draft.testcases.length <= 10) { toast.error("Problem cần giữ ít nhất 10 testcase."); return; }
     setDraft((current) => current.testcases.length === 1
       ? { ...current, testcases: [{ ...current.testcases[0], input: "", expected_output: "" }] }
       : { ...current, testcases: current.testcases.filter((_, itemIndex) => itemIndex !== index) });
@@ -102,21 +105,31 @@ export function SessionProblemEditor({ courseId, sessionId, exercise, onSaved, o
   async function save() {
     const nextErrors: string[] = [];
     if (!draft.title.trim()) nextErrors.push("Tên bài tập không được để trống.");
-    // Bài cũ chưa từng khai báo tên hàm vẫn phải sửa được nội dung; chỉ chặn việc xoá trắng tên hàm đã có.
-    if (exercise.function_name?.trim() && !draft.function_name?.trim()) nextErrors.push("Tên hàm không được để trống.");
+    if (draft.function_name !== null && !draft.function_name.trim()) nextErrors.push("Tên hàm không được để trống.");
     if (!draft.start_datetime || !draft.end_datetime || new Date(draft.start_datetime) >= new Date(draft.end_datetime)) nextErrors.push("Giờ đóng/nộp phải sau giờ mở.");
     let testcases: ProblemUpdateRequest["testcases"];
     if (!hasSubmissions) {
-      const validation = parseDraftTestcases(draft.testcases);
-      setTestcaseErrors(validation.errors);
-      if (Object.keys(validation.errors).length) { setErrors(["Vui lòng sửa các testcase đang báo lỗi trước khi lưu bài tập."]); focusFirstTestcaseError(validation.errors); return; }
-      testcases = validation.parsed;
+      const sampleCount = draft.testcases.filter((testcase) => testcase.is_sample).length;
+      const hiddenCount = draft.testcases.length - sampleCount;
+      if (draft.testcases.length < 10 || draft.testcases.length > 50) nextErrors.push("Problem cần có từ 10 đến 50 testcase.");
+      if (sampleCount < 3) nextErrors.push("Problem cần ít nhất 3 testcase mẫu.");
+      if (hiddenCount < 5) nextErrors.push("Problem cần ít nhất 5 testcase ẩn.");
+      if (draft.function_name === null) {
+        testcases = draft.testcases.map((testcase) => ({
+          input: testcase.input,
+          expected_output: testcase.expected_output,
+          is_sample: testcase.is_sample,
+        }));
+        setTestcaseErrors({});
+      } else {
+        const validation = parseDraftTestcases(draft.testcases);
+        setTestcaseErrors(validation.errors);
+        if (Object.keys(validation.errors).length) { setErrors(["Vui lòng sửa các testcase đang báo lỗi trước khi lưu bài tập."]); focusFirstTestcaseError(validation.errors); return; }
+        testcases = validation.parsed;
+      }
     }
     setErrors(nextErrors);
     if (nextErrors.length) return;
-    const functionChanged = draft.function_name?.trim() !== (exercise.function_name ?? "");
-    // Backend bắt starter_codes phải đủ 4 ngôn ngữ, nên bù những ngôn ngữ còn thiếu bằng mã đang có.
-    const starterCodes = { python: draft.starter_code, c: draft.starter_code, cpp: draft.starter_code, java: draft.starter_code, ...(draft.starter_codes ?? {}) };
     const payload: ProblemUpdateRequest = {
       title: draft.title.trim(), description: draft.description, constraints: draft.constraints, level: draft.level,
       hint: draft.hint || null, complexity: draft.complexity || null,
@@ -126,13 +139,22 @@ export function SessionProblemEditor({ courseId, sessionId, exercise, onSaved, o
         time_limit_seconds: Number(draft.time_limit_seconds),
         starter_code: draft.starter_code,
         testcases,
-        ...(functionChanged ? { function_name: draft.function_name?.trim(), starter_codes: starterCodes } : {}),
       }),
     };
     setSaving(true);
     try {
       const updated = await updateProblem(courseId, sessionId, exercise.id, payload);
-      onSaved({ ...exercise, ...draft, hint: draft.hint || null, complexity: draft.complexity || null, total_number_testcase: updated.total_number_testcase, testcases: updated.testcases });
+      onSaved({
+        ...exercise,
+        ...draft,
+        function_name: updated.function_name,
+        starter_code: updated.starter_code,
+        starter_codes: updated.starter_codes,
+        hint: draft.hint || null,
+        complexity: draft.complexity || null,
+        total_number_testcase: updated.total_number_testcase,
+        testcases: updated.testcases,
+      });
       setImportPreview(null);
       toast.success("Đã lưu nội dung bài tập.");
     } catch (error) { toast.error(error instanceof Error ? error.message : "Không thể lưu bài tập."); }
@@ -145,7 +167,10 @@ export function SessionProblemEditor({ courseId, sessionId, exercise, onSaved, o
     try {
       const result = await readTestcaseFile(file);
       if (result.errors.length) { setImportPreview({ items: result.items, errors: result.errors, warnings: [] }); return; }
-      const remote = await previewTestcases({ courseId, lessonId: sessionId, problemId: exercise.id }, result.raw);
+      const rawTestcases = draft.function_name === null
+        ? result.items.map((item) => ({ input: item.input, expected_output: item.expected_output, is_sample: item.is_sample, input_type: "stdin", expected_output_type: "stdout" }))
+        : result.raw;
+      const remote = await previewTestcases({ courseId, lessonId: sessionId, problemId: exercise.id }, rawTestcases);
       const remoteErrors = remote.errors.map((item) => `Dòng ${item.index}, field testcase: ${item.message}`);
       const preview = { items: result.items, errors: remoteErrors, warnings: remote.warnings.map((item) => item.message) };
       setImportPreview(preview);
@@ -176,7 +201,8 @@ export function SessionProblemEditor({ courseId, sessionId, exercise, onSaved, o
     <div className="flex items-center justify-between"><div><h2 className="font-bold text-[#2f226b]">SOẠN THẢO BÀI {exercise.order}</h2><p className="text-xs text-muted-foreground">Chỉnh nội dung theo dữ liệu bài tập đang chọn.</p></div><div className="flex gap-2"><Button variant="outline" onClick={() => void removeProblem()} className="text-red-600"><Trash2 className="size-4" /> Xóa bài</Button><Button onClick={() => void save()} disabled={saving} className="bg-[#2f226b] text-white"><Save className="size-4" /> {saving ? "Đang lưu..." : "Lưu bài tập"}</Button></div></div>
     {errors.length > 0 && <div role="alert" className="space-y-1 rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700">{errors.map((error) => <p key={error}>{error}</p>)}</div>}
     <label className="block space-y-1 text-xs font-semibold">Tên bài tập<Input value={draft.title} onChange={(event) => setField("title", event.target.value)} className="bg-indigo-50/70" /></label>
-    <label className="block space-y-1 text-xs font-semibold">Tên hàm<Input disabled={hasSubmissions} value={draft.function_name ?? ""} onChange={(event) => setField("function_name", event.target.value)} className="bg-indigo-50/70" /><span className="font-normal text-muted-foreground">Tên hàm được runner dùng để chấm bài.</span></label>
+    <label className="block space-y-1 text-xs font-semibold">Kiểu chấm<select disabled value={draft.function_name === null ? "stdio" : "function"} className="mt-1 h-9 w-full rounded-lg border bg-indigo-50/70 px-2 text-sm"><option value="function">Gọi function_name</option><option value="stdio">stdin / stdout</option></select><span className="font-normal text-muted-foreground">Kiểu chấm được cố định sau khi tạo bài.</span></label>
+    {draft.function_name !== null && <label className="block space-y-1 text-xs font-semibold">Tên hàm<Input disabled value={draft.function_name ?? ""} className="bg-indigo-50/70" /><span className="font-normal text-muted-foreground">Tên hàm được cố định sau khi tạo bài.</span></label>}
     <div className="grid gap-3 sm:grid-cols-3"><label className="space-y-1 text-xs font-semibold">Mức độ<select value={draft.level} onChange={(event) => setField("level", event.target.value as Draft["level"])} className="mt-1 h-9 w-full rounded-lg border bg-indigo-50/70 px-2 text-sm"><option value="easy">Dễ</option><option value="medium">Trung bình</option><option value="hard">Khó</option></select></label><label className="space-y-1 text-xs font-semibold">Giới hạn thời gian (giây)<Input disabled={hasSubmissions} type="number" value={draft.time_limit_seconds} onChange={(event) => setField("time_limit_seconds", Number(event.target.value))} className="bg-indigo-50/70" /></label><div className="space-y-1 text-xs font-semibold"><span>Điểm tối đa</span><div className="flex h-9 items-center rounded-lg bg-indigo-50/70 px-3 text-sm text-muted-foreground">Theo testcase</div></div></div>
     <div className="grid gap-3 sm:grid-cols-2"><label className="space-y-1 text-xs font-semibold">Mở bài<Input disabled={hasSubmissions} type="datetime-local" value={draft.start_datetime} onChange={(event) => setField("start_datetime", event.target.value)} className="bg-indigo-50/70" /></label><label className="space-y-1 text-xs font-semibold">Đóng/nộp bài<Input type="datetime-local" value={draft.end_datetime} onChange={(event) => setField("end_datetime", event.target.value)} className="bg-indigo-50/70" /></label></div>
     <label className="block space-y-1 text-xs font-semibold">Mô tả bài<Textarea value={draft.description} onChange={(event) => setField("description", event.target.value)} className="min-h-40 bg-indigo-50/70" /></label>
@@ -184,11 +210,11 @@ export function SessionProblemEditor({ courseId, sessionId, exercise, onSaved, o
     <label className="block space-y-1 text-xs font-semibold">Mã nguồn khởi tạo<textarea disabled={hasSubmissions} value={draft.starter_code} onChange={(event) => setField("starter_code", event.target.value)} className="min-h-[320px] w-full resize-y rounded-lg border bg-slate-900 p-4 font-mono text-sm leading-6 text-white" /></label>
     {hasSubmissions && <p className="rounded-lg bg-amber-50 p-3 text-xs text-amber-800">Bài đã có bài nộp: không thể thêm, sửa, xóa hoặc đánh dấu mẫu testcase; cũng không thể sửa tên hàm, mã khởi tạo hay giới hạn chấm.</p>}
     <div className="space-y-3 border-t pt-4">
-      <div className="flex flex-wrap items-center justify-between gap-2"><div><h3 className="font-bold text-[#2f226b]">QUẢN LÝ TESTCASE ({draft.testcases.length} TESTS)</h3><p className="text-xs text-muted-foreground">Mọi thay đổi testcase chỉ được gửi khi bấm Lưu bài tập.</p></div><div className="flex flex-wrap gap-2"><label className={`inline-flex cursor-pointer items-center gap-1 rounded-md border px-3 py-2 text-xs font-medium ${readingFile || hasSubmissions ? "pointer-events-none opacity-60" : ""}`}><FileArchive className="size-4" /> {readingFile ? "Đang đọc..." : "Import ZIP/JSON"}<input disabled={readingFile || hasSubmissions} type="file" accept=".zip,.json,application/zip,application/json" className="hidden" onChange={(event) => { const file = event.target.files?.[0]; if (file) void importTestcases(file); event.currentTarget.value = ""; }} /></label><Button disabled={hasSubmissions} variant="outline" size="sm" onClick={addTestcase}><Plus className="size-4" /> Thêm testcase</Button><Button disabled={!draft.testcases.length} variant="outline" size="sm" onClick={() => void exportTestcases("json")}><Download className="size-4" /> Export JSON</Button><Button disabled={!draft.testcases.length} variant="outline" size="sm" onClick={() => void exportTestcases("zip")}><FileArchive className="size-4" /> Export ZIP</Button></div></div>
+      <div className="flex flex-wrap items-center justify-between gap-2"><div><h3 className="font-bold text-[#2f226b]">QUẢN LÝ TESTCASE ({draft.testcases.length}/50 TESTS)</h3><p className="text-xs text-muted-foreground">Cần 10–50 testcase, gồm ít nhất 3 mẫu và 5 ẩn. Mọi thay đổi chỉ được gửi khi bấm Lưu bài tập.</p></div><div className="flex flex-wrap gap-2"><label className={`inline-flex cursor-pointer items-center gap-1 rounded-md border px-3 py-2 text-xs font-medium ${readingFile || hasSubmissions ? "pointer-events-none opacity-60" : ""}`}><FileArchive className="size-4" /> {readingFile ? "Đang đọc..." : "Import ZIP/JSON"}<input disabled={readingFile || hasSubmissions} type="file" accept=".zip,.json,application/zip,application/json" className="hidden" onChange={(event) => { const file = event.target.files?.[0]; if (file) void importTestcases(file); event.currentTarget.value = ""; }} /></label><Button disabled={hasSubmissions || draft.testcases.length >= 50} variant="outline" size="sm" onClick={addTestcase}><Plus className="size-4" /> Thêm testcase</Button><Button disabled={!draft.testcases.length} variant="outline" size="sm" onClick={() => void exportTestcases("json")}><Download className="size-4" /> Export JSON</Button><Button disabled={!draft.testcases.length} variant="outline" size="sm" onClick={() => void exportTestcases("zip")}><FileArchive className="size-4" /> Export ZIP</Button></div></div>
       <div className="rounded-lg border-2 border-dashed border-indigo-200 bg-indigo-50 p-4 text-center text-xs text-muted-foreground" onDragOver={(event) => event.preventDefault()} onDrop={(event) => { event.preventDefault(); const file = event.dataTransfer.files[0]; if (file && !hasSubmissions) void importTestcases(file); }}><FileArchive className="mx-auto mb-1 size-6 text-indigo-700" /><p className="font-semibold text-indigo-900">Kéo thả file ZIP vào đây hoặc chọn file JSON</p><p>File JSON là mảng testcase hoặc object có thuộc tính <code>testcases</code>.</p></div>
       {importPreview && <div className={`space-y-2 rounded-lg border p-3 text-xs ${importPreview.errors.length ? "border-red-200 bg-red-50 text-red-700" : "border-emerald-200 bg-emerald-50 text-emerald-800"}`}><p className="font-semibold">Preview payload import: {importPreview.items.length} testcase</p>{importPreview.errors.map((error) => <p key={error}>• {error}</p>)}{importPreview.warnings.map((warning) => <p key={warning}>• Cảnh báo: {warning}</p>)}{!importPreview.errors.length && <p>Payload hợp lệ. Danh sách đã thay thế bản nháp hiện tại; bấm Lưu bài tập để lưu database.</p>}{importPreview.items.slice(0, 5).map((item, index) => <pre key={item.id} className="overflow-x-auto rounded bg-white/70 p-2">Dòng {index + 1}: {item.input || "(trống)"} → {item.expected_output || "(trống)"} · {item.is_sample ? "mẫu" : "ẩn"}</pre>)}</div>}
       {selectedIds.length > 0 && <div className="flex flex-wrap items-center gap-2 rounded-lg bg-indigo-50 p-2 text-xs"><span>Đã chọn {selectedIds.length} testcase</span><Button disabled={hasSubmissions} size="sm" onClick={() => setSelectedSample(true)}>Đánh dấu mẫu</Button><Button disabled={hasSubmissions} size="sm" variant="outline" onClick={() => setSelectedSample(false)}>Đánh dấu ẩn</Button></div>}
-      <div className="overflow-x-auto rounded-lg border"><table className="w-full min-w-[780px] text-xs"><thead className="bg-indigo-50 text-left"><tr><th className="px-3 py-2">Chọn</th><th className="px-3 py-2">Test #</th><th className="px-3 py-2">Input testcase</th><th className="px-3 py-2">Output mong đợi</th><th className="px-3 py-2">Mẫu</th><th className="px-3 py-2">Thao tác</th></tr></thead><tbody>{draft.testcases.map((testcase, index) => { const fieldError = testcaseErrors[index]; return <tr key={testcase.id} className="border-t align-top"><td className="px-3 py-2"><input disabled={hasSubmissions} type="checkbox" checked={selectedIds.includes(testcase.id)} onChange={(event) => setSelectedIds((current) => event.target.checked ? [...current, testcase.id] : current.filter((id) => id !== testcase.id))} aria-label={`Chọn testcase ${index + 1}`} /></td><td className="px-3 py-2 font-semibold">#{index + 1}</td><td className="px-3 py-2"><Textarea ref={(element) => { inputRefs.current[index] = element; }} aria-invalid={Boolean(fieldError?.input)} disabled={hasSubmissions} rows={3} value={testcase.input} onChange={(event) => updateTestcase(index, "input", event.target.value)} className={`min-w-48 resize-y whitespace-pre font-mono ${fieldError?.input ? "border-red-500" : ""}`} />{fieldError?.input && <p className="mt-1 text-red-600">{fieldError.input}</p>}</td><td className="px-3 py-2"><Textarea ref={(element) => { outputRefs.current[index] = element; }} aria-invalid={Boolean(fieldError?.output)} disabled={hasSubmissions} rows={3} value={testcase.expected_output} onChange={(event) => updateTestcase(index, "expected_output", event.target.value)} className={`min-w-48 resize-y whitespace-pre font-mono ${fieldError?.output ? "border-red-500" : ""}`} />{fieldError?.output && <p className="mt-1 text-red-600">{fieldError.output}</p>}</td><td className="px-3 py-2"><input disabled={hasSubmissions} type="checkbox" checked={testcase.is_sample} onChange={(event) => setDraft((current) => ({ ...current, testcases: current.testcases.map((item, itemIndex) => itemIndex === index ? { ...item, is_sample: event.target.checked } : item) }))} aria-label={`Testcase ${index + 1} là mẫu`} /></td><td className="px-3 py-2"><Button disabled={hasSubmissions} variant="ghost" size="icon" onClick={() => removeTestcase(index)} title={hasSubmissions ? "Không thể xóa vì bài đã có bài nộp" : "Xóa testcase"}><Trash2 className="size-4" /></Button></td></tr>; })}</tbody></table></div>
+      <div className="overflow-x-auto rounded-lg border"><table className="w-full min-w-[780px] text-xs"><thead className="bg-indigo-50 text-left"><tr><th className="px-3 py-2">Chọn</th><th className="px-3 py-2">Test #</th><th className="px-3 py-2">Input testcase</th><th className="px-3 py-2">Output mong đợi</th><th className="px-3 py-2">Mẫu</th><th className="px-3 py-2">Thao tác</th></tr></thead><tbody>{draft.testcases.map((testcase, index) => { const fieldError = testcaseErrors[index]; return <tr key={testcase.id} className="border-t align-top"><td className="px-3 py-2"><input disabled={hasSubmissions} type="checkbox" checked={selectedIds.includes(testcase.id)} onChange={(event) => setSelectedIds((current) => event.target.checked ? [...current, testcase.id] : current.filter((id) => id !== testcase.id))} aria-label={`Chọn testcase ${index + 1}`} /></td><td className="px-3 py-2 font-semibold">#{index + 1}</td><td className="px-3 py-2"><Textarea ref={(element) => { inputRefs.current[index] = element; }} aria-invalid={Boolean(fieldError?.input)} disabled={hasSubmissions} rows={3} value={testcase.input} onChange={(event) => updateTestcase(index, "input", event.target.value)} className={`min-w-48 resize-y whitespace-pre font-mono ${fieldError?.input ? "border-red-500" : ""}`} />{fieldError?.input && <p className="mt-1 text-red-600">{fieldError.input}</p>}</td><td className="px-3 py-2"><Textarea ref={(element) => { outputRefs.current[index] = element; }} aria-invalid={Boolean(fieldError?.output)} disabled={hasSubmissions} rows={3} value={testcase.expected_output} onChange={(event) => updateTestcase(index, "expected_output", event.target.value)} className={`min-w-48 resize-y whitespace-pre font-mono ${fieldError?.output ? "border-red-500" : ""}`} />{fieldError?.output && <p className="mt-1 text-red-600">{fieldError.output}</p>}</td><td className="px-3 py-2"><input disabled={hasSubmissions} type="checkbox" checked={testcase.is_sample} onChange={(event) => setDraft((current) => ({ ...current, testcases: current.testcases.map((item, itemIndex) => itemIndex === index ? { ...item, is_sample: event.target.checked } : item) }))} aria-label={`Testcase ${index + 1} là mẫu`} /></td><td className="px-3 py-2"><Button disabled={hasSubmissions || draft.testcases.length <= 10} variant="ghost" size="icon" onClick={() => removeTestcase(index)} title={hasSubmissions ? "Không thể xóa vì bài đã có bài nộp" : "Giữ tối thiểu 10 testcase"}><Trash2 className="size-4" /></Button></td></tr>; })}</tbody></table></div>
     </div>
   </section>;
 }

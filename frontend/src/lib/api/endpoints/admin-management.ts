@@ -46,7 +46,7 @@ export const saveAdminLesson = (id: string, data: AdminLessonPayload, lessonId?:
 export const attachAdminProblems = (id: string, lessonId: string, problemIds: number[]) =>
   request<AdminCourse>({ method: "POST", url: `${adminLessonUrl(id, lessonId)}/problems`, data: { problem_ids: problemIds } });
 
-export const getAdminProblems = (params: { q?: string; level?: string; page?: number; page_size?: number } = {}) =>
+export const getAdminProblems = (params: { q?: string; level?: string; grading_mode?: "harness" | "stdin_stdout"; page?: number; page_size?: number } = {}) =>
   request<AdminProblemList>({ url: "/problems", params });
 export const createAdminProblem = (data: AdminProblemPayload) => request<AdminProblem>({ method: "POST", url: "/problems", data });
 export const getAdminBankProblem = (problemId: number) => request<AdminProblem>({ url: `/problems/${problemId}` });
@@ -58,7 +58,9 @@ export const updateAdminTestcase = (problemId: number, testcaseId: number, data:
   request<AdminProblem>({ method: "PUT", url: `/problems/${problemId}/testcases/${testcaseId}`, data });
 export const deleteAdminTestcase = (problemId: number, testcaseId: number) =>
   request<void>({ method: "DELETE", url: `/problems/${problemId}/testcases/${testcaseId}` });
-export const previewAdminProblem = (problemId: number, data: { language: string; code: string }) =>
+export const previewAdminProblem = (problemId: number, data: {
+  language: string; code: string;
+}) =>
   request<AdminPreviewResult>({ method: "POST", url: `/problems/${problemId}/run-preview`, data, timeout: 320000 });
 export const reviewAdminPreview = (problemId: number, data: { language: string; code: string; preview_token: string }) =>
   request<AdminAIReview>({ method: "POST", url: `/ai/problems/${problemId}/review-preview`, data, timeout: 190000 });

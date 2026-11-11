@@ -37,17 +37,18 @@ export interface CourseUpdateRequest {
 
 export interface ProblemCreateRequest {
   title: string;
-  function_name: string;
+  report?: string | null;
+  function_name?: string | null;
   description: string;
   constraints: string;
   level: "easy" | "medium" | "hard";
   time_limit_seconds: number;
-  starter_codes: Record<"python" | "c" | "cpp" | "java", string>;
+  starter_codes: Partial<Record<"python" | "c" | "cpp" | "java" | "javascript", string>>;
   start_datetime: string;
   end_datetime: string;
   hint?: string | null;
   complexity?: string | null;
-  testcases: Array<{ input: unknown[]; expected_output: unknown; is_sample: boolean }>;
+  testcases: Array<{ input: unknown; expected_output: unknown; is_sample: boolean }>;
 }
 
 export async function createBankProblem(data: ProblemCreateRequest): Promise<ProblemDetailData> {

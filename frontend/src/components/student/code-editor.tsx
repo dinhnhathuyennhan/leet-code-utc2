@@ -6,7 +6,6 @@ import { Check, Copy, FileCode2, RotateCcw } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   LANGUAGE_OPTIONS,
-  findLanguageOption,
   starterCodeFor,
   type LanguageOption,
 } from "@/lib/helpers/languages";
@@ -24,6 +23,9 @@ interface CodeEditorProps {
   onLanguageChange: (language: string) => void;
   /** Khóa tắt nút "Nộp bài" khi đang chấm. */
   disabled?: boolean;
+  /** Ngôn ngữ phù hợp với grading mode của Problem. */
+  supportedLanguages?: readonly string[];
+  functionName?: string | null;
 }
 
 /**
@@ -40,18 +42,41 @@ export function CodeEditor({
   language,
   onLanguageChange,
   disabled = false,
+  supportedLanguages,
+  functionName = null,
 }: CodeEditorProps) {
   const [copied, setCopied] = useState(false);
   const [touched, setTouched] = useState(false);
   const { t } = useLocale();
 
-  const options: LanguageOption[] = useMemo(() => LANGUAGE_OPTIONS, []);
-  const current = findLanguageOption(language) ?? options[0];
+  const options: LanguageOption[] = useMemo(
+    () => supportedLanguages
+      ? LANGUAGE_OPTIONS.filter((option) => supportedLanguages.includes(option.value))
+      : LANGUAGE_OPTIONS,
+    [supportedLanguages],
+  );
+  const current = options.find((option) => option.value === language) ?? options[0] ?? LANGUAGE_OPTIONS[0];
+
+  useEffect(() => {
+    if (options.length && !options.some((option) => option.value === language)) {
+      onLanguageChange(options[0].value);
+    }
+  }, [language, onLanguageChange, options]);
+
+  function starterForCurrentLanguage() {
+    const specific = starterCodes?.[language];
+    if (specific) return specific;
+    if (!functionName) return starterCodeFor(language, starterCodes, fallbackCode);
+    if (language === "python") return `def ${functionName}(*args):\n    # TODO: implement\n    pass\n`;
+    if (language === "javascript") return `function ${functionName}(...args) {\n  // TODO: implement\n  return null;\n}\n`;
+    if (language === "c" || language === "cpp") return "";
+    return starterCodeFor(language, starterCodes, fallbackCode);
+  }
 
   // Nạp mã mẫu của ngôn ngữ đang chọn khi người dùng chưa tự sửa code.
   useEffect(() => {
     if (touched) return;
-    const starter = starterCodeFor(language, starterCodes, fallbackCode);
+    const starter = starterForCurrentLanguage();
     onChange(starter);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [language]);
@@ -68,7 +93,7 @@ export function CodeEditor({
 
   function resetCode() {
     setTouched(false);
-    onChange(starterCodeFor(language, starterCodes, fallbackCode));
+    onChange(starterForCurrentLanguage());
   }
 
   return (

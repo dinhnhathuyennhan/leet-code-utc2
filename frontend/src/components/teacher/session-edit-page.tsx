@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { CalendarDays, Check, Clock3, FileCode2, FlaskConical, Plus, Save, X } from "lucide-react";
+import { CalendarDays, Check, Clock3, FileCode2, FlaskConical, Plus, Save, Trash2, X } from "lucide-react";
 import { toast } from "sonner";
 import { useRouter } from "next/navigation";
 import { useQueryClient } from "@tanstack/react-query";
@@ -15,6 +15,23 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { SessionProblemEditor } from "./session-problem-editor";
+
+const MIN_MANUAL_TESTCASES = 10;
+const MAX_MANUAL_TESTCASES = 50;
+
+type ManualTestcaseDraft = {
+  input: string;
+  expectedOutput: string;
+  isSample: boolean;
+};
+
+function initialManualTestcases(): ManualTestcaseDraft[] {
+  return Array.from({ length: MIN_MANUAL_TESTCASES }, (_, index) => ({
+    input: "",
+    expectedOutput: "",
+    isSample: index < 3,
+  }));
+}
 
 // Modal tạo bài tập mới thủ công
 function NewProblemModal({
@@ -41,8 +58,8 @@ function NewProblemModal({
   const [level, setLevel] = useState<"easy" | "medium" | "hard">("easy");
   const [timeLimit, setTimeLimit] = useState(1);
   const [starterCode, setStarterCode] = useState("");
-  const [testcaseInput, setTestcaseInput] = useState("[]");
-  const [testcaseOutput, setTestcaseOutput] = useState("0");
+  const [javascriptStarterCode, setJavascriptStarterCode] = useState("");
+  const [testcases, setTestcases] = useState(initialManualTestcases);
   const [hint, setHint] = useState("");
   const [saving, setSaving] = useState(false);
   const [errors, setErrors] = useState<Record<string, string | undefined>>({});
@@ -57,17 +74,34 @@ function NewProblemModal({
     const nextErrors: Record<string, string> = {};
     if (!title.trim()) nextErrors.title = "Tên bài tập không được để trống.";
     if (existingTitles.some((item) => item.trim().toLocaleLowerCase() === title.trim().toLocaleLowerCase())) nextErrors.title = "Buổi học đã có bài trùng nội dung này.";
-    if (!functionName.trim()) nextErrors.functionName = "Tên hàm không được để trống.";
+    if (!/^[A-Za-z_][A-Za-z0-9_]*$/.test(functionName.trim())) nextErrors.functionName = "Tên hàm phải là identifier ASCII hợp lệ.";
     if (!description.trim()) nextErrors.description = "Mô tả bài không được để trống.";
     if (!constraints.trim()) nextErrors.constraints = "Ràng buộc không được để trống.";
-    if (!starterCode.trim()) nextErrors.starterCode = "Mã nguồn khởi tạo không được để trống.";
+    if (!starterCode.trim()) nextErrors.starterCode = "Cần mã khởi tạo Python.";
+    else if (!starterCode.includes(functionName.trim())) nextErrors.starterCode = `Mã khởi tạo Python cần chứa tên hàm ${functionName.trim()}.`;
+    if (!javascriptStarterCode.trim()) nextErrors.javascriptStarterCode = "Cần mã khởi tạo JavaScript.";
+    else if (!javascriptStarterCode.includes(functionName.trim())) nextErrors.javascriptStarterCode = `Mã khởi tạo JavaScript cần chứa tên hàm ${functionName.trim()}.`;
     if (!Number.isInteger(timeLimit) || timeLimit < 1) nextErrors.timeLimit = "Giới hạn thời gian phải từ 1 giây.";
     if (startDate === endDate && openTime >= closeTime) nextErrors.closeTime = "Giờ đóng phải sau giờ mở.";
     if (startDate > endDate) nextErrors.closeTime = "Thời gian đóng phải sau thời gian mở.";
-    let input: unknown[] = [];
-    let output: unknown = null;
-    try { input = JSON.parse(testcaseInput); output = JSON.parse(testcaseOutput); if (!Array.isArray(input)) throw new Error("Input phải là một mảng JSON."); }
-    catch (error) { nextErrors.testcaseInput = error instanceof Error ? `Testcase #1: ${error.message}` : "Testcase #1 không hợp lệ."; }
+    if (testcases.length < MIN_MANUAL_TESTCASES || testcases.length > MAX_MANUAL_TESTCASES) {
+      nextErrors.testcases = `Cần từ ${MIN_MANUAL_TESTCASES} đến ${MAX_MANUAL_TESTCASES} testcase.`;
+    }
+    const sampleCount = testcases.filter((testcase) => testcase.isSample).length;
+    const hiddenCount = testcases.length - sampleCount;
+    if (sampleCount < 3) nextErrors.testcases = "Cần ít nhất 3 testcase mẫu.";
+    if (hiddenCount < 5) nextErrors.testcases = "Cần ít nhất 5 testcase ẩn.";
+    let parsedTestcases: Array<{ input: unknown[]; expected_output: unknown; is_sample: boolean }> = [];
+    try {
+      parsedTestcases = testcases.map((testcase, index) => {
+        const input: unknown = JSON.parse(testcase.input);
+        const expectedOutput: unknown = JSON.parse(testcase.expectedOutput);
+        if (!Array.isArray(input)) throw new Error(`Testcase #${index + 1}: input phải là mảng JSON.`);
+        return { input, expected_output: expectedOutput, is_sample: testcase.isSample };
+      });
+    } catch (error) {
+      nextErrors.testcases = error instanceof Error ? error.message : "Có testcase JSON không hợp lệ.";
+    }
     setErrors(nextErrors);
     if (Object.keys(nextErrors).length) return;
     setSaving(true);
@@ -78,11 +112,10 @@ function NewProblemModal({
         constraints,
         level,
         time_limit_seconds: timeLimit,
-        starter_code: starterCode,
         hint: hint || null,
-        testcases: [{ input, expected_output: output, is_sample: true }],
+        testcases: parsedTestcases,
       };
-      const created = await createBankProblem({ ...payload, function_name: functionName.trim(), starter_codes: { python: starterCode, c: starterCode, cpp: starterCode, java: starterCode }, start_datetime: fromDateInput(startDate, `${openTime}:00`), end_datetime: fromDateInput(endDate, `${closeTime}:00`), testcases: [{ input, expected_output: output, is_sample: true }] });
+      const created = await createBankProblem({ ...payload, function_name: functionName.trim(), starter_codes: { python: starterCode, javascript: javascriptStarterCode }, start_datetime: fromDateInput(startDate, `${openTime}:00`), end_datetime: fromDateInput(endDate, `${closeTime}:00`) });
       await attachProblemsToLesson(courseId, sessionId, [created.id]);
       const refreshed = await getSessionDetail(courseId, sessionId);
       const attached = refreshed.exercises.find((item) => item.title === created.title);
@@ -136,7 +169,34 @@ function NewProblemModal({
             Mô tả bài
             <Textarea aria-invalid={Boolean(errors.description)} value={description} onChange={(e) => setDescription(e.target.value)} rows={4} style={{ marginTop: "0.25rem", background: "#eef2ff" }} placeholder="Trình bày đề bài..." />{errorFor("description")}
           </label>
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "0.75rem" }}><label style={{ fontSize: "0.75rem", fontWeight: 600 }}>Input testcase mẫu<textarea aria-invalid={Boolean(errors.testcaseInput)} value={testcaseInput} onChange={(e) => setTestcaseInput(e.target.value)} rows={2} style={{ marginTop: "0.25rem", width: "100%", borderRadius: "0.5rem", border: "1px solid #e2e8f0", padding: "0.5rem" }} />{errorFor("testcaseInput")}</label><label style={{ fontSize: "0.75rem", fontWeight: 600 }}>Output testcase mẫu<textarea aria-invalid={Boolean(errors.testcaseOutput)} value={testcaseOutput} onChange={(e) => setTestcaseOutput(e.target.value)} rows={2} style={{ marginTop: "0.25rem", width: "100%", borderRadius: "0.5rem", border: "1px solid #e2e8f0", padding: "0.5rem" }} />{errorFor("testcaseOutput")}</label></div>
+          <section className="space-y-3 rounded-lg border p-3">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <div>
+                <h3 className="text-sm font-semibold">Testcase JSON</h3>
+                <p className="text-xs text-muted-foreground">10–50 testcase · tối thiểu 3 mẫu và 5 ẩn</p>
+              </div>
+              <Button type="button" variant="outline" size="sm" disabled={testcases.length >= MAX_MANUAL_TESTCASES} onClick={() => setTestcases((current) => [...current, { input: "", expectedOutput: "", isSample: false }])}>
+                <Plus className="size-4" /> Thêm testcase
+              </Button>
+            </div>
+            <p className="text-xs text-muted-foreground">{testcases.filter((testcase) => testcase.isSample).length}/3 mẫu · {testcases.filter((testcase) => !testcase.isSample).length}/5 hidden · {testcases.length}/{MAX_MANUAL_TESTCASES}</p>
+            {testcases.map((testcase, index) => (
+              <div key={index} className="space-y-2 rounded-md bg-muted/40 p-3">
+                <div className="flex items-center justify-between gap-2">
+                  <span className="text-xs font-semibold">Test #{index + 1}</span>
+                  <div className="flex items-center gap-3">
+                    <label className="flex items-center gap-1 text-xs"><input type="checkbox" checked={testcase.isSample} onChange={(event) => setTestcases((current) => current.map((item, itemIndex) => itemIndex === index ? { ...item, isSample: event.target.checked } : item))} /> Mẫu</label>
+                    <Button type="button" variant="ghost" size="icon" aria-label={`Xóa testcase ${index + 1}`} disabled={testcases.length <= MIN_MANUAL_TESTCASES} onClick={() => setTestcases((current) => current.filter((_, itemIndex) => itemIndex !== index))}><Trash2 className="size-4" /></Button>
+                  </div>
+                </div>
+                <div className="grid gap-2 sm:grid-cols-2">
+                  <label className="text-xs font-medium">Input (mảng JSON)<Textarea rows={2} value={testcase.input} onChange={(event) => setTestcases((current) => current.map((item, itemIndex) => itemIndex === index ? { ...item, input: event.target.value } : item))} placeholder="[1, 2]" className="mt-1 font-mono text-xs" /></label>
+                  <label className="text-xs font-medium">Output JSON<Textarea rows={2} value={testcase.expectedOutput} onChange={(event) => setTestcases((current) => current.map((item, itemIndex) => itemIndex === index ? { ...item, expectedOutput: event.target.value } : item))} placeholder="3" className="mt-1 font-mono text-xs" /></label>
+                </div>
+              </div>
+            ))}
+            {errorFor("testcases")}
+          </section>
           <label style={{ display: "block", fontSize: "0.75rem", fontWeight: 600 }}>
             Ràng buộc
             <Textarea aria-invalid={Boolean(errors.constraints)} value={constraints} onChange={(e) => setConstraints(e.target.value)} rows={2} style={{ marginTop: "0.25rem", background: "#eef2ff" }} placeholder="VD: 1 ≤ n ≤ 10^5" />{errorFor("constraints")}
@@ -147,10 +207,16 @@ function NewProblemModal({
             <Textarea value={hint} onChange={(e) => setHint(e.target.value)} rows={2} style={{ marginTop: "0.25rem", background: "#eef2ff" }} placeholder="Gợi ý cách tiếp cận..." />
           </label>
           <label style={{ display: "block", fontSize: "0.75rem", fontWeight: 600 }}>
-            Mã nguồn khởi tạo (tuỳ chọn)
+            Mã nguồn khởi tạo Python *
             <textarea aria-invalid={Boolean(errors.starterCode)} value={starterCode} onChange={(e) => setStarterCode(e.target.value)} rows={4}
               style={{ marginTop: "0.25rem", width: "100%", borderRadius: "0.5rem", border: "1px solid #e2e8f0", background: "#0f172a", color: "#e2e8f0", padding: "0.75rem", fontFamily: "monospace", fontSize: "0.75rem" }}
               placeholder="def solution():\n    pass" />{errorFor("starterCode")}
+          </label>
+          <label style={{ display: "block", fontSize: "0.75rem", fontWeight: 600 }}>
+            Mã nguồn khởi tạo JavaScript *
+            <textarea aria-invalid={Boolean(errors.javascriptStarterCode)} value={javascriptStarterCode} onChange={(e) => setJavascriptStarterCode(e.target.value)} rows={4}
+              style={{ marginTop: "0.25rem", width: "100%", borderRadius: "0.5rem", border: "1px solid #e2e8f0", background: "#0f172a", color: "#e2e8f0", padding: "0.75rem", fontFamily: "monospace", fontSize: "0.75rem" }}
+              placeholder="function solution(...args) { return null; }" />{errorFor("javascriptStarterCode")}
           </label>
         </div>
         <div style={{ borderTop: "1px solid #e2e8f0", padding: "1rem 1.5rem", display: "flex", justifyContent: "flex-end", gap: "0.5rem" }}>

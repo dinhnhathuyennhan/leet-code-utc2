@@ -9,7 +9,7 @@ from app.modules.lessons.schemas import LessonCreateRequest, LessonDetailRespons
 from app.modules.courses import grade_service
 from app.modules.courses.access import get_lesson_in_course, get_manageable_course, get_viewable_course
 from app.modules.courses.view import build_course_response
-from app.modules.problems.service import copy_problems_to_lesson, refresh_assignment_count
+from app.modules.problems.service import copy_problems_to_lesson, refresh_assignment_count, sync_problem_schedule
 from app.models import Enrollment, Lesson, Problem, Submission, Testcase, User, Course
 from app.modules.testcases.testcase_format import testcase_to_api_values
 
@@ -36,11 +36,14 @@ def update_lesson(session: Session, course_id: str, lesson_id: int, data: Lesson
     course = get_manageable_course(course_id, session, current_user, "Bạn không có quyền sửa buổi học")
     lesson = get_lesson_in_course(session, course_id, lesson_id)
     updates = data.model_dump(exclude_unset=True)
+    old_dates = (lesson.start_date, lesson.end_date)
     for field in ("lesson_name", "start_date", "end_date"):
         if updates.get(field) is not None:
             setattr(lesson, field, updates[field])
     if lesson.start_date > lesson.end_date:
         raise InvalidFormatError("start_date phải trước hoặc bằng end_date")
+    if (lesson.start_date, lesson.end_date) != old_dates:
+        sync_problem_schedule(session, lesson)  # ngày của buổi là nguồn chuẩn cho hạn của bài
     if data.problem_ids is not None:       # chỉ THÊM bài; muốn gỡ bài dùng DELETE problem
         copy_problems_to_lesson(session, data.problem_ids, lesson, current_user)
         refresh_assignment_count(session, lesson)

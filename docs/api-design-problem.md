@@ -7,6 +7,7 @@
 - Chưa có `created_by` cho Problem, Topic, archive hoặc Assignment snapshot.
 - Problem gắn Lesson chỉ được quản lý bởi Admin hoặc Teacher chủ Course.
 - Datetime request phải kèm UTC offset; response dùng giờ Việt Nam với offset `+07:00`. `start_datetime` mở đề; `end_datetime` chỉ chặn Submit và không chặn xem đề.
+- Với Problem đã gắn Lesson, lịch được suy ra từ `Lesson.start_date`/`end_date`; không chỉnh lịch riêng trên Problem. Khi ngày Lesson thay đổi, các Problem thuộc Lesson được đồng bộ về đầu ngày bắt đầu và cuối ngày kết thúc theo giờ Việt Nam.
 - Mỗi Problem chỉ có một cách chấm, suy ra từ `function_name`: có tên thì chấm function-call (harness), `null` thì chấm stdin/stdout. `function_name` không đổi được sau khi tạo bài.
 
 ## POST /problems — Tạo Problem trong bank
@@ -66,7 +67,7 @@ riêng cho một lần chạy.
 
 Admin hoặc Teacher gửi `multipart/form-data` với field `file`, file đuôi `.json`, tối đa 25 MB và 5.000 Problem mỗi lần. Nội dung chấp nhận một object Problem, một mảng Problem, hoặc object bọc `{ "problems": [...] }`. Mỗi Problem dùng cùng các field và validation như `POST /problems`. Có `function_name` thì testcase dùng mảng đối số/output JSON; bỏ hoặc đặt `function_name: null` thì testcase dùng chuỗi stdin/stdout. `report` tùy chọn được lưu trên Problem và trả qua field `code`; trường này không yêu cầu duy nhất.
 
-Với bài function-call, starter C/C++ mà harness không dựng được bị bỏ trước khi validate; bài vẫn được import với `supported_languages` ngắn hơn. Bài thiếu starter Python hoặc JavaScript bị báo lỗi.
+Với bài function-call, starter C/C++ được validate trực tiếp bằng harness. Nếu không dựng được, preview báo lỗi ở field tương ứng và chặn import; hệ thống không tự xóa starter. Bài thiếu starter Python hoặc JavaScript cũng bị báo lỗi.
 
 Trước khi ghi database, hệ thống parse và validate toàn bộ file, đồng thời so nội dung chuẩn hóa với các Problem nguồn trong bank và các Problem khác trong cùng file. Nội dung được chuẩn hóa theo Unicode, chữ hoa/thường và khoảng trắng trên tên, tên hàm, mô tả và ràng buộc. Problem trùng không được import. Có thể gọi `POST /problems/import/preview` trước để xem số bài/testcase và lỗi validation hoặc trùng nội dung. Sau đó toàn bộ Problem và testcase được tạo trong cùng một transaction; lỗi validation, trùng nội dung hoặc lỗi ghi dữ liệu sẽ không giữ lại bản ghi nào của file. Lỗi trả `422` kèm số thứ tự Problem và field đầu tiên bị lỗi.
 
@@ -124,15 +125,15 @@ Student chỉ xem Problem từ `start_datetime` trở đi và chỉ nhận testc
 | level | string \| null | `easy`, `medium`, `hard`; null bỏ qua |
 | hint, complexity, report | string \| null | Có thể xóa bằng null; `report` được trả dưới tên `code` |
 | time_limit_seconds | int \| null | Nếu gửi phải >= 1 |
-| start_datetime, end_datetime | datetime \| null | Nếu đổi một field, cặp thời gian mới phải hợp lệ |
+| start_datetime, end_datetime | datetime \| null | Với Problem thuộc Lesson, các giá trị này không được áp dụng; lịch lấy theo Lesson |
 | starter_codes | object \| null | Ngôn ngữ hợp lệ: Python, C, C++, Java, JavaScript. Bài function-call: bắt buộc Python và JavaScript, C/C++ tùy chọn và phải dựng được harness, không nhận Java. Bài stdin/stdout: không bắt buộc, nhận cả 5 |
 | testcases | array \| null | Nếu gửi, phải có 10–50 testcase theo grading mode, ít nhất 3 mẫu và 5 hidden; thay toàn bộ danh sách; null bỏ qua |
 
-Muốn đổi cách chấm (function-call ⇄ stdin/stdout) phải tạo Problem mới, vì `function_name` không đổi được. Nếu thay đổi lịch: datetime phải có UTC offset và `start_datetime < end_datetime`. Không áp giới hạn tương lai hoặc khoảng cách tối đa. Problem gắn Lesson có thể cập nhật lịch hợp lệ trực tiếp; nếu ngày của Lesson thay đổi sau đó, lịch các Problem trong Lesson sẽ được đồng bộ lại theo ngày mới. Khi Problem đã có Submission, thay đổi testcase, starter code hoặc `time_limit_seconds` bị chặn với 409 để giữ nguyên hợp đồng chấm lịch sử.
+Muốn đổi cách chấm (function-call ⇄ stdin/stdout) phải tạo Problem mới, vì `function_name` không đổi được. Các field lịch trên endpoint này được bỏ qua; muốn đổi thời gian mở/đóng bài phải cập nhật ngày của Lesson. Khi Problem đã có Submission, thay đổi testcase, starter code hoặc `time_limit_seconds` bị chặn với 409 để giữ nguyên hợp đồng chấm lịch sử.
 
 **Response 200 OK**: `ProblemDetailResponse`.
 
-**Response lỗi**: 403 không có quyền; 404 Problem không thuộc Lesson; 409 đổi `function_name`, hoặc đã có Submission khi thay testcase/metadata ảnh hưởng đến chấm; 422 field/lịch không hợp lệ, starter code không đạt yêu cầu của cách chấm, hoặc testcase dưới/trên giới hạn.
+**Response lỗi**: 403 không có quyền; 404 Problem không thuộc Lesson; 409 đổi `function_name`, hoặc đã có Submission khi thay testcase/metadata ảnh hưởng đến chấm; 422 field không hợp lệ, starter code không đạt yêu cầu của cách chấm, hoặc testcase dưới/trên giới hạn.
 
 ## DELETE /courses/{course_id}/lessons/{lesson_id}/problems/{problem_id} — Xóa Problem
 

@@ -572,9 +572,11 @@ def update_problem(
     lesson = get_lesson_in_course(session, course_id, lesson_id)
     problem = get_problem_in_lesson(session, lesson, problem_id)
 
-    # Cho phép cập nhật lịch hợp lệ trực tiếp trên Problem. Nếu ngày của Lesson đổi,
-    # sync_problem_schedule sẽ đồng bộ lại lịch của các Problem thuộc Lesson đó.
-    updates = data.model_dump(exclude_unset=True, exclude={"testcases", "starter_code", "starter_codes"})
+    # Lịch Problem trong Lesson lấy từ Lesson; bỏ qua lịch riêng từ client cũ.
+    updates = data.model_dump(
+        exclude_unset=True,
+        exclude={"testcases", "starter_code", "starter_codes", "start_datetime", "end_datetime"},
+    )
     _check_function_and_starters(problem, data, updates)
     function_name = problem.function_name
     if data.testcases is not None:
@@ -600,11 +602,6 @@ def update_problem(
     )
     if has_grading_changes and _has_submissions(session, problem.problem_id):
         raise ConflictError("Bài đã có bài nộp, không thể sửa thông tin ảnh hưởng đến chấm")
-
-    new_start = updates.get("start_datetime") or problem.start_datetime
-    new_end = updates.get("end_datetime") or problem.end_datetime
-    if updates.get("start_datetime") is not None or updates.get("end_datetime") is not None:
-        validate_problem_schedule(new_start, new_end)  # kiểm tra TRƯỚC khi gán
 
     nullable_fields = {"function_name", "hint", "complexity", "report"}
     for field, value in updates.items():

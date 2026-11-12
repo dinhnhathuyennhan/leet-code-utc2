@@ -218,8 +218,9 @@ export function ProblemImportDialog({
               <strong>3 sample</strong> và <strong>5 hidden</strong>. Bài có{" "}
               <code>function_name</code> bắt buộc starter <code>python</code> và{" "}
               <code>javascript</code>; <code>c</code>/<code>cpp</code> tùy chọn
-              (không dựng được harness sẽ bị bỏ). Bài stdin/stdout không bắt
-              buộc starter. File mẫu có ví dụ cho cả hai kiểu.
+              nhưng nếu đã khai báo thì phải dựng được harness; lỗi sẽ hiện ở
+              bước kiểm tra và chặn import. Bài stdin/stdout không bắt buộc
+              starter. File mẫu có ví dụ cho cả hai kiểu.
             </p>
             <Button
               type="button"

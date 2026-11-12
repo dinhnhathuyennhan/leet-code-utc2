@@ -5,6 +5,7 @@ import { Download, FileArchive, Plus, Save, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 
 import { deleteProblem, updateProblem } from "@/lib/api/endpoints/courses";
+import { formatDate } from "@/lib/helpers/datetime";
 import {
   downloadTestcases,
   previewTestcases,
@@ -41,8 +42,6 @@ type Draft = Pick<
   | "time_limit_seconds"
   | "starter_code"
   | "function_name"
-  | "start_datetime"
-  | "end_datetime"
 > & {
   hint: string;
   complexity: string;
@@ -50,27 +49,7 @@ type Draft = Pick<
   testcases: DraftTestcase[];
 };
 
-function toDateTimeLocal(value: string) {
-  const parts = new Intl.DateTimeFormat("en-GB", {
-    timeZone: "Asia/Ho_Chi_Minh",
-    year: "numeric",
-    month: "2-digit",
-    day: "2-digit",
-    hour: "2-digit",
-    minute: "2-digit",
-    hourCycle: "h23",
-  }).formatToParts(new Date(value));
-  const values = Object.fromEntries(
-    parts.map((part) => [part.type, part.value]),
-  );
-  return `${values.year}-${values.month}-${values.day}T${values.hour}:${values.minute}`;
-}
-
-function toDraft(
-  exercise: SessionExercise,
-  lessonStartDate: string,
-  lessonEndDate: string,
-): Draft {
+function toDraft(exercise: SessionExercise): Draft {
   return {
     title: exercise.title,
     description: exercise.description,
@@ -80,12 +59,6 @@ function toDraft(
     starter_code: exercise.starter_code,
     starter_codes: exercise.starter_codes,
     function_name: exercise.function_name,
-    start_datetime: exercise.start_datetime
-      ? toDateTimeLocal(exercise.start_datetime)
-      : `${lessonStartDate}T00:00`,
-    end_datetime: exercise.end_datetime
-      ? toDateTimeLocal(exercise.end_datetime)
-      : `${lessonEndDate}T23:59`,
     hint: exercise.hint ?? "",
     complexity: exercise.complexity ?? "",
     testcases: (exercise.testcases ?? []).map((testcase) => ({
@@ -108,9 +81,7 @@ export function SessionProblemEditor({
   lessonStartDate,
   lessonEndDate,
 }: Props) {
-  const [draft, setDraft] = useState<Draft>(() =>
-    toDraft(exercise, lessonStartDate, lessonEndDate),
-  );
+  const [draft, setDraft] = useState<Draft>(() => toDraft(exercise));
   const [saving, setSaving] = useState(false);
   const [readingFile, setReadingFile] = useState(false);
   const [errors, setErrors] = useState<string[]>([]);
@@ -243,12 +214,6 @@ export function SessionProblemEditor({
       nextErrors.push("Tên bài tập không được để trống.");
     if (draft.function_name !== null && !draft.function_name.trim())
       nextErrors.push("Tên hàm không được để trống.");
-    if (
-      !draft.start_datetime ||
-      !draft.end_datetime ||
-      new Date(draft.start_datetime) >= new Date(draft.end_datetime)
-    )
-      nextErrors.push("Giờ đóng/nộp phải sau giờ mở.");
     let testcases: ProblemUpdateRequest["testcases"];
     if (!hasSubmissions) {
       const sampleCount = draft.testcases.filter(
@@ -290,8 +255,6 @@ export function SessionProblemEditor({
       level: draft.level,
       hint: draft.hint || null,
       complexity: draft.complexity || null,
-      start_datetime: `${draft.start_datetime}:00+07:00`,
-      end_datetime: `${draft.end_datetime}:00+07:00`,
       // Các trường ảnh hưởng tới việc chấm chỉ được gửi khi bài chưa có bài nộp.
       ...(hasSubmissions
         ? {}
@@ -542,26 +505,9 @@ export function SessionProblemEditor({
           </div>
         </div>
       </div>
-      <div className="grid gap-3 sm:grid-cols-2">
-        <label className="space-y-1 text-xs font-semibold">
-          Mở bài
-          <Input
-            disabled={hasSubmissions}
-            type="datetime-local"
-            value={draft.start_datetime}
-            onChange={(event) => setField("start_datetime", event.target.value)}
-            className="bg-indigo-50/70"
-          />
-        </label>
-        <label className="space-y-1 text-xs font-semibold">
-          Đóng/nộp bài
-          <Input
-            type="datetime-local"
-            value={draft.end_datetime}
-            onChange={(event) => setField("end_datetime", event.target.value)}
-            className="bg-indigo-50/70"
-          />
-        </label>
+      <div className="rounded-lg bg-indigo-50/70 px-3 py-2 text-xs">
+        <span className="font-semibold">Lịch theo buổi học: </span>
+        {formatDate(lessonStartDate)} – {formatDate(lessonEndDate)}
       </div>
       <label className="block space-y-1 text-xs font-semibold">
         Mô tả bài

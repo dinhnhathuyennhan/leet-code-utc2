@@ -62,6 +62,8 @@
 
 **Response lỗi**: 403 không có quyền; 404 Course/Lesson/Problem không tồn tại; 422 dữ liệu hoặc khoảng ngày không hợp lệ.
 
+Khi `start_date` hoặc `end_date` thực sự thay đổi, hệ thống đồng bộ `start_datetime`/`end_datetime` của toàn bộ Problem trong Lesson theo đầu ngày bắt đầu (`00:00:00`) và cuối ngày kết thúc (`23:59:59`) giờ Việt Nam. Đổi tên Lesson hoặc gửi lại nguyên ngày hiện tại không kích hoạt đồng bộ lịch.
+
 ## POST /courses/{course_id}/lessons/{lesson_id}/problems — Gắn Problem vào buổi
 
 **Request body**: `{ "problem_ids": [1, 2] }`; danh sách không được rỗng.

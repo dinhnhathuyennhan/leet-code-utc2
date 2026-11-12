@@ -7,7 +7,6 @@ from pydantic import ValidationError
 from app.core.exceptions import AppError, InvalidFormatError
 from app.modules.problems.deduplication import duplicate_problem_pairs
 from app.modules.problems.schemas import ProblemCreateRequest
-from app.modules.submissions.judge0.harness import prune_unsupported_starters
 
 MAX_PROBLEM_IMPORT_BYTES = 25 * 1024 * 1024
 MAX_PROBLEMS_PER_IMPORT = 5000
@@ -73,13 +72,6 @@ def inspect_problem_import(filename: str, raw: bytes) -> ProblemImportInspection
     for index, item in enumerate(items, start=1):
         code = item.get("report") if isinstance(item, dict) and isinstance(item.get("report"), str) else None
         try:
-            if (
-                    isinstance(item, dict)
-                    and isinstance(item.get("function_name"), str)
-                    and isinstance(item.get("starter_codes"), dict)
-            ):
-                item = {**item, "starter_codes": prune_unsupported_starters(
-                    item["function_name"], item["starter_codes"])}
             validated.append(ProblemCreateRequest.model_validate(item))
             validated_indices.append(index)
         except AppError as error:

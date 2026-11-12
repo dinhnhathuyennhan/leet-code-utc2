@@ -21,14 +21,13 @@ import {
   createBankProblem,
   getSessionDetail,
   updateLesson,
-  updateProblem,
 } from "@/lib/api/endpoints/courses";
 import {
   getProblems,
   type ProblemListItem,
 } from "@/lib/api/endpoints/problems";
 import { courseKeys } from "@/lib/hooks/use-courses";
-import { fromDateInput, toDateInput } from "@/lib/helpers/datetime";
+import { formatDate, fromDateInput, toDateInput } from "@/lib/helpers/datetime";
 import type { SessionDetailData, SessionExercise } from "@/lib/types/course";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -82,8 +81,6 @@ function NewProblemModal({
   const [hint, setHint] = useState("");
   const [saving, setSaving] = useState(false);
   const [errors, setErrors] = useState<Record<string, string | undefined>>({});
-  const [openTime, setOpenTime] = useState("00:00");
-  const [closeTime, setCloseTime] = useState("23:59");
 
   function errorFor(field: string) {
     return errors[field] ? (
@@ -116,10 +113,10 @@ function NewProblemModal({
       nextErrors.javascriptStarterCode = `Mã khởi tạo JavaScript cần chứa tên hàm ${functionName.trim()}.`;
     if (!Number.isInteger(timeLimit) || timeLimit < 1)
       nextErrors.timeLimit = "Giới hạn thời gian phải từ 1 giây.";
-    if (startDate === endDate && openTime >= closeTime)
-      nextErrors.closeTime = "Giờ đóng phải sau giờ mở.";
-    if (startDate > endDate)
-      nextErrors.closeTime = "Thời gian đóng phải sau thời gian mở.";
+    if (startDate > endDate) {
+      nextErrors.schedule =
+        "Ngày kết thúc phải sau hoặc bằng ngày bắt đầu của buổi học.";
+    }
     if (
       testcases.length < MIN_MANUAL_TESTCASES ||
       testcases.length > MAX_MANUAL_TESTCASES
@@ -175,8 +172,8 @@ function NewProblemModal({
           python: starterCode,
           javascript: javascriptStarterCode,
         },
-        start_datetime: fromDateInput(startDate, `${openTime}:00`),
-        end_datetime: fromDateInput(endDate, `${closeTime}:00`),
+        start_datetime: fromDateInput(startDate, "00:00:00"),
+        end_datetime: fromDateInput(endDate, "23:59:59"),
       });
       await attachProblemsToLesson(courseId, sessionId, [created.id]);
       const refreshed = await getSessionDetail(courseId, sessionId);
@@ -185,15 +182,7 @@ function NewProblemModal({
       );
       if (!attached)
         throw new Error("Không tìm thấy bài tập vừa thêm vào buổi học.");
-      await updateProblem(courseId, sessionId, attached.id, {
-        start_datetime: fromDateInput(startDate, `${openTime}:00`),
-        end_datetime: fromDateInput(endDate, `${closeTime}:00`),
-      });
-      const withSchedule = await getSessionDetail(courseId, sessionId);
-      const scheduled =
-        withSchedule.exercises.find((item) => item.id === attached.id) ??
-        attached;
-      const exercise: SessionExercise = { ...scheduled, order: 1 };
+      const exercise: SessionExercise = { ...attached, order: 1 };
       onCreated(exercise);
       toast.success("Đã tạo bài tập mới.");
       onClose();
@@ -489,29 +478,10 @@ function NewProblemModal({
             />
             {errorFor("constraints")}
           </label>
-          <div className="grid grid-cols-2 gap-3">
-            <label
-              style={{ display: "block", fontSize: "0.75rem", fontWeight: 600 }}
-            >
-              Giờ mở
-              <Input
-                type="time"
-                value={openTime}
-                onChange={(e) => setOpenTime(e.target.value)}
-              />
-            </label>
-            <label
-              style={{ display: "block", fontSize: "0.75rem", fontWeight: 600 }}
-            >
-              Giờ đóng/nộp
-              <Input
-                aria-invalid={Boolean(errors.closeTime)}
-                type="time"
-                value={closeTime}
-                onChange={(e) => setCloseTime(e.target.value)}
-              />
-              {errorFor("closeTime")}
-            </label>
+          <div className="rounded-lg bg-indigo-50 px-3 py-2 text-xs">
+            <span className="font-semibold">Lịch theo buổi học: </span>
+            {formatDate(startDate)} – {formatDate(endDate)}
+            {errorFor("schedule")}
           </div>
           <label
             style={{ display: "block", fontSize: "0.75rem", fontWeight: 600 }}

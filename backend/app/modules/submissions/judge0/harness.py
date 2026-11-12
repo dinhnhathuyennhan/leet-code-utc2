@@ -109,7 +109,21 @@ def json_outputs_match(expected_json: str, actual_json: str | None) -> bool:
 def text_outputs_match(expected: str, actual: str | None) -> bool:
     return (actual or "").strip() == expected.strip()
 
-_CPP_RUNTIME = r'''#include <bits/stdc++.h>
+_CPP_RUNTIME = r'''#include <cctype>
+#include <cmath>
+#include <cstddef>
+#include <cstring>
+#include <iomanip>
+#include <iostream>
+#include <iterator>
+#include <map>
+#include <sstream>
+#include <stdexcept>
+#include <string>
+#include <tuple>
+#include <type_traits>
+#include <utility>
+#include <vector>
 using namespace std;
 namespace __cham {
 struct J {
@@ -685,16 +699,6 @@ def validate_starter_codes(function_name: str | None, starter_codes: dict[str, s
                     f"starter_codes.{language} không dùng được với harness: {reason}. "
                     f"Sửa chữ ký hoặc bỏ starter {language} để bài chỉ hỗ trợ các ngôn ngữ còn lại"
                 )
-
-
-def prune_unsupported_starters(function_name: str, starter_codes: dict[str, str]) -> dict[str, str]:
-    """Bỏ starter C/C++ mà harness không dựng được (dùng khi import hàng loạt)."""
-    return {
-        language: code
-        for language, code in starter_codes.items()
-        if language not in OPTIONAL_HARNESS_LANGUAGES
-        or (isinstance(code, str) and _builds(language, code, function_name) is None)
-    }
 
 
 def starter_codes_of(problem) -> dict[str, str]:

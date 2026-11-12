@@ -33,7 +33,7 @@
 | **Pre-condition** | Đã đăng nhập với vai trò Admin hoặc Teacher; file `.json` không quá 25 MB và có tối đa 5.000 Problem |
 | **Post-condition** | Tất cả Problem và testcase hợp lệ được tạo trong bank (`lesson_id = null`); hoặc không có dữ liệu nào được tạo nếu import thất bại |
 | **Basic flow** | 1. Người dùng chọn file JSON dạng một Problem, danh sách Problem hoặc object `{ "problems": [...] }`; mỗi bài có thể kèm mã tùy chọn `report`<br>2. Với `function_name`, testcase dùng mảng input và output JSON; khi bỏ/null `function_name`, testcase dùng stdin/stdout dạng chuỗi<br>3. Hệ thống preview schema, số bài/testcase, lỗi và nội dung problem lặp; mỗi bài cần 10–50 testcase, ít nhất 3 mẫu và 5 hidden<br>4. Người dùng xác nhận; hệ thống kiểm tra lại và tạo các Problem cùng testcase trong một transaction<br>5. Hệ thống trả số lượng và danh sách ID/mã/tên Problem vừa tạo |
-| **Exception flow** | **E1. File hoặc một Problem sai định dạng, trùng nội dung trong file hoặc trùng bài nguồn trong bank**: trả lỗi 422 kèm số thứ tự problem; không tạo bài nào<br>**E2. Lỗi lưu dữ liệu**: rollback toàn bộ transaction<br>**E3. File quá lớn hoặc quá nhiều bài**: trả lỗi 422 |
+| **Exception flow** | **E1. File hoặc một Problem sai định dạng, starter C/C++ không dựng được harness, trùng nội dung trong file hoặc trùng bài nguồn trong bank**: preview hiển thị lỗi theo số thứ tự Problem và field liên quan; import trả 422, không tự xóa starter và không tạo bài nào<br>**E2. Lỗi lưu dữ liệu**: rollback toàn bộ transaction<br>**E3. File quá lớn hoặc quá nhiều bài**: trả lỗi 422 |
 
 ### Use-case: Gắn Problem vào Lesson
 

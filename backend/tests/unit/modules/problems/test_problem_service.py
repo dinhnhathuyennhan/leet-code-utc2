@@ -502,13 +502,14 @@ class TestUpdateProblem:
 
 
 class TestProblemScheduleUpdates:
-    """Problem nhận lịch hợp lệ trực tiếp; Lesson vẫn không bị cập nhật ngược."""
+    """Lịch Problem trong Lesson do Lesson quản lý."""
 
-    def test_update_problem_applies_valid_schedule_but_not_to_lesson(
+    def test_update_problem_ignores_legacy_schedule_fields(
         self, session, problem_teacher, problem_course, problem_lesson, problem_record
     ):
         new_start = datetime(2026, 3, 1, 9, 0, tzinfo=VN_TZ)
         new_end = datetime(2026, 3, 2, 11, 30, tzinfo=VN_TZ)
+        old_schedule = (problem_record.start_datetime, problem_record.end_datetime)
         lesson_dates = (problem_lesson.start_date, problem_lesson.end_date)
 
         problem_service.update_problem(
@@ -527,30 +528,32 @@ class TestProblemScheduleUpdates:
         session.refresh(problem_record)
         session.refresh(problem_lesson)
         assert problem_record.title == "Renamed"
-        assert (problem_record.start_datetime, problem_record.end_datetime) == (new_start, new_end)
+        assert (problem_record.start_datetime, problem_record.end_datetime) == old_schedule
         assert (problem_lesson.start_date, problem_lesson.end_date) == lesson_dates
 
-    def test_update_problem_rejects_reversed_schedule_without_mutating(
+    def test_update_problem_ignores_invalid_legacy_schedule_fields(
         self, session, problem_teacher, problem_course, problem_lesson, problem_record
     ):
-        """start_datetime phải trước end_datetime."""
+        """Các trường lịch gửi từ client cũ không còn quyết định lịch của Problem."""
         start, end = problem_record.start_datetime, problem_record.end_datetime
 
-        with pytest.raises(InvalidFormatError, match="start_datetime"):
-            problem_service.update_problem(
-                session,
-                problem_course.course_id,
-                problem_lesson.lesson_id,
-                problem_record.problem_id,
-                ProblemUpdateRequest(
-                    start_datetime=datetime(2026, 3, 2, tzinfo=VN_TZ),
-                    end_datetime=datetime(2026, 3, 1, tzinfo=VN_TZ),
-                ),
-                problem_teacher,
-            )
+        problem_service.update_problem(
+            session,
+            problem_course.course_id,
+            problem_lesson.lesson_id,
+            problem_record.problem_id,
+            ProblemUpdateRequest(
+                start_datetime=datetime(2026, 3, 2, tzinfo=VN_TZ),
+                end_datetime=datetime(2026, 3, 1, tzinfo=VN_TZ),
+            ),
+            problem_teacher,
+        )
 
         session.refresh(problem_record)
-        assert (problem_record.start_datetime, problem_record.end_datetime) == (start, end)
+        assert (problem_record.start_datetime, problem_record.end_datetime) == (
+            start,
+            end,
+        )
 
     def test_bank_problem_schedule_is_still_editable(self, session, problem_bank_problem):
         """Bài ngân hàng không thuộc buổi nào, nên vẫn được sửa lịch như cũ."""

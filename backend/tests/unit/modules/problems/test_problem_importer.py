@@ -75,6 +75,28 @@ def test_import_accepts_supported_json_shapes_and_preserves_report():
         assert parsed[0].report == "IMPORT-CODE"
 
 
+@pytest.mark.parametrize(
+    ("language", "starter_code"),
+    [
+        ("c", "int main(void) { return 0; }"),
+        ("cpp", "int main() { return 0; }"),
+    ],
+)
+def test_import_reports_optional_harness_starter_that_cannot_be_built(
+    language: str, starter_code: str
+):
+    payload = _problem_payload()
+    payload["starter_codes"][language] = starter_code
+
+    inspection = inspect_problem_import("problems.json", json.dumps(payload).encode())
+
+    assert inspection.problems == []
+    assert len(inspection.issues) == 1
+    assert inspection.issues[0].index == 1
+    assert f"starter_codes.{language}" in inspection.issues[0].message
+    assert "không dùng được với harness" in inspection.issues[0].message
+
+
 def test_preview_rejects_duplicate_normalized_problem_content(session):
     payload = {
         "problems": [

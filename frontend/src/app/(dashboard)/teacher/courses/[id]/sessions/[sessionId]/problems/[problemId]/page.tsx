@@ -65,12 +65,17 @@ export default function TeacherProblemDetailPage() {
           <Section title="Mã nguồn khởi tạo cho sinh viên"><pre className="overflow-x-auto rounded-xl bg-slate-900 p-5 text-sm leading-6 text-slate-100">{data.starter_code}</pre></Section>
         </div>
 
-        <section className="h-fit space-y-3 rounded-2xl border bg-card p-6 shadow-sm"><h2 className="font-bold text-foreground">Test cases mẫu</h2>{data.testcases.filter((testcase) => testcase.is_sample).map((testcase, index) => <div key={testcase.id} className="rounded-xl bg-muted p-4 text-sm"><p className="mb-2 font-semibold text-foreground">Test #{index + 1}</p><div className="grid gap-2"><div><p className="text-xs text-muted-foreground">Input</p><pre className="whitespace-pre-wrap rounded bg-background p-2">{testcase.input}</pre></div><div><p className="text-xs text-muted-foreground">Output mong đợi</p><pre className="whitespace-pre-wrap rounded bg-background p-2">{testcase.expected_output}</pre></div></div></div>)}</section>
+        <section className="h-fit space-y-3 rounded-2xl border bg-card p-6 shadow-sm"><h2 className="font-bold text-foreground">Test cases mẫu</h2>{data.testcases.filter((testcase) => testcase.is_sample).map((testcase, index) => <div key={testcase.id} className="rounded-xl bg-muted p-4 text-sm"><p className="mb-2 font-semibold text-foreground">Test #{index + 1}</p><div className="grid gap-2"><div><p className="text-xs text-muted-foreground">Input</p><pre className="whitespace-pre-wrap rounded bg-background p-2">{formatTestcaseValue(testcase.input)}</pre></div><div><p className="text-xs text-muted-foreground">Output mong đợi</p><pre className="whitespace-pre-wrap rounded bg-background p-2">{formatTestcaseValue(testcase.expected_output)}</pre></div></div></div>)}</section>
       </section>
       <ProblemSubmissionsPanel courseId={courseId} lessonId={sessionId} problemId={problemId} />
       <TestcaseManager courseId={courseId} lessonId={sessionId} problemId={problemId} hasSubmissions={(data.submitted_count ?? 0) > 0} />
     </div>
   );
+}
+
+function formatTestcaseValue(value: unknown): string {
+  if (typeof value === "string") return value;
+  return JSON.stringify(value, null, 2) ?? "null";
 }
 
 function Stat({ icon, label, value }: { icon: React.ReactNode; label: string; value: string }) {

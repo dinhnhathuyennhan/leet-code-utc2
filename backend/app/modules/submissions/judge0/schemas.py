@@ -5,7 +5,6 @@ from pydantic import BaseModel, field_validator
 from app.core import config
 from app.core.exceptions import EmptyFieldError, InvalidFormatError
 
-MAX_CODE_BYTES = 64 * 1024
 Language = Literal["python", "c", "cpp", "java", "javascript"]
 
 
@@ -30,6 +29,10 @@ class CodeRequest(BaseModel):
         if len(v.encode("utf-8")) > config.MAX_CODE_BYTES:
             raise InvalidFormatError(f"Code vượt quá {config.MAX_CODE_BYTES // 1024}KB")
         return v
+
+
+class AdminPreviewRequest(CodeRequest):
+    """Run stored testcases using the Problem's configured grading mode."""
 
 
 class RunCaseResponse(BaseModel):

@@ -26,7 +26,7 @@ Danh sách gồm Submission status `pending`, `wrong_answer`, `compile_error`.
 
 ## GET /submissions/{submission_id} — Chi tiết bài nộp
 
-**Response 200 OK**: `SubmissionDetailResponse`, gồm thông tin Student/Course/Lesson/Problem, code, language, status, compile_output, feedback, passed_count, tổng testcase, submitted_datetime và testcase. `input` là mảng đối số JSON, `expected_output` là giá trị JSON; testcase legacy stdin/stdout giữ dạng chuỗi.
+**Response 200 OK**: `SubmissionDetailResponse`, gồm thông tin Student/Course/Lesson/Problem, code, language, status, compile_output, feedback, passed_count, tổng testcase, submitted_datetime và testcase. Function-call testcase trả input là mảng đối số và output JSON; stdin/stdout testcase trả cả input và output dạng chuỗi.
 
 **Response lỗi**
 

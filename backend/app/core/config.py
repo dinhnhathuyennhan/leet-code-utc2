@@ -23,7 +23,11 @@ _DEFAULT_LANGUAGES: dict[str, dict] = {
     "python": {"judge0_id": 71, "cpu_time_factor": 2},
     "javascript": {"judge0_id": 63, "cpu_time_factor": 2, "memory_limit_kb": 2_048_000},
     "c": {"judge0_id": 50, "cpu_time_factor": 1},
-    "cpp": {"judge0_id": 54, "cpu_time_factor": 1},
+    "cpp": {
+        "judge0_id": 54,
+        "cpu_time_factor": 1,
+        "compiler_options": "-std=c++17",
+    },
     "java": {
         "judge0_id": 62,
         "cpu_time_factor": 2,

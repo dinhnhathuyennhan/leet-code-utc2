@@ -177,7 +177,7 @@ class TestUpdateTestcase:
         )
         assert testcase.is_sample is True
 
-    def test_update_testcase_ignores_explicit_null_sample_value(
+    def test_update_testcase_rejects_explicit_null_sample_value(
         self,
         session,
         testcase_teacher,
@@ -187,15 +187,16 @@ class TestUpdateTestcase:
         testcase_factory,
     ):
         testcase = testcase_factory(testcase_problem, is_sample=False)
-        testcase_service.update_testcase(
-            session,
-            testcase_course.course_id,
-            testcase_lesson.lesson_id,
-            testcase_problem.problem_id,
-            testcase.testcase_id,
-            UpdateRequest(is_sample=None),
-            testcase_teacher,
-        )
+        with pytest.raises(ValidationError):
+            testcase_service.update_testcase(
+                session,
+                testcase_course.course_id,
+                testcase_lesson.lesson_id,
+                testcase_problem.problem_id,
+                testcase.testcase_id,
+                UpdateRequest(is_sample=None),
+                testcase_teacher,
+            )
         session.refresh(testcase)
         assert testcase.is_sample is False
 
@@ -225,10 +226,10 @@ class TestUpdateTestcase:
 
 
 class TestUpdateTestcaseRequest:
-    def test_input_cannot_be_null_but_output_can_and_omitted_fields_stay_omitted(self):
-        with pytest.raises(ValidationError, match="input không được là null"):
-            UpdateRequest.model_validate({"input": None})
-
+    def test_partial_update_preserves_omitted_and_explicit_null_fields(self):
+        assert UpdateRequest.model_validate({"input": None}).model_dump(
+            exclude_unset=True
+        ) == {"input": None}
         assert UpdateRequest.model_validate({}).model_dump(exclude_unset=True) == {}
         assert UpdateRequest.model_validate({"expected_output": None}).model_dump(
             exclude_unset=True
@@ -464,7 +465,7 @@ class TestPreviewTestcases:
         )
 
         assert response.valid is False
-        assert [error.index for error in response.errors] == list(range(1, 8))
+        assert [error.index for error in response.errors] == [*range(1, 8), 10]
         assert response.count == 9
         assert response.sample_count == 1 and response.hidden_count == 1
         assert any(
@@ -473,10 +474,14 @@ class TestPreviewTestcases:
 
     def test_preview_testcases_warns_when_valid_items_have_no_sample(self):
         response = testcase_service.preview_testcases(
-            PreviewRequest(testcases=[{"input": [], "expected_output": {"ok": True}}])
+            PreviewRequest(testcases=[
+                {"input": [index], "expected_output": {"ok": True}, "is_sample": False}
+                for index in range(10)
+            ])
         )
-        assert response.valid
-        assert response.sample_count == 0 and response.hidden_count == 1
+        assert not response.valid
+        assert response.sample_count == 0 and response.hidden_count == 10
+        assert any("ít nhất 3 testcase mẫu" in error.message for error in response.errors)
         assert any(
             "Không có testcase mẫu" in warning.message for warning in response.warnings
         )

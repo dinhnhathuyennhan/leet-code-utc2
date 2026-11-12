@@ -5,14 +5,40 @@ from sqlmodel import Session, func, select, or_
 from app.core.utils.datetime_utils import as_utc, now_utc, vn_day_end, vn_day_start
 from app.core.exceptions import ConflictError, ForbiddenError, InvalidFormatError, NotFoundError
 from app.core.dependencies import Role
-from app.modules.testcases.testcase_format import testcase_to_storage, testcase_to_api_values
+from app.modules.testcases.testcase_format import (
+    problem_testcase_to_storage,
+    testcase_to_storage,
+    testcase_to_api_values,
+)
 from app.modules.problems.schemas import AdminTestcaseMutation, ProblemDetailResponse, ProblemUpdateRequest, ProblemCreateRequest, \
-    ProblemListResponse, validate_problem_schedule
+    ProblemImportPreviewResponse, ProblemImportResponse, ProblemListResponse, validate_problem_schedule
+from app.modules.problems.deduplication import duplicate_problem_pairs, problem_content_identity
+from app.modules.problems.schemas import (
+    MAX_PROBLEM_TESTCASES,
+    MIN_PROBLEM_TESTCASES,
+    validate_testcase_coverage,
+    validate_problem_testcase_mode,
+)
+from app.modules.problems.importer import ProblemImportInspection
 from app.modules.courses.access import (
     get_lesson_in_course, get_manageable_course, get_problem_in_lesson, get_viewable_course,
 )
 from app.models import Course, Lesson, Problem, Submission, Testcase, User
+from app.modules.submissions.judge0.harness import (
+    starter_codes_of, supported_languages, validate_starter_codes,
+)
 
+
+def _first_starter(starter_codes: dict[str, str]) -> str:
+    return starter_codes.get("python") or next(iter(starter_codes.values()), "")
+
+
+def _check_function_and_starters(problem: Problem, data: ProblemUpdateRequest, updates: dict) -> None:
+    if "function_name" in updates and updates["function_name"] != problem.function_name:
+        raise ConflictError("Không thể đổi function_name sau khi tạo bài, hãy tạo bài mới")
+    updates.pop("function_name", None)
+    if data.starter_codes is not None:
+        validate_starter_codes(problem.function_name, data.starter_codes)
 
 def assert_can_copy_problems(
     session: Session, problem_ids: list[int], current_user: User, target_lesson_id: int | None = None
@@ -49,33 +75,137 @@ def refresh_assignment_count(session: Session, lesson: Lesson) -> None:
 def create_bank_problem(
     session: Session, data: ProblemCreateRequest
 ) -> ProblemDetailResponse:
+    problem = _insert_bank_problem(session, data)
+    session.commit()
+    session.refresh(problem)
+    return _build_problem_detail_response(session, problem, course_id=None)
+
+
+def _insert_bank_problem(session: Session, data: ProblemCreateRequest) -> Problem:
+    starter_code = _first_starter(data.starter_codes)
     problem = Problem(
         lesson_id=None,
         title=data.title,
+        report=data.report,
         function_name=data.function_name,
         description=data.description,
         constraints=data.constraints,
         level=data.level,
         time_limit_seconds=data.time_limit_seconds,
-        start_format_code=data.starter_codes["python"],
+        start_format_code=starter_code,
         starter_codes=data.starter_codes,
         start_datetime=data.start_datetime,
         end_datetime=data.end_datetime,
         hint=data.hint,
         complexity=data.complexity,
         total_number_testcase=len(data.testcases),
-        report=None,
     )
     session.add(problem)
     session.flush()
     for testcase in data.testcases:
         session.add(Testcase(
             problem_id=problem.problem_id,
-            **testcase_to_storage(testcase.model_dump()),
+            **problem_testcase_to_storage(testcase.model_dump(), data.function_name),
         ))
-    session.commit()
-    session.refresh(problem)
-    return _build_problem_detail_response(session, problem, course_id=None)
+    return problem
+
+
+def import_bank_problems(
+    session: Session, items: list[ProblemCreateRequest]
+) -> ProblemImportResponse:
+    duplicates = duplicate_problem_pairs(items)
+    if duplicates:
+        duplicate_index, first_index = duplicates[0]
+        raise InvalidFormatError(
+            f"Nội dung problem #{duplicate_index} trùng với problem #{first_index} trong file"
+        )
+    existing_duplicates = _existing_bank_content_duplicates(session, items)
+    if existing_duplicates:
+        problem_index, existing_problem_id, existing_title = existing_duplicates[0]
+        raise InvalidFormatError(
+            f"Nội dung problem #{problem_index} trùng với bài nguồn hiện có "
+            f"(ID {existing_problem_id}: \"{existing_title}\")"
+        )
+    created: list[Problem] = []
+    try:
+        for item in items:
+            created.append(_insert_bank_problem(session, item))
+        response = ProblemImportResponse(
+            created_count=len(created),
+            problems=[
+                {
+                    "id": problem.problem_id,
+                    "code": problem.report,
+                    "title": problem.title,
+                    "total_number_testcase": problem.total_number_testcase,
+                }
+                for problem in created
+            ],
+        )
+        session.commit()
+    except Exception:
+        session.rollback()
+        raise
+    return response
+
+
+def _existing_bank_content_duplicates(
+    session: Session, items: list[ProblemCreateRequest]
+) -> list[tuple[int, int, str]]:
+    existing_problems = session.exec(
+        select(Problem).where(Problem.lesson_id.is_(None))
+    ).all()
+    existing_by_identity: dict[str, tuple[int, str]] = {}
+    for problem in existing_problems:
+        if problem.problem_id is not None:
+            existing_by_identity.setdefault(
+                problem_content_identity(problem), (problem.problem_id, problem.title)
+            )
+
+    duplicates: list[tuple[int, int, str]] = []
+    for index, item in enumerate(items, start=1):
+        existing = existing_by_identity.get(problem_content_identity(item))
+        if existing is not None:
+            existing_id, existing_title = existing
+            duplicates.append((index, existing_id, existing_title))
+    return duplicates
+
+
+def preview_bank_problem_import(
+    session: Session, inspection: ProblemImportInspection,
+) -> ProblemImportPreviewResponse:
+    from app.modules.problems.schemas import ProblemImportIssueResponse
+
+    issues = [
+        ProblemImportIssueResponse(index=issue.index, code=issue.code, message=issue.message)
+        for issue in inspection.issues
+    ]
+    for problem_index, existing_problem_id, existing_title in _existing_bank_content_duplicates(
+        session, inspection.problems
+    ):
+        file_index = (
+            inspection.problem_indices[problem_index - 1]
+            if len(inspection.problem_indices) == len(inspection.problems)
+            else problem_index
+        )
+        issues.append(ProblemImportIssueResponse(
+            index=file_index,
+            message=(
+                f"Nội dung problem #{file_index} trùng với bài nguồn hiện có "
+                f"(ID {existing_problem_id}: \"{existing_title}\")"
+            ),
+        ))
+    testcases = [testcase for item in inspection.problems for testcase in item.testcases]
+    sample_count = sum(testcase.is_sample for testcase in testcases)
+    return ProblemImportPreviewResponse(
+        valid=not issues and inspection.problem_count > 0,
+        problem_count=inspection.problem_count,
+        ready_problem_count=len(inspection.problems),
+        testcase_count=len(testcases),
+        sample_testcase_count=sample_count,
+        hidden_testcase_count=len(testcases) - sample_count,
+        issues=issues,
+    )
 
 def get_bank_problem(session: Session, problem_id: int, current_user: User) -> ProblemDetailResponse:
     problem = session.get(Problem, problem_id)
@@ -93,19 +223,25 @@ def update_bank_problem(session: Session, problem_id: int, data: ProblemUpdateRe
     if problem is None or problem.lesson_id is not None:
         raise NotFoundError("Không tìm thấy bài tập nguồn")
     updates = data.model_dump(exclude_unset=True, exclude={"testcases", "starter_code", "starter_codes"})
+    _check_function_and_starters(problem, data, updates)
+    function_name = problem.function_name
+    if data.testcases is not None:
+        validate_problem_testcase_mode(data.testcases, function_name)
     if updates.get("start_datetime") is not None or updates.get("end_datetime") is not None:
         validate_problem_schedule(updates.get("start_datetime") or problem.start_datetime, updates.get("end_datetime") or problem.end_datetime)
     for field, value in updates.items():
-        if value is not None or field in {"hint", "complexity", "report"}:
+        if value is not None or field in {"function_name", "hint", "complexity", "report"}:
             setattr(problem, field, value)
     if data.starter_codes is not None:
         problem.starter_codes = data.starter_codes
-        problem.start_format_code = data.starter_codes["python"]
+        problem.start_format_code = _first_starter(data.starter_codes)
     elif data.starter_code is not None:
         problem.start_format_code = data.starter_code
         problem.starter_codes = {**(problem.starter_codes or {}), "python": data.starter_code}
     if data.testcases is not None:
-        _replace_testcases(session, problem, [testcase_to_storage(t.model_dump()) for t in data.testcases])
+        _replace_testcases(session, problem, [
+            problem_testcase_to_storage(t.model_dump(), function_name) for t in data.testcases
+        ])
     session.add(problem)
     session.commit()
     session.refresh(problem)
@@ -129,6 +265,7 @@ def list_problems(
     *,
     q: str | None,
     level: str | None,
+    grading_mode: str | None = None,
     course_id: str | None,
     page: int,
     page_size: int,
@@ -145,6 +282,10 @@ def list_problems(
         filters.append(Problem.title.ilike(f"%{q.strip()}%"))
     if level is not None:
         filters.append(Problem.level == level)
+    if grading_mode == "harness":
+        filters.append(Problem.function_name.is_not(None))
+    elif grading_mode == "stdin_stdout":
+        filters.append(Problem.function_name.is_(None))
     if course_id is not None:
         filters.append(
             Problem.lesson_id.in_(
@@ -200,7 +341,7 @@ def copy_problems_to_lesson(
     session: Session, problem_ids: list[int], lesson: Lesson, current_user: User
 ) -> list[Problem]:
     """Gắn bài vào buổi: bài đã ở buổi này giữ nguyên, bài ở buổi khác được SAO CHÉP
-    (problem_id mới, Submission cũ không đi theo). Giữ nguyên mã bài `report`."""
+    (problem_id mới, Submission cũ không đi theo)."""
     problem_ids = list(dict.fromkeys(problem_ids))   # bỏ id trùng, giữ thứ tự
     if not problem_ids:
         return []
@@ -227,7 +368,7 @@ def copy_problems_to_lesson(
             lesson_id=lesson.lesson_id, title=src.title, function_name=src.function_name,
             description=src.description,
             time_limit_seconds=src.time_limit_seconds, start_format_code=src.start_format_code,
-            starter_codes=src.starter_codes or {"python": src.start_format_code},
+            starter_codes=starter_codes_of(src),
             constraints=src.constraints, level=src.level, hint=src.hint,
             complexity=src.complexity, start_datetime=start_dt, end_datetime=end_dt,
             total_number_testcase=len(testcases_by_source[pid]), report=src.report,
@@ -263,6 +404,8 @@ def _build_problem_detail_response(
         .where(Submission.problem_id == problem.problem_id)
     ).one()
 
+    starters = starter_codes_of(problem)
+
     return ProblemDetailResponse(
         id=problem.problem_id, lesson_id=problem.lesson_id, course_id=course_id,
         code=problem.report, title=problem.title, function_name=problem.function_name,
@@ -271,13 +414,14 @@ def _build_problem_detail_response(
         complexity=problem.complexity, time_limit_seconds=problem.time_limit_seconds,
         total_number_testcase=problem.total_number_testcase,
         start_datetime=problem.start_datetime, end_datetime=problem.end_datetime,
-        starter_code=problem.starter_codes.get("python") or problem.start_format_code,
-        starter_codes=problem.starter_codes or {"python": problem.start_format_code},
+        starter_code=starters.get("python", ""),
+        starter_codes=starters,
         submitted_count=submitted_count,
         testcases=[
             {"id": t.testcase_id, **testcase_to_api_values(t), "is_sample": t.is_sample}
             for t in testcases
         ],
+        supported_languages=supported_languages(problem)
     )
 
 
@@ -328,6 +472,11 @@ def add_admin_testcase(
 ) -> ProblemDetailResponse:
     problem = _get_admin_testcase_problem(session, problem_id)
     _validate_admin_testcase_mode(problem, data)
+    testcase_count = session.exec(
+        select(func.count()).select_from(Testcase).where(Testcase.problem_id == problem_id)
+    ).one()
+    if testcase_count >= MAX_PROBLEM_TESTCASES:
+        raise ConflictError(f"Problem chỉ được có tối đa {MAX_PROBLEM_TESTCASES} testcase")
     session.add(Testcase(problem_id=problem_id, **testcase_to_storage(data.model_dump())))
     _refresh_problem_testcase_count(session, problem)
     session.commit()
@@ -343,6 +492,14 @@ def update_admin_testcase(
     testcase = session.get(Testcase, testcase_id)
     if testcase is None or testcase.problem_id != problem_id:
         raise NotFoundError("Không tìm thấy testcase trong bài tập")
+    current_testcases = session.exec(
+        select(Testcase).where(Testcase.problem_id == problem_id)
+    ).all()
+    if len(current_testcases) >= MIN_PROBLEM_TESTCASES:
+        validate_testcase_coverage([
+            {"is_sample": data.is_sample if item.testcase_id == testcase_id else item.is_sample}
+            for item in current_testcases
+        ])
     for field, value in testcase_to_storage(data.model_dump()).items():
         setattr(testcase, field, value)
     session.add(testcase)
@@ -355,10 +512,14 @@ def delete_admin_testcase(session: Session, problem_id: int, testcase_id: int) -
     testcase = session.get(Testcase, testcase_id)
     if testcase is None or testcase.problem_id != problem_id:
         raise NotFoundError("Không tìm thấy testcase trong bài tập")
-    count = session.exec(
-        select(func.count()).select_from(Testcase).where(Testcase.problem_id == problem_id)
-    ).one()
-    if count <= 1:
+    current_testcases = session.exec(
+        select(Testcase).where(Testcase.problem_id == problem_id)
+    ).all()
+    if len(current_testcases) >= MIN_PROBLEM_TESTCASES:
+        validate_testcase_coverage(
+            [item for item in current_testcases if item.testcase_id != testcase_id]
+        )
+    elif len(current_testcases) <= 1:
         raise ConflictError("Bài tập phải có ít nhất một testcase")
     session.delete(testcase)
     _refresh_problem_testcase_count(session, problem)
@@ -369,6 +530,7 @@ def _replace_testcases(session: Session, problem: Problem, items: list[dict]) ->
     if _has_submissions(session, problem.problem_id):
         # Đổi testcase sau khi đã có bài nộp làm lệch điểm cũ -> chặn (bỏ dòng này nếu nhóm muốn cho phép)
         raise ConflictError("Bài đã có bài nộp, không thể thay đổi testcase")
+    validate_testcase_coverage(items)
     for tc in session.exec(select(Testcase).where(Testcase.problem_id == problem.problem_id)).all():
         session.delete(tc)
     session.flush()
@@ -378,7 +540,9 @@ def _replace_testcases(session: Session, problem: Problem, items: list[dict]) ->
     session.add(problem)
 
 
-def _testcases_changed(session: Session, problem: Problem, items: list) -> bool:
+def _testcases_changed(
+    session: Session, problem: Problem, items: list, function_name: str | None,
+) -> bool:
     """So khớp bộ testcase gửi lên với bộ đang lưu, theo đúng thứ tự."""
     current = session.exec(
         select(Testcase)
@@ -388,7 +552,7 @@ def _testcases_changed(session: Session, problem: Problem, items: list) -> bool:
     if len(current) != len(items):
         return True
     for stored, incoming in zip(current, items, strict=True):
-        new = testcase_to_storage(incoming.model_dump())
+        new = problem_testcase_to_storage(incoming.model_dump(), function_name)
         if (
             stored.input != new["input"]
             or stored.expected_output != new["expected_output"]
@@ -408,22 +572,25 @@ def update_problem(
     lesson = get_lesson_in_course(session, course_id, lesson_id)
     problem = get_problem_in_lesson(session, lesson, problem_id)
 
-    # Lịch của bài trong buổi do ngày của buổi quyết định (sync_problem_schedule): bỏ qua
-    # start_datetime/end_datetime client gửi lên để lịch bài không lệch khỏi buổi.
+    # Lịch Problem trong Lesson lấy từ Lesson; bỏ qua lịch riêng từ client cũ.
     updates = data.model_dump(
         exclude_unset=True,
         exclude={"testcases", "starter_code", "starter_codes", "start_datetime", "end_datetime"},
     )
+    _check_function_and_starters(problem, data, updates)
+    function_name = problem.function_name
+    if data.testcases is not None:
+        validate_problem_testcase_mode(data.testcases, function_name)
     # Chỉ chặn khi giá trị gửi lên KHÁC giá trị đang lưu: client gửi lại nguyên trạng
     # các trường này trong mọi lần lưu, nên so sánh theo giá trị mới biết có sửa thật hay không.
     current_starter_codes = problem.starter_codes or {}
     testcases_changed = data.testcases is not None and _testcases_changed(
-        session, problem, data.testcases
+        session, problem, data.testcases, function_name
     )
     has_grading_changes = (
         any(
             updates.get(field) is not None and updates[field] != getattr(problem, field)
-            for field in ("function_name", "time_limit_seconds")
+            for field in ("time_limit_seconds",)
         )
         or (data.starter_codes is not None and data.starter_codes != current_starter_codes)
         or (
@@ -436,13 +603,13 @@ def update_problem(
     if has_grading_changes and _has_submissions(session, problem.problem_id):
         raise ConflictError("Bài đã có bài nộp, không thể sửa thông tin ảnh hưởng đến chấm")
 
-    nullable_fields = {"hint", "complexity", "report"}
+    nullable_fields = {"function_name", "hint", "complexity", "report"}
     for field, value in updates.items():
         if value is not None or field in nullable_fields:
             setattr(problem, field, value)
     if data.starter_codes is not None:
         problem.starter_codes = data.starter_codes
-        problem.start_format_code = data.starter_codes["python"]
+        problem.start_format_code = _first_starter(data.starter_codes)
     elif data.starter_code is not None:
         problem.start_format_code = data.starter_code
         problem.starter_codes = {**(problem.starter_codes or {}), "python": data.starter_code}
@@ -451,7 +618,7 @@ def update_problem(
         _replace_testcases(
             session,
             problem,
-            [testcase_to_storage(t.model_dump()) for t in data.testcases],
+            [problem_testcase_to_storage(t.model_dump(), function_name) for t in data.testcases],
         )
 
     session.add(problem)
@@ -467,6 +634,9 @@ def replace_testcases(
     get_manageable_course(course_id, session, current_user, "Bạn không có quyền sửa testcase")
     lesson = get_lesson_in_course(session, course_id, lesson_id)
     problem = get_problem_in_lesson(session, lesson, problem_id)
+    expected_types = ("json_args", "json") if problem.function_name else ("stdin", "stdout")
+    if any((item.get("input_type"), item.get("expected_output_type")) != expected_types for item in items):
+        raise InvalidFormatError("Định dạng testcase không khớp với kiểu chấm của bài tập")
     _replace_testcases(session, problem, [testcase_to_storage(item) for item in items])
     session.commit()
     session.refresh(problem)

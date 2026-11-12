@@ -6,11 +6,16 @@ from app.core.database import get_session
 from app.core.dependencies import Role, get_current_user, require_role
 from app.core.exceptions import InvalidFormatError
 from app.modules.problems.schemas import AdminTestcaseMutation, ProblemDetailResponse, ProblemUpdateRequest, ProblemCreateRequest, \
-    ProblemListResponse
+    ProblemImportPreviewResponse, ProblemImportResponse, ProblemListResponse
 from app.modules.problems import service as problem_service
+from app.modules.problems.importer import (
+    MAX_PROBLEM_IMPORT_BYTES,
+    inspect_problem_import,
+    parse_problem_import,
+)
 from app.modules.testcases.testcase_import import MAX_UPLOAD_BYTES, parse_testcases
 from app.models import User
-from app.modules.submissions.judge0.schemas import CodeRequest, RunResponse, SubmitAcceptedResponse
+from app.modules.submissions.judge0.schemas import AdminPreviewRequest, CodeRequest, RunResponse, SubmitAcceptedResponse
 from app.modules.submissions.judge0 import grading_queue, service as judge_service
 router = APIRouter(tags=["problem"])
 BASE = "/courses/{course_id}/lessons/{lesson_id}/problems/{problem_id}"
@@ -25,10 +30,40 @@ def create_bank_problem_route(
     return problem_service.create_bank_problem(session, data)
 
 
+@router.post(
+    "/problems/import",
+    response_model=ProblemImportResponse,
+    status_code=status.HTTP_201_CREATED,
+)
+def import_bank_problems_route(
+    file: UploadFile = File(...),
+    session: Session = Depends(get_session),
+    current_user: User = Depends(require_role(Role.ADMIN, Role.TEACHER)),
+) -> ProblemImportResponse:
+    raw = file.file.read(MAX_PROBLEM_IMPORT_BYTES + 1)
+    items = parse_problem_import(file.filename or "", raw)
+    return problem_service.import_bank_problems(session, items)
+
+
+@router.post(
+    "/problems/import/preview",
+    response_model=ProblemImportPreviewResponse,
+)
+def preview_bank_problems_import_route(
+    file: UploadFile = File(...),
+    session: Session = Depends(get_session),
+    current_user: User = Depends(require_role(Role.ADMIN, Role.TEACHER)),
+) -> ProblemImportPreviewResponse:
+    raw = file.file.read(MAX_PROBLEM_IMPORT_BYTES + 1)
+    inspection = inspect_problem_import(file.filename or "", raw)
+    return problem_service.preview_bank_problem_import(session, inspection)
+
+
 @router.get("/problems", response_model=ProblemListResponse)
 def list_problems_route(
     q: str | None = None,
     level: str | None = None,
+    grading_mode: str | None = None,
     course_id: str | None = None,
     page: int = Query(default=1, ge=1),
     page_size: int = Query(default=20, ge=1, le=100),
@@ -37,8 +72,10 @@ def list_problems_route(
 ) -> ProblemListResponse:
     if level is not None and level not in ("easy", "medium", "hard"):
         raise InvalidFormatError("level chỉ được nhận một trong các giá trị: easy, medium, hard")
+    if grading_mode is not None and grading_mode not in ("harness", "stdin_stdout"):
+        raise InvalidFormatError("grading_mode chỉ được nhận harness hoặc stdin_stdout")
     return problem_service.list_problems(
-        session, current_user, q=q, level=level, course_id=course_id,
+        session, current_user, q=q, level=level, grading_mode=grading_mode, course_id=course_id,
         page=page, page_size=page_size,
     )
 
@@ -96,7 +133,7 @@ def delete_admin_testcase_route(
 
 @router.post("/problems/{problem_id}/run-preview", response_model=RunResponse)
 def run_admin_problem_preview_route(
-    problem_id: int, data: CodeRequest,
+    problem_id: int, data: AdminPreviewRequest,
     session: Session = Depends(get_session),
     current_user: User = Depends(require_role(Role.ADMIN)),
 ) -> RunResponse:

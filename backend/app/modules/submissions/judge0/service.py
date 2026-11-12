@@ -24,7 +24,8 @@ from app.modules.submissions.judge0.harness import (
     build_source,
     extract_result,
     json_outputs_match,
-    supports_function_harness,
+    starter_codes_of,
+    supported_languages,
     text_outputs_match,
 )
 from app.modules.submissions.judge0.judge0_client import (
@@ -34,6 +35,7 @@ from app.modules.submissions.judge0.judge0_client import (
     Judge0Result,
 )
 from app.modules.submissions.judge0.schemas import (
+    AdminPreviewRequest,
     CodeRequest,
     RunCaseResponse,
     RunResponse,
@@ -63,6 +65,15 @@ class UnsupportedLanguageError(InvalidFormatError):
 class JudgeBusyError(Judge0Error):
     error_code = "JUDGE_BUSY"
 
+
+def _build_source(problem: Problem, language: str, code: str) -> str:
+    if problem.function_name is None:
+        return code
+    if language not in supported_languages(problem):
+        raise UnsupportedLanguageError(f"Bài tập này chưa hỗ trợ chấm bằng {language}")
+    return build_source(
+        language, code, problem.function_name, starter_codes_of(problem).get(language)
+    )
 
 _run_slots = threading.BoundedSemaphore(config.RUN_CONCURRENCY)
 _running_users: set[str] = set()
@@ -96,15 +107,6 @@ def _get_student_problem(
     if as_utc(problem.start_datetime) > now_utc():
         raise NotFoundError("Không tìm thấy bài tập trong buổi học")
     return problem
-
-
-def _build_source(problem: Problem, language: str, code: str) -> str:
-    if problem.function_name is None:
-        return code
-    if not supports_function_harness(language):
-        raise UnsupportedLanguageError(f"Bài tập này chưa hỗ trợ chấm bằng {language}")
-    return build_source(language, code, problem.function_name)
-
 
 def _judge_case(result: Judge0Result, testcase: Testcase, uses_harness: bool) -> tuple[str, Any]:
     """Trả về (status nội bộ, actual_output đã giải mã)."""
@@ -195,7 +197,7 @@ def run(
 
 
 def run_admin_preview(
-    session: Session, problem_id: int, data: CodeRequest, current_user: User,
+    session: Session, problem_id: int, data: AdminPreviewRequest, current_user: User,
 ) -> RunResponse:
     """Grade all current testcases without creating a student submission."""
     problem = session.get(Problem, problem_id)
@@ -236,6 +238,8 @@ def run_admin_preview(
             passed_count=sum(case.status == "accepted" for case in cases), total_count=len(cases),
         ) if all(case.status != "internal_error" for case in cases) else None,
     )
+
+
 def _compile_output_of(judged: list[tuple[Judge0Result, str, Any]]) -> str | None:
     """Lấy output lỗi của testcase đầu tiên bị lỗi biên dịch.
 

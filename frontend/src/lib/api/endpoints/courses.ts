@@ -125,7 +125,7 @@ function toSummary(record: CourseApiRecord) {
     name: record.course_name,
     language: languageFromCover(record.avt_link, record.course_id, record.course_name),
     status: statusFromDates(record.start_date, record.end_date),
-    teacher_name: record.created_by,
+    teacher_name: record.teacher_name ?? "",
     semester,
     academic_year: academicYear,
     group: 1,

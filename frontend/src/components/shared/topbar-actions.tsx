@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { Bell, ChevronDown, KeyRound, LogOut, Moon, Sun, User } from "lucide-react";
+import { ChevronDown, KeyRound, LogOut, Moon, Sun, User } from "lucide-react";
 import { useTheme } from "next-themes";
 
 import { Button } from "@/components/ui/button";
@@ -56,16 +56,6 @@ function ThemeToggle() {
   );
 }
 
-function NotificationButton({ hasUnread }: { hasUnread: boolean }) {
-  const { t } = useLocale();
-  return (
-    <Button variant="ghost" size="icon" aria-label={t("layout.notifications")} className="relative rounded-full text-slate-500">
-      <Bell className="size-5" />
-      {hasUnread && <span className="absolute right-2 top-2 size-2 rounded-full bg-red-500 ring-2 ring-card" />}
-    </Button>
-  );
-}
-
 function UserMenu({ onLogout }: { onLogout: () => void }) {
   const { t } = useLocale();
   return (
@@ -95,12 +85,11 @@ function UserMenu({ onLogout }: { onLogout: () => void }) {
   );
 }
 
-export function TopbarActions({ onLogout, hasUnread = false }: { onLogout: () => void; hasUnread?: boolean }) {
+export function TopbarActions({ onLogout }: { onLogout: () => void }) {
   return (
     <div className="flex items-center gap-1.5 sm:gap-3">
       <LanguageToggle />
       <ThemeToggle />
-      <NotificationButton hasUnread={hasUnread} />
       <span aria-hidden className="mx-1 hidden h-6 w-px bg-border sm:block" />
       <UserMenu onLogout={onLogout} />
     </div>

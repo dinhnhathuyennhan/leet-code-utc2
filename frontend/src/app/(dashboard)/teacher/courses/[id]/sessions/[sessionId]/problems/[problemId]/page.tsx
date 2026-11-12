@@ -12,15 +12,23 @@ import { TestcaseManager } from "@/components/teacher/testcase-manager";
 import { useBreadcrumbLabels } from "@/components/shared/breadcrumb-context";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
-import { getProblemDetail } from "@/lib/api/endpoints/courses";
+import { getProblemDetail, getSessionDetail } from "@/lib/api/endpoints/courses";
 import type { ProblemDetailData } from "@/lib/types/course";
 
 export default function TeacherProblemDetailPage() {
   const { id: courseId, sessionId, problemId } = useParams<{ id: string; sessionId: string; problemId: string }>();
   const [data, setData] = useState<ProblemDetailData | null>(null);
   const [error, setError] = useState<unknown>(null);
+  const [sessionTitle, setSessionTitle] = useState<string | null>(null);
 
-  useBreadcrumbLabels(courseId, data?.title ?? "Chi tiết bài tập");
+  // Breadcrumb: Lớp học phần / <lớp> / <buổi học> / <tên bài>
+  useBreadcrumbLabels(courseId, sessionTitle ?? "Buổi học", data?.title ?? "Chi tiết bài tập");
+
+  useEffect(() => {
+    getSessionDetail(courseId, sessionId)
+      .then((session) => setSessionTitle(session.title))
+      .catch(() => setSessionTitle(null));
+  }, [courseId, sessionId]);
 
   useEffect(() => {
     getProblemDetail(courseId, sessionId, problemId)

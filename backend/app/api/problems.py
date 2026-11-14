@@ -159,16 +159,3 @@ def submit_code_route(
     submission = judge_service.submit(session, course_id, lesson_id, problem_id, data, current_user)
     grading_queue.enqueue(submission.submission_id)
     return SubmitAcceptedResponse(submission_id=submission.submission_id, status=submission.status)
-
-@router.post(
-    "/{submission_id}/regrade",
-    response_model=SubmitAcceptedResponse,
-    status_code=status.HTTP_202_ACCEPTED,
-)
-def regrade_submission_route(
-    submission_id: int,
-    session: Session = Depends(get_session),
-    current_user: User = Depends(require_role(Role.ADMIN, Role.TEACHER)),
-) -> SubmitAcceptedResponse:
-    submission = judge_service.regrade(session, submission_id, current_user)
-    return SubmitAcceptedResponse(submission_id=submission.submission_id, status=submission.status)

@@ -8,6 +8,7 @@ import {
   CheckCircle2,
   Clock,
   Code2,
+  RefreshCw,
   Save,
   XCircle,
 } from "lucide-react";
@@ -17,7 +18,7 @@ import { ErrorState } from "@/components/shared/page-state";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
-import { getSubmissionDetail, updateSubmission } from "@/lib/api/endpoints/dashboard";
+import { getSubmissionDetail, regradeSubmission, updateSubmission } from "@/lib/api/endpoints/dashboard";
 import type { SubmissionDetail } from "@/lib/types/dashboard";
 
 /**
@@ -43,6 +44,7 @@ export default function SubmissionDetailPage() {
   const [manualScore, setManualScore] = useState("");
   const [saved, setSaved] = useState(false);
   const [status, setStatus] = useState("pending");
+  const [regrading, setRegrading] = useState(false);
 
   /** Chỉ nhận đường dẫn nội bộ, tránh bị lợi dụng để điều hướng ra ngoài hệ thống. */
   const returnTo = safeReturnTo(searchParams.get("returnTo"));
@@ -62,6 +64,19 @@ export default function SubmissionDetailPage() {
       .catch(setError);
   }, [id]);
 
+  useEffect(() => {
+    if (data?.status !== "pending" && data?.status !== "processing") return;
+    const timer = window.setInterval(() => {
+      void getSubmissionDetail(id)
+        .then((submission) => {
+          setData(submission);
+          setStatus(submission.status);
+        })
+        .catch(setSaveError);
+    }, 1_500);
+    return () => window.clearInterval(timer);
+  }, [data?.status, id]);
+
   if (error) return <ErrorState error={error} />;
   if (!data) return <div className="rounded-xl border bg-card p-6 text-sm text-muted-foreground">Đang tải bài nộp...</div>;
 
@@ -76,7 +91,6 @@ export default function SubmissionDetailPage() {
       const submission = await updateSubmission(id, {
         feedback,
         manual_score: parsedScore,
-        status,
       });
       setData(submission);
       setStatus(submission.status);
@@ -88,7 +102,19 @@ export default function SubmissionDetailPage() {
     }
   }
 
-  const statusLabel = data.status === "compile_error" ? "Lỗi biên dịch" : data.status === "accepted" ? "Đã chấp nhận" : data.status === "pending" ? "Đang chờ" : "Sai kết quả";
+  async function regrade() {
+    setRegrading(true);
+    setSaveError(null);
+    try {
+      await regradeSubmission(id);
+      setData((current) => current ? { ...current, status: "pending" } : current);
+      setStatus("pending");
+    } catch (requestError) {
+      setSaveError(requestError instanceof Error ? requestError.message : "Không thể chấm lại bài nộp.");
+    } finally { setRegrading(false); }
+  }
+
+  const statusLabel = data.status === "compile_error" ? "Lỗi biên dịch" : data.status === "accepted" ? "Đã chấp nhận" : data.status === "pending" ? "Đang chờ" : data.status === "internal_error" ? "Lỗi hệ thống chấm" : "Sai kết quả";
 
   return (
     <div className="space-y-6">
@@ -111,6 +137,7 @@ export default function SubmissionDetailPage() {
         </div>
 
         <div className="flex items-center gap-3">
+          {data.status === "internal_error" && <Button variant="outline" onClick={() => void regrade()} disabled={regrading}><RefreshCw className={`size-4 ${regrading ? "animate-spin" : ""}`} /> Chấm lại</Button>}
           <Button
             onClick={() => void saveSubmission()}
             className="h-10 bg-[#2f226b] gap-2 font-semibold text-white shadow-sm hover:bg-[#251b56]"
@@ -193,11 +220,8 @@ export default function SubmissionDetailPage() {
 
             <div>
               <label className="text-xs font-semibold text-slate-700 dark:text-slate-300">Trạng thái</label>
-              <select value={status} onChange={(event) => setStatus(event.target.value)} className="mt-1 h-11 w-full rounded-md border bg-background px-3 text-sm">
-                <option value="pending">Đang chờ</option>
-                <option value="accepted">Đã chấp nhận</option>
-                <option value="wrong_answer">Sai kết quả</option>
-                <option value="compile_error">Lỗi biên dịch</option>
+              <select value={status} disabled className="mt-1 h-11 w-full rounded-md border bg-muted px-3 text-sm opacity-80">
+                <option value={status}>{statusLabel}</option>
               </select>
             </div>
 

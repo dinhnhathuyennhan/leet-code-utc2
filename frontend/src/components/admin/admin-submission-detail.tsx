@@ -3,14 +3,14 @@
 import Link from "next/link";
 import { useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { ArrowLeft, CheckCircle2, Code2, Copy, FileCheck2, Save } from "lucide-react";
+import { ArrowLeft, CheckCircle2, Code2, Copy, FileCheck2, RefreshCw, Save } from "lucide-react";
 import { toast } from "sonner";
 import { useBreadcrumbLabels } from "@/components/shared/breadcrumb-context";
 import { ErrorState } from "@/components/shared/page-state";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
-import { getAdminSubmission, saveAdminSubmission } from "@/lib/api/endpoints/admin-management";
+import { getAdminSubmission, regradeAdminSubmission, saveAdminSubmission } from "@/lib/api/endpoints/admin-management";
 import { formatDeadline } from "@/lib/helpers/datetime";
 import { getErrorMessage } from "@/lib/helpers/error-message";
 import { adminKeys } from "@/lib/hooks/use-admin";
@@ -24,7 +24,14 @@ const STATUSES: Record<string, string> = {
 const jsonText = (value: unknown) => typeof value === "string" ? value : JSON.stringify(value, null, 2);
 
 export function AdminSubmissionDetail({ id }: { id: string }) {
-  const query = useQuery({ queryKey: [...adminKeys.submissions, id], queryFn: () => getAdminSubmission(id) });
+  const query = useQuery({
+    queryKey: [...adminKeys.submissions, id],
+    queryFn: () => getAdminSubmission(id),
+    refetchInterval: (currentQuery) => {
+      const status = currentQuery.state.data?.status;
+      return status === "pending" || status === "processing" ? 1_500 : false;
+    },
+  });
   useBreadcrumbLabels(null, null, `Bài nộp #${id}`);
   if (query.isPending) return <AdminLoading />;
   if (query.error || !query.data) return <ErrorState error={query.error} onRetry={() => void query.refetch()} />;
@@ -34,9 +41,10 @@ export function AdminSubmissionDetail({ id }: { id: string }) {
 function SubmissionWorkspace({ submission }: { submission: Submission }) {
   const client = useQueryClient();
   const [feedback, setFeedback] = useState(submission.feedback ?? "");
-  const [status, setStatus] = useState(submission.status);
+  const [status] = useState(submission.status);
   const [score, setScore] = useState(submission.manual_score == null ? "" : String(submission.manual_score));
   const [saving, setSaving] = useState(false);
+  const [regrading, setRegrading] = useState(false);
   const automatic = submission.total_testcases > 0 ? ((submission.passed_count / submission.total_testcases) * 10).toFixed(1) : "—";
   async function save(event: React.FormEvent) {
     event.preventDefault();
@@ -44,7 +52,7 @@ function SubmissionWorkspace({ submission }: { submission: Submission }) {
     if (manualScore !== null && (!Number.isFinite(manualScore) || manualScore < 0 || manualScore > 10)) { toast.error("Điểm phải nằm trong khoảng 0 đến 10."); return; }
     setSaving(true);
     try {
-      await saveAdminSubmission(String(submission.id), { feedback: feedback.trim(), status, manual_score: manualScore });
+      await saveAdminSubmission(String(submission.id), { feedback: feedback.trim(), manual_score: manualScore });
       await client.invalidateQueries({ queryKey: adminKeys.all });
       toast.success("Đã lưu đánh giá bài nộp.");
     } catch (error) { toast.error(getErrorMessage(error)); } finally { setSaving(false); }
@@ -53,9 +61,17 @@ function SubmissionWorkspace({ submission }: { submission: Submission }) {
     try { await navigator.clipboard.writeText(submission.submitted_code); toast.success("Đã sao chép mã nguồn."); }
     catch { toast.error("Không thể sao chép. Hãy chọn mã nguồn và sao chép thủ công."); }
   }
+  async function regrade() {
+    setRegrading(true);
+    try {
+      await regradeAdminSubmission(String(submission.id));
+      await client.invalidateQueries({ queryKey: [...adminKeys.submissions, String(submission.id)] });
+      toast.success("Đã đưa bài nộp vào hàng đợi chấm lại.");
+    } catch (error) { toast.error(getErrorMessage(error)); } finally { setRegrading(false); }
+  }
   return <div className="space-y-6">
     <Link href="/admin/submissions" className="inline-flex items-center gap-2 text-sm text-indigo-700 dark:text-indigo-300"><ArrowLeft className="size-4" />Quay lại danh sách bài nộp</Link>
-    <AdminHeading title={`Đánh giá bài nộp #${submission.id}`} description={`${submission.course_code} · ${submission.session_label} · ${submission.problem_title}`} />
+    <div className="flex flex-wrap items-start justify-between gap-3"><AdminHeading title={`Đánh giá bài nộp #${submission.id}`} description={`${submission.course_code} · ${submission.session_label} · ${submission.problem_title}`} />{submission.status === "internal_error" && <Button variant="outline" onClick={() => void regrade()} disabled={regrading}>{regrading ? <RefreshCw className="size-4 animate-spin" /> : <RefreshCw className="size-4" />} Chấm lại</Button>}</div>
     <div className="grid gap-4 sm:grid-cols-3">
       <AdminMetric label="Trạng thái" value={STATUSES[submission.status] ?? submission.status} icon={FileCheck2} />
       <AdminMetric label="Testcase đạt" value={`${submission.passed_count}/${submission.total_testcases}`} icon={CheckCircle2} />
@@ -89,7 +105,7 @@ function SubmissionWorkspace({ submission }: { submission: Submission }) {
       </div>
       <form onSubmit={(event) => void save(event)} className="h-fit space-y-5 rounded-2xl border bg-card p-5 shadow-sm">
         <h2 className="font-bold">Đánh giá & nhận xét</h2>
-        <label className="block space-y-2 text-sm font-medium">Trạng thái<select value={status} onChange={(event) => setStatus(event.target.value)} className={`${ADMIN_SELECT} w-full`} disabled={saving}>{Object.entries(STATUSES).map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></label>
+        <label className="block space-y-2 text-sm font-medium">Trạng thái<select value={status} disabled className={`${ADMIN_SELECT} w-full bg-muted opacity-80`}><option value={status}>{STATUSES[status] ?? status}</option></select></label>
         <label className="block space-y-2 text-sm font-medium">Điểm chốt (0–10)<Input type="number" min={0} max={10} step="0.1" value={score} onChange={(event) => setScore(event.target.value)} placeholder={automatic} disabled={saving} /></label>
         <p className="text-xs text-muted-foreground">Để trống điểm chốt để sử dụng kết quả chấm tự động.</p>
         <label className="block space-y-2 text-sm font-medium">Nhận xét<Textarea rows={7} maxLength={10000} value={feedback} onChange={(event) => setFeedback(event.target.value)} disabled={saving} placeholder="Nhập nhận xét về bài làm..." /></label>

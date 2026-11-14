@@ -68,6 +68,15 @@ export async function getSubmissionDetail(id: string | number): Promise<Submissi
   }
 }
 
+export async function regradeSubmission(id: string | number): Promise<{ submission_id: number; status: string }> {
+  try {
+    const response = await axiosInstance.post<{ submission_id: number; status: string }>(`/submissions/${id}/regrade`);
+    return response.data;
+  } catch (error) {
+    throw wrapAxiosError(error);
+  }
+}
+
 export async function updateSubmission(id: string | number, data: { feedback?: string | null; status?: string; manual_score?: number }): Promise<SubmissionDetail> {
   try {
     const response = await axiosInstance.patch<SubmissionDetail>(`/submissions/${id}`, data);
@@ -97,4 +106,3 @@ export async function getStudentOverview(studentId: string): Promise<StudentOver
     throw wrapAxiosError(error);
   }
 }
-

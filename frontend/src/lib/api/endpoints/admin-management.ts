@@ -84,5 +84,7 @@ export const runAdminJudge = (data: { source_code: string; language_id: number; 
   request<JudgeResult>({ method: "POST", url: "/judge0/run", data, timeout: 60000 });
 
 export const getAdminSubmission = (id: string) => request<AdminSubmissionDetail>({ url: `/submissions/${segment(id)}` });
-export const saveAdminSubmission = (id: string, data: { feedback: string; status: string; manual_score: number | null }) =>
+export const regradeAdminSubmission = (id: string) =>
+  request<{ submission_id: number; status: string }>({ method: "POST", url: `/submissions/${segment(id)}/regrade` });
+export const saveAdminSubmission = (id: string, data: { feedback: string; manual_score: number | null }) =>
   request<AdminSubmissionDetail>({ method: "PATCH", url: `/submissions/${segment(id)}`, data });

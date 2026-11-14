@@ -30,6 +30,8 @@ import type { UserResponse } from "@/lib/api/types";
 
 interface LoginFormProps {
   onSuccess?: (user: UserResponse) => void;
+  onLoginStart?: () => void;
+  onLoginError?: () => void;
 }
 
 const FormField = Controller;
@@ -85,7 +87,7 @@ function FormMessage({ name }: { name: string }) {
   ) : null;
 }
 
-export function LoginForm({ onSuccess }: LoginFormProps) {
+export function LoginForm({ onSuccess, onLoginStart, onLoginError }: LoginFormProps) {
   const { login } = useAuth();
   const { t, locale } = useLocale();
   const [connectionError, setConnectionError] = React.useState<string | null>(null);
@@ -106,6 +108,7 @@ export function LoginForm({ onSuccess }: LoginFormProps) {
 
   async function onSubmit(values: LoginFormValues) {
     setConnectionError(null);
+    onLoginStart?.();
     try {
       const user = await login({
         email: values.email,
@@ -119,6 +122,7 @@ export function LoginForm({ onSuccess }: LoginFormProps) {
     } catch (error) {
       if (error instanceof ApiError) {
         if (error.isNetworkError) {
+          onLoginError?.();
           setConnectionError(t("error.network"));
           toast.error(t("error.network"));
           return;
@@ -129,10 +133,12 @@ export function LoginForm({ onSuccess }: LoginFormProps) {
           message,
         });
         form.resetField("password", { keepError: true });
+        onLoginError?.();
         toast.error(message);
         return;
       }
 
+      onLoginError?.();
       setConnectionError(t("error.generic"));
       toast.error(t("error.generic"));
     }

@@ -36,6 +36,7 @@ type AuthState =
   | { status: "authenticated"; user: UserResponse };
 
 type AuthContextValue = AuthState & {
+  loginInProgress: boolean;
   login: (data: LoginRequest) => Promise<UserResponse>;
   changePassword: (data: ChangePasswordRequest) => Promise<UserResponse>;
   logout: () => Promise<void>;
@@ -111,6 +112,7 @@ function buildUserFromAccessToken(accessToken: string): UserResponse | null {
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [state, setState] = useState<AuthState>({ status: "loading" });
+  const [loginInProgress, setLoginInProgress] = useState(false);
   const queryClient = useQueryClient();
 
   const handleSessionExpired = useCallback(() => {
@@ -152,11 +154,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const login = useCallback(async (data: LoginRequest) => {
     // Không cho phép dữ liệu của tài khoản trước tồn tại trong màn hình mới.
     queryClient.clear();
-    const result: LoginResponse = await loginRequest(data);
-    setAccessToken(result.access_token);
-    cacheProfile(result.user);
-    setState({ status: "authenticated", user: result.user });
-    return result.user;
+    setLoginInProgress(true);
+    try {
+      const result: LoginResponse = await loginRequest(data);
+      setAccessToken(result.access_token);
+      cacheProfile(result.user);
+      setState({ status: "authenticated", user: result.user });
+      return result.user;
+    } catch (error) {
+      setLoginInProgress(false);
+      throw error;
+    }
   }, [queryClient]);
 
   const changePassword = useCallback(async (data: ChangePasswordRequest) => {
@@ -177,13 +185,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       queryClient.clear();
       setAccessToken(null);
       clearCachedProfile();
+      setLoginInProgress(false);
       setState({ status: "unauthenticated" });
     }
   }, [queryClient]);
 
   const value = useMemo<AuthContextValue>(
-    () => ({ ...state, login, changePassword, logout, retryConnection: bootstrap }),
-    [state, login, changePassword, logout, bootstrap],
+    () => ({ ...state, loginInProgress, login, changePassword, logout, retryConnection: bootstrap }),
+    [state, loginInProgress, login, changePassword, logout, bootstrap],
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

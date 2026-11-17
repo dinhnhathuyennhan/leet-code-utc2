@@ -252,6 +252,8 @@ export default function StudentAssignmentDetailPage() {
             fallbackCode={problem.starter_code}
             language={language}
             onLanguageChange={setLanguage}
+            supportedLanguages={problem.supported_languages}
+            functionName={problem.function_name}
             disabled={isGrading}
           />
 

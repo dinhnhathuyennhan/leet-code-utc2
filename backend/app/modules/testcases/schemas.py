@@ -2,9 +2,6 @@ from typing import Any
 
 from pydantic import BaseModel, field_validator
 
-from app.modules.problems.schemas import validate_json_value
-
-
 
 class TestcaseResponse(BaseModel):
     id: int
@@ -23,21 +20,9 @@ class TestcaseListResponse(BaseModel):
 
 class TestcaseUpdateRequest(BaseModel):
 
-    input: list[Any] | None = None
+    input: Any = None
     expected_output: Any = None
     is_sample: bool | None = None
-
-    @field_validator("input", mode="before")
-    @classmethod
-    def validate_input_json(cls, value: Any) -> Any:
-        if value is None:
-            raise ValueError("input không được là null")
-        return validate_json_value(value)
-
-    @field_validator("expected_output")
-    @classmethod
-    def validate_output_json(cls, value: Any) -> Any:
-        return validate_json_value(value)
 
 
 class TestcaseBatchRequest(BaseModel):

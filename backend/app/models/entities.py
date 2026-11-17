@@ -96,7 +96,7 @@ class Problem(SQLModel, table=True):
     # NULL = bài nằm trong ngân hàng đề, chưa gắn buổi học nào
     lesson_id: int | None = Field(default=None, foreign_key="lesson.lesson_id")
     title: str = Field(max_length=255)
-    # Method runner sẽ gọi; NULL chỉ dành cho Problem cũ chưa chuyển từ stdin/stdout.
+    # Method runner sẽ gọi; NULL biểu thị Problem chấm theo stdin/stdout.
     function_name: str | None = Field(default=None, max_length=100)
     description: str
     time_limit_seconds: int

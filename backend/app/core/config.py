@@ -31,6 +31,11 @@ _DEFAULT_LANGUAGES: dict[str, dict] = {
     "java": {
         "judge0_id": 62,
         "cpu_time_factor": 2,
+        # JVM cần reserve code cache + metaspace (~245 MB) trước khi chạy.
+        # Nếu để mặc định của Judge0 (128 MB) thì Java luôn NZEC
+        # ("Could not reserve enough space for code cache").
+        # Trần trong judge0.conf: MAX_MEMORY_LIMIT=6144000.
+        "memory_limit_kb": 6_144_000,
         "compiler_options": "-J-XX:CompressedClassSpaceSize=64m -J-XX:ReservedCodeCacheSize=64m -J-Xmx256m",
     },
 }

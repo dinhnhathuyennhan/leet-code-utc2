@@ -135,9 +135,11 @@ function toSummary(record: CourseApiRecord) {
 }
 
 // SỬA: Giữ số liệu AC do backend tính; chỉ dùng giá trị 0 cho dữ liệu API cũ.
+// `student_id` là UUID (khoá/gọi API), `student_code` là MSSV (hiển thị cho người dùng).
 function toStudent(record: { 
   enrollment_id: number; 
   student_id: string; 
+  student_code?: string | null; 
   full_name: string; 
   email: string; 
   class_id?: string | null; 
@@ -206,6 +208,7 @@ export async function getCourseEnrollments(courseId: string): Promise<CourseStud
     const response = await axiosInstance.get<Array<{ 
       enrollment_id: number; 
       student_id: string; 
+      student_code?: string | null; 
       full_name: string; 
       email: string; 
       class_id?: string | null; 
@@ -264,9 +267,22 @@ export async function getClassStudents(classId: string): Promise<StudentSearchRe
   }
 }
 
-export async function addStudentToCourse(courseId: string, studentId: string): Promise<void> {
+/**
+ * Thêm một sinh viên vào lớp học.
+ *
+ * Truyền `studentCode` (MSSV) khi biết MSSV — backend tra theo `student_code`.
+ * `studentId` là UUID `user_id`, dùng khi chỉ có khoá nội bộ (ví dụ import Excel).
+ */
+export async function addStudentToCourse(
+  courseId: string,
+  studentId: string | null,
+  studentCode: string | null = null,
+): Promise<void> {
   try {
-    await axiosInstance.post(`/courses/${courseId}/enrollments`, { student_id: studentId });
+    const payload = studentCode
+      ? { student_code: studentCode }
+      : { student_id: studentId ?? "" };
+    await axiosInstance.post(`/courses/${courseId}/enrollments`, payload);
   } catch (error) {
     throw wrapAxiosError(error);
   }

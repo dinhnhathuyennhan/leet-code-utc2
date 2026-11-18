@@ -192,6 +192,10 @@ export const student = {
   "editor.reset": { vi: "Khôi phục mẫu", en: "Reset template" },
   "editor.sourceLabel": { vi: "Mã nguồn bài nộp", en: "Submission source code" },
   "editor.fileName": { vi: "Main", en: "Main" },
+  "editor.languageSwitched": {
+    vi: "Đã đổi sang {language}: mã nguồn cũ đã được thay bằng mẫu của ngôn ngữ mới. Hãy viết lại lời giải cho đúng ngôn ngữ này.",
+    en: "Switched to {language}: your previous source was replaced with the new language template. Rewrite your solution for this language.",
+  },
 
   // ── Kết quả chấm ────────────────────────────────────────────────────
   "result.heading": { vi: "Kết quả chấm", en: "Grading result" },

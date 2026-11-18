@@ -55,7 +55,8 @@ export function CourseStudentsTable({
   const [open, setOpen] = useState(false);
   const [mode, setMode] = useState<"class" | "individual">("class");
   const [query, setQuery] = useState("");
-  const [studentId, setStudentId] = useState("");
+  /** MSSV (mã sinh viên 10 chữ số) — KHÔNG phải UUID `user_id`. */
+  const [studentCode, setStudentCode] = useState("");
   const [classId, setClassId] = useState("");
   const classes = useClasses(open && mode === "class");
   const classStudents = useClassStudents(classId, open && mode === "class");
@@ -67,7 +68,7 @@ export function CourseStudentsTable({
     (s) => !enrolled.has(s.user_id),
   );
   const rows = students.filter((s) =>
-    `${s.student_id} ${s.full_name} ${s.email}`
+    `${s.student_code ?? ""} ${s.full_name} ${s.email}`
       .toLowerCase()
       .includes(query.toLowerCase()),
   );
@@ -116,7 +117,7 @@ export function CourseStudentsTable({
         const result = await addClassToCourse(courseId, classId);
         toast.success(`Đã thêm ${result.added_count} sinh viên.`);
       } else {
-        await addStudentToCourse(courseId, studentId.trim());
+        await addStudentToCourse(courseId, null, studentCode.trim());
         toast.success("Đã thêm sinh viên.");
       }
       await refresh();
@@ -180,15 +181,15 @@ export function CourseStudentsTable({
           <Button
             variant="outline"
             onClick={() =>
-              downloadCsv(`sinh-vien-${courseId}.csv`, [
-                ["MSSV", "Họ tên", "Email", "Tiến độ (%)"],
-                ...students.map((s) => [
-                  s.student_id,
-                  s.full_name,
-                  s.email,
-                  s.progress_percent,
-                ]),
-              ])
+            downloadCsv(`sinh-vien-${courseId}.csv`, [
+              ["MSSV", "Họ tên", "Email", "Tiến độ (%)"],
+              ...students.map((s) => [
+                s.student_code ?? "",
+                s.full_name,
+                s.email,
+                s.progress_percent,
+              ]),
+            ])
             }
           >
             <Download className="size-4" /> Xuất danh sách
@@ -257,7 +258,7 @@ export function CourseStudentsTable({
                             >
                               <strong>{s.full_name}</strong>
                               <span className="ml-2 text-muted-foreground">
-                                {s.user_id} · {s.email}
+                                {s.student_code ?? s.user_id} · {s.email}
                               </span>
                             </div>
                           ))}
@@ -272,15 +273,18 @@ export function CourseStudentsTable({
                   </>
                 ) : (
                   <Input
-                    value={studentId}
-                    onChange={(e) => setStudentId(e.target.value)}
-                    placeholder="MSSV"
+                    value={studentCode}
+                    onChange={(e) => setStudentCode(e.target.value.replace(/\D/g, ""))}
+                    inputMode="numeric"
+                    maxLength={10}
+                    placeholder="MSSV (10 chữ số)"
+                    aria-label="MSSV sinh viên"
                   />
                 )}
               </div>
               <div className="flex justify-end">
                 <Button
-                  disabled={adding || (mode === "class" ? !classId || classStudents.isPending || !candidates.length : !studentId.trim())}
+                  disabled={adding || (mode === "class" ? !classId || classStudents.isPending || !candidates.length : !/^\d{10}$/.test(studentCode.trim()))}
                   onClick={() => void add()}
                   className="bg-[#34227a] text-white"
                 >
@@ -307,7 +311,7 @@ export function CourseStudentsTable({
               <tr key={student.student_id} className="border-t">
                 <td className="px-4 py-3">{index + 1}</td>
                 <td className="px-4 py-3 font-semibold">
-                  {student.student_id}
+                  {student.student_code ?? "—"}
                 </td>
                 <td className="px-4 py-3">
                   <div className="font-semibold">{student.full_name}</div>
@@ -342,7 +346,7 @@ export function CourseStudentsTable({
       </div>
       <AlertDialog open={Boolean(pendingDelete)} onOpenChange={(next) => { if (!next && !deleting) setPendingDelete(null); }}>
         <AlertDialogContent>
-          <AlertDialogHeader><AlertDialogTitle>Xác nhận xóa sinh viên</AlertDialogTitle><AlertDialogDescription>Bạn có chắc muốn xóa sinh viên <strong>{pendingDelete?.full_name}</strong> ({pendingDelete?.student_id}) khỏi lớp này không? Thao tác này không thể hoàn tác.</AlertDialogDescription></AlertDialogHeader>
+          <AlertDialogHeader><AlertDialogTitle>Xác nhận xóa sinh viên</AlertDialogTitle><AlertDialogDescription>Bạn có chắc muốn xóa sinh viên <strong>{pendingDelete?.full_name}</strong> ({pendingDelete?.student_code ?? pendingDelete?.email}) khỏi lớp này không? Thao tác này không thể hoàn tác.</AlertDialogDescription></AlertDialogHeader>
           <AlertDialogFooter><AlertDialogCancel disabled={deleting}>Hủy</AlertDialogCancel><AlertDialogAction disabled={deleting} onClick={(event) => { event.preventDefault(); void confirmRemove(); }}>{deleting && <Loader2 className="size-4 animate-spin" />} {deleting ? "Đang xóa..." : "Xác nhận xóa"}</AlertDialogAction></AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>

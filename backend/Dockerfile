@@ -21,6 +21,8 @@ RUN pip install -r requirements.txt
 
 COPY . .
 
+RUN sed -i 's/\r$//' /app/entrypoint.sh
+
 RUN useradd --create-home --uid 1000 appuser && \
     chown -R appuser:appuser /app && \
     chmod +x /app/entrypoint.sh

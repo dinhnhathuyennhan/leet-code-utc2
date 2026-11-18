@@ -5,6 +5,8 @@ on:
     branches: [main, develop]
   pull_request:
     branches: [main, develop]
+  # CD (cd.yaml) gọi lại workflow này trước khi build image cho nhánh release/*
+  workflow_call:
 
 jobs:
   backend:

@@ -9,7 +9,11 @@
 # Nhờ `command=`, dù client gửi lệnh gì thì sshd cũng chỉ chạy script này, lệnh gốc
 # nằm trong SSH_ORIGINAL_COMMAND. Script chỉ chấp nhận đúng dạng:
 #   deploy <version> <commit-sha-40-ký-tự>
-# => lộ private key thì kẻ xấu cũng chỉ deploy được một commit của repo, không có shell.
+# và chỉ khi <commit-sha> đúng là đầu nhánh `release/<version>` hoặc commit của tag
+# `v<version>` trên repo gốc (hỏi thẳng GitHub bằng `git ls-remote`). Commit của nhánh
+# feature, của fork hay của PR (refs/pull/*) đều bị từ chối, dù có trên raw.githubusercontent.com.
+# => lộ key thì cũng chỉ deploy lại được bản đã có trên nhánh release/tag, không có shell.
+# (Người có quyền push `release/*` vẫn đưa được code lên; chặn bằng ruleset ở docs mục 10.2.)
 #
 # CD KHÔNG tự cập nhật file này (nó là chốt chặn). Sửa thì copy tay lên server.
 
@@ -30,7 +34,15 @@ read -r action version sha extra <<< "${SSH_ORIGINAL_COMMAND:-}"
 [[ "$sha" =~ ^[0-9a-f]{40}$ ]] \
   || deny "commit sha không hợp lệ: '$sha'"
 
-# Tải file deploy của ĐÚNG commit đang release -> cấu hình server luôn khớp git
+# SHA phải trùng commit mà release/<version> hoặc v<version> đang trỏ tới.
+# Tag annotated có 2 dòng: object của tag và `^{}` là commit thật; so với cả hai.
+refs="$(git ls-remote "https://github.com/$REPO.git" \
+          "refs/heads/release/$version" "refs/tags/v$version" "refs/tags/v$version^{}")" \
+  || deny "không hỏi được GitHub (git ls-remote lỗi)"
+awk -v s="$sha" '$1 == s { found = 1 } END { exit !found }' <<< "$refs" \
+  || deny "commit $sha không phải đầu nhánh release/$version hoặc tag v$version"
+
+# Tải file deploy của ĐÚNG commit đó -> cấu hình server luôn khớp git
 tmp="$(mktemp -d)"
 base="https://raw.githubusercontent.com/$REPO/$sha/deploy"
 for f in "${FILES[@]}"; do
@@ -45,5 +57,5 @@ done
 rm -rf "$tmp"
 chmod 755 deploy.sh
 
-echo "ssh-deploy: commit $sha -> version $version"
+echo "ssh-deploy: commit $sha (release/$version | v$version) -> deploy $version"
 exec bash "$APP_DIR/deploy.sh" "$version"

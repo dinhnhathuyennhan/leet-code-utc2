@@ -12,11 +12,15 @@ name: CD
 # Key deploy trên server bị khoá bằng forced command deploy/ssh-deploy.sh: chỉ chạy được
 # "deploy <version> <sha>", không có shell.
 #
-# Cấu hình cần có (xem docs/deploy-ec2-cd.md):
-#   Secret   : DOCKERHUB_TOKEN, EC2_SSH_KEY
-#   Variable : DOCKERHUB_USERNAME, NEXT_PUBLIC_API_URL, APP_URL,
-#              EC2_HOST, EC2_KNOWN_HOSTS, (tuỳ chọn) EC2_USER
-#   Environment "production" (bật Required reviewers)
+# Cấu hình cần có (xem docs/deploy-ec2-cd.md mục 10):
+#   Environment "release-build" (chỉ release/*, v*; không cần reviewer)
+#     secret   : DOCKERHUB_TOKEN
+#   Environment "production" (Required reviewers; chỉ release/*, v*)
+#     secret   : EC2_SSH_KEY
+#   Variable repo: DOCKERHUB_USERNAME, NEXT_PUBLIC_API_URL, APP_URL,
+#                  EC2_HOST, EC2_KNOWN_HOSTS, (tuỳ chọn) EC2_USER
+#   Secret đặt trong environment (KHÔNG ở cấp repo) để workflow của nhánh khác
+#   không đọc được: nhánh feature tự viết workflow cũng không lấy được key/token.
 #
 # Repo public => log Actions ai cũng xem được: không echo secret, deploy.sh không in .env.
 
@@ -47,6 +51,8 @@ jobs:
   version:
     name: Xác định version
     runs-on: ubuntu-latest
+    # Chứa DOCKERHUB_TOKEN, chỉ nhánh release/* và tag v* được dùng
+    environment: release-build
     outputs:
       version: ${{ steps.v.outputs.version }}
       short_sha: ${{ steps.v.outputs.short_sha }}
@@ -108,6 +114,7 @@ jobs:
     needs: [ci, version]
     if: github.event_name == 'push'
     runs-on: ubuntu-latest
+    environment: release-build
     strategy:
       fail-fast: true
       matrix:
@@ -205,10 +212,15 @@ jobs:
           if [ "$code" -eq 255 ]; then
             echo "::error::Không SSH được vào $HOST. Instance đã start chưa? Security Group mở port 22 chưa? EC2_KNOWN_HOSTS/EC2_SSH_KEY đúng chưa?"
             exit 1
-          elif [ "$code" -ne 0 ]; then
-            echo "::error::Deploy $VERSION thất bại (exit $code). Server đã tự quay về version trước nếu kịp, xem log phía trên."
-            exit 1
           fi
+          # Mã thoát do ssh-deploy.sh / deploy.sh quy ước
+          case "$code" in
+            0) ;;
+            2) echo "::error::Server từ chối lệnh deploy (ssh-deploy.sh). Commit này không phải đầu nhánh release/$VERSION hoặc tag v$VERSION?"; exit 1 ;;
+            3) echo "::error::Deploy $VERSION thất bại. Server ĐÃ quay về version trước và backend healthy, xem log phía trên."; exit 1 ;;
+            4) echo "::error::Deploy $VERSION thất bại VÀ rollback cũng thất bại: production có thể đang down. SSH vào server xử lý ngay, xem log phía trên."; exit 1 ;;
+            *) echo "::error::Deploy $VERSION thất bại trước khi đổi gì trên server (exit $code), xem log phía trên."; exit 1 ;;
+          esac
 
       - name: Xoá SSH key
         if: always()

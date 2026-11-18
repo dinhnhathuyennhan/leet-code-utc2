@@ -143,7 +143,9 @@ Sau đó làm **bước 6 của mục 5**: PR vào `main`, gắn tag `v1.1.1`, *
 
 ## 7. Rollback và deploy lại
 
-**Tự động:** nếu bản mới không healthy trong 240 giây, hoặc API public không trả lời, `deploy.sh` tự đưa về version trước. Job Deploy báo đỏ, log in kèm 60 dòng log backend.
+**Tự động:** nếu bản mới không healthy trong 240 giây, frontend không trả lời, hoặc API public không trả lời, `deploy.sh` tự đưa về version trước. Job Deploy báo đỏ, log in kèm 60 dòng log backend.
+- Nếu bản lỗi **đã chạy migration**, image cũ sẽ không khởi động được với schema mới. Vì vậy `deploy.sh` **khôi phục DB từ bản backup vừa tạo** trước khi chạy image cũ. DB lỗi được giữ lại với tên `ChamCodeDB_failed_<thời gian>` để điều tra; xoá tay khi không cần (`DROP DATABASE`). Dữ liệu ghi trong vài phút bản lỗi chạy chỉ còn trong DB đó.
+- Job báo **"ĐÃ quay về version trước"** nghĩa là backend cũ đã healthy trở lại. Job báo **"rollback cũng thất bại"** nghĩa là production có thể đang down: SSH vào server xử lý ngay.
 
 **Rollback bằng tay:** Actions → **CD** → **Run workflow**:
 - **Use workflow from**: chọn nhánh release của version muốn quay về, ví dụ `release/1.0.0`. Nhánh đó đã bị xoá thì chọn **tag** `v1.0.0`; khi đó environment `production` phải cho phép cả tag `v*` (xem mục 10.3).
@@ -152,7 +154,17 @@ Sau đó làm **bước 6 của mục 5**: PR vào `main`, gắn tag `v1.1.1`, *
 
 Khi chạy tay, pipeline **không build**. Nó chỉ kiểm tra image `1.0.0` còn trên Docker Hub rồi deploy.
 
-**Database không tự restore.** Nếu bản lỗi đã chạy migration làm hỏng schema, phải restore bằng tay. Log in sẵn lệnh restore kèm đường dẫn file backup. Backup nằm ở `/home/ubuntu/backups` trên EC2, giữ 10 bản gần nhất.
+Version chọn ở ô **version** phải khớp với nhánh/tag ở ô **Use workflow from** (ví dụ `1.0.0` với `release/1.0.0` hoặc `v1.0.0`). Server từ chối commit không phải đầu nhánh `release/<version>` hoặc tag `v<version>`.
+
+**Rollback bằng tay qua một migration thì phải restore DB trước.** Ví dụ đang chạy `1.1.0` (có migration mới), muốn về `1.0.0`: image `1.0.0` không chạy được với schema của `1.1.0`, nên lần deploy đó sẽ lỗi rồi tự quay lại `1.1.0`. Muốn về thật thì làm trên server:
+```bash
+cd /opt/chamcode
+ls -1t ~/backups/before-1.1.0-*.dump | head -1     # backup tạo ngay trước khi lên 1.1.0
+docker compose stop backend
+docker compose exec -T postgres pg_restore -U chamcode -d ChamCodeDB --clean --if-exists --no-owner < <file vừa tìm>
+bash deploy.sh 1.0.0
+```
+Dữ liệu ghi sau thời điểm backup đó sẽ mất. Backup nằm ở `/home/ubuntu/backups` trên EC2, giữ 10 bản gần nhất.
 
 **Khi GitHub hoặc AWS gặp sự cố**, chạy thẳng trên server, kết quả giống hệt pipeline:
 ```bash
@@ -176,19 +188,23 @@ cd /opt/chamcode && bash deploy.sh 1.0.0
 ## 9. Cấu hình một lần (người phụ trách deploy)
 
 ### 9.1 Docker Hub
-1. Account settings → Personal access tokens → tạo token `github-actions`, quyền **Read & Write**. Đưa token này cho chủ repo để nhập vào secret (mục 10.4).
+1. Account settings → Personal access tokens → tạo token `github-actions`, quyền **Read & Write**. Đưa token này cho chủ repo để nhập vào secret của environment `release-build` (mục 10.3).
 2. Nếu repo image để private: trên EC2, đăng nhập một lần bằng user `ubuntu`: `docker login -u <user>`, dùng token Read-only.
 
 ### 9.2 Key SSH cho GitHub Actions
 
-GitHub Actions SSH vào chamcode-app bằng một **key riêng, chỉ dùng cho deploy**. Trên server, key này bị khoá bằng *forced command*: dù gửi lệnh gì, server cũng chỉ chạy `ssh-deploy.sh`, và script đó chỉ nhận `deploy <version> <sha>`. Lộ key thì kẻ xấu cũng không có shell.
+GitHub Actions SSH vào chamcode-app bằng một **key riêng, chỉ dùng cho deploy**. Trên server, key này bị khoá bằng *forced command*: dù gửi lệnh gì, server cũng chỉ chạy `ssh-deploy.sh`. Script đó:
+- chỉ nhận lệnh `deploy <version> <sha>`;
+- hỏi GitHub (`git ls-remote`) và chỉ chấp nhận `<sha>` là **đầu nhánh `release/<version>` hoặc commit của tag `v<version>`**. Commit của nhánh feature, fork hay PR đều bị từ chối.
+
+Lộ key thì kẻ xấu cũng không có shell và chỉ deploy lại được bản đã nằm trên nhánh release hoặc tag. Ai có quyền push `release/*` vẫn đưa được code lên production, nên vẫn cần ruleset ở mục 10.2 và giữ key trong environment `production` (mục 10.3).
 
 **a. Tạo key (máy local, ngoài thư mục repo):**
 ```bash
 ssh-keygen -t ed25519 -C github-cd-chamcode -f github-cd-chamcode
 ```
 Nhấn Enter 2 lần để **không đặt passphrase** (GitHub Actions không nhập passphrase được). Kết quả là 2 file:
-- `github-cd-chamcode`: private key. Dán **toàn bộ nội dung** (kể cả dòng `BEGIN`/`END`) vào secret `EC2_SSH_KEY` (mục 10.4), sau đó **xoá file này** khỏi máy.
+- `github-cd-chamcode`: private key. Dán **toàn bộ nội dung** (kể cả dòng `BEGIN`/`END`) vào secret `EC2_SSH_KEY` của **environment `production`** (mục 10.3), sau đó **xoá file này** khỏi máy. Repo cá nhân thì chỉ chủ repo tạo được environment secret: gửi key cho chủ repo qua kênh riêng.
 - `github-cd-chamcode.pub`: public key, dùng ở bước b.
 
 **b. Cài trên server** (SSH vào bằng key cá nhân như bình thường, user `ubuntu`):
@@ -207,6 +223,12 @@ Thử từ máy local, trước khi xoá private key:
 ssh -i github-cd-chamcode ubuntu@<ELASTIC_IP> "ls"
 ```
 Kết quả đúng là bị từ chối với dòng `ssh-deploy: chỉ cho phép lệnh: deploy <version> <commit-sha>`. Như vậy key vào được nhưng không có shell.
+
+Thử tiếp với một commit **không** nằm trên nhánh release (ví dụ đầu nhánh `develop`, lấy bằng `git rev-parse origin/develop`):
+```bash
+ssh -i github-cd-chamcode ubuntu@<ELASTIC_IP> "deploy 0.9.0 <sha-của-develop>"
+```
+Kết quả đúng: `ssh-deploy: commit ... không phải đầu nhánh release/0.9.0 hoặc tag v0.9.0`. Không có gì trên server bị thay đổi.
 
 **c. Host key của server** (để GitHub biết đúng server, chống giả mạo). Trên server:
 ```bash
@@ -277,20 +299,31 @@ Dù chọn hướng nào, **danh sách Required reviewers ở mục 10.3** vẫn
 - ☑ Restrict updates, ☑ Restrict deletions, ☑ Block force pushes: tag đã gắn cho một version thì không bị dời hoặc xoá.
 - ☑ Restrict creations: chỉ bật theo hướng B, bypass role **Maintain**. Lý do giống ruleset 3.
 
-### 10.3 Environment `production` (Settings → Environments → New environment)
+### 10.3 Environments (Settings → Environments → New environment)
+
+**Vì sao secret phải nằm trong environment, không ở cấp repo:** secret cấp repo thì workflow của **mọi nhánh** đều đọc được. Một thành viên chỉ cần push nhánh `feature/x` kèm một workflow tự viết là lấy được key SSH hoặc token Docker Hub, rồi deploy hoặc ghi đè image mà không qua ai duyệt. Secret trong environment chỉ được cấp cho job khai báo đúng environment đó, và chỉ khi chạy từ nhánh/tag được cho phép.
+
+**Environment 1: `release-build`** (job *Xác định version* và *Build & push* dùng)
+- Không cần reviewer.
+- **Deployment branches and tags** → *Selected branches and tags*: branch `release/*`, tag `v*`.
+- **Environment secret** `DOCKERHUB_TOKEN`: token Read & Write ở mục 9.1.
+
+**Environment 2: `production`** (job *Deploy* dùng)
 - ☑ **Required reviewers**: thêm 1–2 người, ví dụ chủ repo và người phụ trách deploy.
 - ☑ **Prevent self-review**: người kích hoạt release không tự duyệt được cho mình. Chỉ bật khi danh sách có từ 2 người trở lên.
 - **Deployment branches and tags** → *Selected branches and tags*:
   - Branch pattern `release/*`
   - Tag pattern `v*` (để rollback được khi nhánh release đã bị xoá)
-- Environment **không cần biến riêng**: mọi secret/variable đặt ở cấp repo (mục 10.4).
+- **Environment secret** `EC2_SSH_KEY`: private key deploy ở mục 9.2a (toàn bộ nội dung file).
 
-### 10.4 Secrets và variables của repo (Settings → Secrets and variables → Actions)
+Nếu `DOCKERHUB_TOKEN` hoặc `EC2_SSH_KEY` đã lỡ tạo ở cấp repo thì **xoá bản cấp repo** sau khi tạo bản trong environment.
+
+### 10.4 Variables của repo (Settings → Secrets and variables → Actions → tab Variables)
+
+Các giá trị này không bí mật nên để ở cấp repo.
 
 | Loại | Tên | Giá trị |
 |---|---|---|
-| Secret | `DOCKERHUB_TOKEN` | Token Read & Write ở mục 9.1 |
-| Secret | `EC2_SSH_KEY` | Private key deploy ở mục 9.2a (toàn bộ nội dung file) |
 | Variable | `DOCKERHUB_USERNAME` | Username Docker Hub |
 | Variable | `NEXT_PUBLIC_API_URL` | `https://<API_DOMAIN>`: có `https://`, không có `/` ở cuối |
 | Variable | `APP_URL` | `https://<APP_DOMAIN>` |
@@ -318,5 +351,9 @@ Dù chọn hướng nào, **danh sách Required reviewers ở mục 10.3** vẫn
 | `Host key verification failed` | `EC2_KNOWN_HOSTS` sai, hoặc Elastic IP đã đổi (mục 9.2c, 9.2e) |
 | `Permission denied (publickey)` | `EC2_SSH_KEY` dán thiếu dòng, hoặc dòng trong `authorized_keys` sai (mục 9.2a–b) |
 | `ssh-deploy: không tải được ... của commit` | Commit chưa có trên GitHub, hoặc repo đã chuyển sang private |
-| `Deploy ... thất bại (exit 1)` | Đọc log `deploy.sh` ngay phía trên: pull lỗi (sai tag) hoặc backend không healthy. Server đã tự quay về version cũ |
+| `Server từ chối lệnh deploy` / `không phải đầu nhánh release/...` | Chạy tay với version không khớp nhánh/tag đã chọn; hoặc nhánh release vừa có commit mới đè lên commit đang deploy |
+| `ssh-deploy: không hỏi được GitHub` | Server không ra được internet, hoặc thiếu `git` (`sudo apt-get install -y git`) |
+| `Deploy ... thất bại. Server ĐÃ quay về version trước` | Đọc log `deploy.sh` ngay phía trên: pull lỗi (sai tag), backend không healthy, frontend hoặc API public không trả lời. Nếu bản lỗi đã migrate thì DB đã được khôi phục từ backup |
+| `rollback cũng thất bại` | Production có thể đang down. SSH vào server: `cd /opt/chamcode && docker compose ps && docker compose logs --tail 100 backend`, xem mục 7 |
+| Job `Xác định version` báo thiếu `DOCKERHUB_TOKEN` / login lỗi | Chưa tạo environment `release-build` hoặc secret chưa nằm trong đó (mục 10.3) |
 | PR không merge được dù code đúng | CI chưa xanh, thiếu approval, hoặc còn comment chưa resolve |

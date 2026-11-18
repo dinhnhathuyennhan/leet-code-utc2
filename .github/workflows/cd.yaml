@@ -1,0 +1,238 @@
+name: CD
+
+# Continuous Delivery cho EC2 chamcode-app.
+#
+# - Push nhánh `release/<version>` (vd release/1.0.0):
+#     CI (gọi lại ci.yaml) -> build + push image backend/frontend lên Docker Hub
+#     -> CHỜ NGƯỜI DUYỆT (environment "production") -> SSH vào EC2 chạy deploy.sh.
+# - Chạy tay (Actions > CD > Run workflow) với một version ĐÃ CÓ trên Docker Hub:
+#     bỏ qua build, chỉ deploy (dùng để rollback hoặc deploy lại), vẫn phải duyệt.
+#
+# Deploy qua SSH (không dùng AWS OIDC/SSM vì tài khoản AWS không bật được tính năng đó).
+# Key deploy trên server bị khoá bằng forced command deploy/ssh-deploy.sh: chỉ chạy được
+# "deploy <version> <sha>", không có shell.
+#
+# Cấu hình cần có (xem docs/deploy-ec2-cd.md):
+#   Secret   : DOCKERHUB_TOKEN, EC2_SSH_KEY
+#   Variable : DOCKERHUB_USERNAME, NEXT_PUBLIC_API_URL, APP_URL,
+#              EC2_HOST, EC2_KNOWN_HOSTS, (tuỳ chọn) EC2_USER
+#   Environment "production" (bật Required reviewers)
+#
+# Repo public => log Actions ai cũng xem được: không echo secret, deploy.sh không in .env.
+
+on:
+  push:
+    branches: ["release/**"]
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Version đã có trên Docker Hub để deploy lại / rollback (vd 1.0.0)"
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: cd-production
+  cancel-in-progress: false
+
+jobs:
+  ci:
+    name: CI
+    if: github.event_name == 'push'
+    uses: ./.github/workflows/ci.yaml
+    secrets: inherit
+
+  version:
+    name: Xác định version
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.v.outputs.version }}
+      short_sha: ${{ steps.v.outputs.short_sha }}
+    steps:
+      - name: Lấy version từ tên nhánh / input
+        id: v
+        env:
+          EVENT: ${{ github.event_name }}
+          REF_NAME: ${{ github.ref_name }}
+          INPUT_VERSION: ${{ inputs.version }}
+        run: |
+          if [ "$EVENT" = "workflow_dispatch" ]; then v="$INPUT_VERSION"; else v="${REF_NAME#release/}"; fi
+          v="${v#v}"
+          if ! printf '%s' "$v" | grep -Eq '^[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?$'; then
+            echo "::error::Version '$v' không đúng semver. Nhánh phải là release/1.2.3 (hoặc release/1.2.3-rc.1)"
+            exit 1
+          fi
+          echo "version=$v" >> "$GITHUB_OUTPUT"
+          echo "short_sha=${GITHUB_SHA::7}" >> "$GITHUB_OUTPUT"
+          echo "Version: $v"
+
+      - name: Kiểm tra cấu hình
+        env:
+          DOCKERHUB_USERNAME: ${{ vars.DOCKERHUB_USERNAME }}
+          NEXT_PUBLIC_API_URL: ${{ vars.NEXT_PUBLIC_API_URL }}
+        run: |
+          [ -n "$DOCKERHUB_USERNAME" ] || { echo "::error::Thiếu variable DOCKERHUB_USERNAME"; exit 1; }
+          # Bài học từ lần build tay: thiếu https:// thì axios coi là đường dẫn tương đối
+          if ! printf '%s' "$NEXT_PUBLIC_API_URL" | grep -Eq '^https://[A-Za-z0-9.-]+$'; then
+            echo "::error::NEXT_PUBLIC_API_URL phải dạng https://api.domain (có https://, không có / ở cuối)"
+            exit 1
+          fi
+
+      - name: Đăng nhập Docker Hub
+        uses: docker/login-action@v3
+        with:
+          username: ${{ vars.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      - name: Kiểm tra tag trên Docker Hub
+        env:
+          EVENT: ${{ github.event_name }}
+          VERSION: ${{ steps.v.outputs.version }}
+          USER: ${{ vars.DOCKERHUB_USERNAME }}
+        run: |
+          exists() { docker buildx imagetools inspect "$USER/chamcode-$1:$VERSION" > /dev/null 2>&1; }
+          if [ "$EVENT" = "workflow_dispatch" ]; then
+            for s in backend frontend; do
+              exists "$s" || { echo "::error::Không có $USER/chamcode-$s:$VERSION trên Docker Hub"; exit 1; }
+            done
+          elif exists backend && exists frontend; then
+            # Version đã phát hành thì bất biến: sửa lỗi => tạo nhánh release/<version mới>
+            echo "::error::Version $VERSION đã được phát hành. Tạo nhánh release mới (vd tăng patch) thay vì ghi đè."
+            exit 1
+          fi
+
+  build:
+    name: Build & push ${{ matrix.service }}
+    needs: [ci, version]
+    if: github.event_name == 'push'
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: true
+      matrix:
+        include:
+          - service: backend
+            context: ./backend
+          - service: frontend
+            context: ./frontend
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: docker/setup-buildx-action@v3
+
+      - name: Đăng nhập Docker Hub
+        uses: docker/login-action@v3
+        with:
+          username: ${{ vars.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      - name: Tạo tag + label
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ vars.DOCKERHUB_USERNAME }}/chamcode-${{ matrix.service }}
+          # Không đẩy `latest`: server luôn deploy theo version cụ thể
+          tags: |
+            type=raw,value=${{ needs.version.outputs.version }}
+            type=raw,value=sha-${{ needs.version.outputs.short_sha }}
+          labels: |
+            org.opencontainers.image.title=chamcode-${{ matrix.service }}
+            org.opencontainers.image.version=${{ needs.version.outputs.version }}
+
+      - name: Build & push
+        uses: docker/build-push-action@v6
+        with:
+          context: ${{ matrix.context }}
+          platforms: linux/amd64
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          # NEXT_PUBLIC_* được gắn cứng vào bundle lúc build (chỉ frontend dùng)
+          build-args: |
+            NEXT_PUBLIC_API_URL=${{ vars.NEXT_PUBLIC_API_URL }}
+          cache-from: type=gha,scope=${{ matrix.service }}
+          cache-to: type=gha,mode=max,scope=${{ matrix.service }}
+
+  deploy:
+    name: Deploy ${{ needs.version.outputs.version }} lên EC2
+    needs: [version, build]
+    # Push release: chỉ khi build xong. Chạy tay: build bị skip, deploy version có sẵn.
+    if: >-
+      always() &&
+      needs.version.result == 'success' &&
+      (needs.build.result == 'success' ||
+       (github.event_name == 'workflow_dispatch' && needs.build.result == 'skipped'))
+    runs-on: ubuntu-latest
+    environment:
+      name: production
+      url: ${{ vars.APP_URL }}
+    permissions:
+      contents: read
+    timeout-minutes: 20
+    steps:
+      - name: Chuẩn bị SSH key
+        env:
+          SSH_KEY: ${{ secrets.EC2_SSH_KEY }}
+          KNOWN_HOSTS: ${{ vars.EC2_KNOWN_HOSTS }}
+          HOST: ${{ vars.EC2_HOST }}
+        run: |
+          [ -n "$SSH_KEY" ] || { echo "::error::Thiếu secret EC2_SSH_KEY"; exit 1; }
+          [ -n "$HOST" ] || { echo "::error::Thiếu variable EC2_HOST (Elastic IP của chamcode-app)"; exit 1; }
+          # Không dùng StrictHostKeyChecking=no: phải biết trước host key để chống giả mạo server
+          [ -n "$KNOWN_HOSTS" ] || { echo "::error::Thiếu variable EC2_KNOWN_HOSTS (host key của server)"; exit 1; }
+          install -m 700 -d ~/.ssh
+          printf '%s\n' "$SSH_KEY" > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+          printf '%s\n' "$KNOWN_HOSTS" > ~/.ssh/known_hosts
+
+      - name: Chạy deploy.sh trên EC2 qua SSH
+        env:
+          VERSION: ${{ needs.version.outputs.version }}
+          SHA: ${{ github.sha }}
+          HOST: ${{ vars.EC2_HOST }}
+          SSH_USER: ${{ vars.EC2_USER || 'ubuntu' }}
+        run: |
+          # Phía server, forced command ssh-deploy.sh nhận lệnh này, tải file deploy của
+          # đúng commit $SHA rồi chạy deploy.sh. Output deploy.sh hiện thẳng ở đây.
+          set +e
+          ssh -i ~/.ssh/deploy_key \
+            -o IdentitiesOnly=yes -o BatchMode=yes -o StrictHostKeyChecking=yes \
+            -o ConnectTimeout=20 -o ServerAliveInterval=30 -o ServerAliveCountMax=10 \
+            "$SSH_USER@$HOST" "deploy $VERSION $SHA"
+          code=$?
+          set -e
+          if [ "$code" -eq 255 ]; then
+            echo "::error::Không SSH được vào $HOST. Instance đã start chưa? Security Group mở port 22 chưa? EC2_KNOWN_HOSTS/EC2_SSH_KEY đúng chưa?"
+            exit 1
+          elif [ "$code" -ne 0 ]; then
+            echo "::error::Deploy $VERSION thất bại (exit $code). Server đã tự quay về version trước nếu kịp, xem log phía trên."
+            exit 1
+          fi
+
+      - name: Xoá SSH key
+        if: always()
+        run: rm -f ~/.ssh/deploy_key
+
+      - name: Smoke test từ internet
+        env:
+          APP_URL: ${{ vars.APP_URL }}
+          API_URL: ${{ vars.NEXT_PUBLIC_API_URL }}
+        run: |
+          curl -fsS --retry 5 --retry-delay 5 --retry-all-errors "$API_URL/" && echo
+          curl -fsS --retry 5 --retry-delay 5 --retry-all-errors -o /dev/null "$APP_URL" && echo "Frontend OK"
+
+      - name: Tóm tắt
+        env:
+          VERSION: ${{ needs.version.outputs.version }}
+          USER: ${{ vars.DOCKERHUB_USERNAME }}
+          APP_URL: ${{ vars.APP_URL }}
+        run: |
+          {
+            echo "### Đã deploy \`$VERSION\`"
+            echo "- Backend: \`$USER/chamcode-backend:$VERSION\`"
+            echo "- Frontend: \`$USER/chamcode-frontend:$VERSION\`"
+            echo "- Commit: \`$GITHUB_SHA\`"
+            echo "- URL: $APP_URL"
+            echo "- Rollback: Actions > CD > Run workflow > nhập version cũ"
+          } >> "$GITHUB_STEP_SUMMARY"

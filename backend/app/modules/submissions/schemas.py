@@ -34,6 +34,22 @@ class SubmissionTestcaseResponse(BaseModel):
     input: Any
     expected_output: Any
     is_sample: bool
+    # Kết quả chấm của test này; None với bài nộp cũ (chưa lưu kết quả từng test)
+    status: str | None = None
+    time: float | None = None
+
+
+class TestcaseResultResponse(BaseModel):
+    """Kết quả một testcase theo thứ tự chấm (1-based), KHÔNG kèm dữ liệu test.
+
+    Dùng để hiển thị đúng/sai của cả test ẩn mà không lộ input/expected_output.
+    Danh sách rỗng nghĩa là bài nộp được chấm trước khi hệ thống lưu kết quả từng test.
+    """
+
+    index: int
+    is_sample: bool
+    status: str
+    time: float | None = None
 
 
 class SubmissionDetailResponse(BaseModel):
@@ -61,6 +77,7 @@ class SubmissionDetailResponse(BaseModel):
     total_testcases: int
     submitted_datetime: datetime
     testcases: list[SubmissionTestcaseResponse]
+    testcase_results: list[TestcaseResultResponse] = []
 
 
 class SubmissionUpdateRequest(BaseModel):
@@ -97,10 +114,14 @@ class StudentSubmissionListResponse(BaseModel):
 
 
 class StudentSubmissionTestcaseResponse(BaseModel):
+    """Testcase MẪU (có dữ liệu) trong kết quả chấm của sinh viên."""
+
     id: int
     input: Any
     expected_output: Any
     is_sample: bool
+    status: str | None = None
+    time: float | None = None
 
 
 class StudentSubmissionDetailResponse(BaseModel):
@@ -123,3 +144,4 @@ class StudentSubmissionDetailResponse(BaseModel):
     total_testcases: int
     submitted_datetime: datetime
     testcases: list[StudentSubmissionTestcaseResponse]
+    testcase_results: list[TestcaseResultResponse] = []

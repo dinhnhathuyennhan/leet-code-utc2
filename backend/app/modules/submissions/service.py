@@ -3,6 +3,7 @@ from sqlmodel import Session, select
 from app.core.exceptions import InvalidFormatError, NotFoundError
 from app.core.dependencies import Role
 from app.modules.testcases.testcase_format import testcase_to_api_values
+from app.modules.submissions.testcase_results import build_testcase_results, result_by_testcase
 from app.modules.submissions.schemas import (
     PendingSubmissionListResponse,
     PendingSubmissionResponse,
@@ -180,6 +181,7 @@ def get_submission_detail(
         .where(Testcase.problem_id == problem.problem_id)
         .order_by(Testcase.testcase_id)
     ).all()
+    results = result_by_testcase(submission)
     return SubmissionDetailResponse(
         id=submission.submission_id,
         problem_id=problem.problem_id,
@@ -209,9 +211,12 @@ def get_submission_detail(
                 id=testcase.testcase_id,
                 **testcase_to_api_values(testcase),
                 is_sample=testcase.is_sample,
+                status=results.get(testcase.testcase_id, {}).get("status"),
+                time=results.get(testcase.testcase_id, {}).get("time"),
             )
             for testcase in testcases
         ],
+        testcase_results=build_testcase_results(submission, list(testcases)),
     )
 
 

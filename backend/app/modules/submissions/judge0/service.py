@@ -33,6 +33,7 @@ from app.modules.submissions.judge0.judge0_client import (
     Judge0Client,
     Judge0Error,
     Judge0Result,
+    compute_limits,
 )
 from app.modules.submissions.judge0.schemas import (
     AdminPreviewRequest,
@@ -124,6 +125,17 @@ def _judge_case(result: Judge0Result, testcase: Testcase, uses_harness: bool) ->
     return ("accepted" if matched else "wrong_answer"), (result.stdout or "").strip()
 
 
+def _case_time(result: Judge0Result | None, status: str, problem: Problem, language: str) -> float | None:
+    """Thời gian hiển thị của một test.
+
+    Test bị dừng vì quá thời gian (wall clock) thì Judge0 trả `time` gần 0 (chỉ tính
+    CPU), nên hiển thị giới hạn wall time để sinh viên hiểu vì sao bị dừng.
+    """
+    if status == "time_limit_exceeded":
+        return compute_limits(problem.time_limit_seconds, language)[1]
+    return result.time if result is not None else None
+
+
 def _overall_status(statuses: list[str]) -> str:
     return next((s for s in statuses if s != "accepted"), "accepted")
 
@@ -184,7 +196,7 @@ def run(
             expected_output=decode_testcase_value(tc.expected_output, tc.expected_output_type),
             actual_output=actual,
             stderr=result.stderr or result.message,
-            time=result.time,
+            time=_case_time(result, status, problem, data.language),
         )
         for index, (tc, (result, status, actual)) in enumerate(zip(samples, judged, strict=True))
     ]
@@ -223,7 +235,7 @@ def run_admin_preview(
             expected_output=decode_testcase_value(testcase.expected_output, testcase.expected_output_type),
             actual_output=actual,
             stderr=result.stderr or result.message,
-            time=result.time,
+            time=_case_time(result, status, problem, data.language),
         )
         for index, (testcase, (result, status, actual)) in enumerate(zip(testcases, judged, strict=True), start=1)
     ]
@@ -247,7 +259,7 @@ def _compile_output_of(judged: list[tuple[Judge0Result, str, Any]]) -> str | Non
     bước biên dịch nên lỗi cú pháp nằm ở `stderr` -> cần lấy cả hai.
     """
     for result, status, _ in judged:
-        if status != "compile_error":
+        if status != "compile_error" or result is None:
             continue
         return result.compile_output or result.stderr or result.message
     return None
@@ -304,6 +316,72 @@ def _save_tokens(submission_id: int, tokens: list[str]) -> None:
             session.commit()
 
 
+SKIPPED_STATUS = "skipped"
+_STOP_STATUSES = ("time_limit_exceeded",)
+
+
+def _chunk_timeout(problem: Problem, language: str, size: int) -> float:
+    """Thời gian chờ một lô: đủ cho mọi test TLE chạy tuần tự, không thấp hơn mức mặc định."""
+    _, wall = compute_limits(problem.time_limit_seconds, language)
+    return max(GRADING_TIMEOUT_SECONDS, size * wall + config.GRADING_CHUNK_EXTRA_SECONDS)
+
+
+def _grade_in_chunks(
+    problem: Problem,
+    data: CodeRequest,
+    testcases: list[Testcase],
+    tokens: list[str] | None,
+    on_tokens: Callable[[list[str]], None],
+) -> list[tuple[Judge0Result | None, str, Any]]:
+    """Chấm theo từng lô; lô có test TLE thì các test còn lại được đánh dấu `skipped`.
+
+    Judge0 CE không huỷ được test đã gửi, nên chỉ có thể dừng ở ranh giới lô. `tokens`
+    là token đã lưu của các lô trước (để chấm tiếp sau khi backend khởi động lại).
+    """
+    size = config.GRADING_CHUNK_SIZE if config.GRADING_CHUNK_SIZE > 0 else len(testcases)
+    saved = list(tokens or [])
+    judged: list[tuple[Judge0Result | None, str, Any]] = []
+    for start in range(0, len(testcases), size):
+        chunk = testcases[start : start + size]
+        chunk_tokens = saved[start : start + len(chunk)]
+
+        def remember(new_tokens: list[str], start: int = start) -> None:
+            saved[start:] = new_tokens
+            on_tokens(list(saved))
+
+        judged += _run_judge(
+            problem,
+            data,
+            chunk,
+            _chunk_timeout(problem, data.language, len(chunk)),
+            chunk_tokens if len(chunk_tokens) == len(chunk) else None,
+            remember,
+        )
+        statuses = [status for _, status, _ in judged]
+        if "compile_error" in statuses or any(s in _STOP_STATUSES for s in statuses):
+            # Lỗi biên dịch thì mọi test đều lỗi như nhau; TLE thì chạy tiếp chỉ làm nghẽn
+            fill = "compile_error" if "compile_error" in statuses else SKIPPED_STATUS
+            judged += [(None, fill, None) for _ in testcases[len(judged):]]
+            break
+    return judged
+
+
+def _testcase_results(
+    problem: Problem,
+    language: str,
+    testcases: list[Testcase],
+    judged: list[tuple[Judge0Result | None, str, Any]],
+) -> list[dict]:
+    return [
+        {
+            "testcase_id": testcase.testcase_id,
+            "status": status,
+            "time": _case_time(result, status, problem, language),
+        }
+        for testcase, (result, status, _) in zip(testcases, judged, strict=True)
+    ]
+
+
 def grade_submission(submission_id: int) -> None:
     """Chạy trong worker nền: mở Session riêng và không giữ kết nối DB trong lúc chờ Judge0."""
     with Session(engine) as session:
@@ -331,12 +409,12 @@ def grade_submission(submission_id: int) -> None:
         retry = False
         passed_count = 0
         compile_output = None
+        results = None
         try:
-            judged = _run_judge(
+            judged = _grade_in_chunks(
                 problem,
                 data,
                 testcases,
-                GRADING_TIMEOUT_SECONDS,
                 tokens,
                 lambda new_tokens: _save_tokens(submission_id, new_tokens),
             )
@@ -344,6 +422,7 @@ def grade_submission(submission_id: int) -> None:
             status = _overall_status(statuses)
             passed_count = statuses.count("accepted")
             compile_output = _compile_output_of(judged)
+            results = _testcase_results(problem, data.language, testcases, judged)
         except Judge0Error:
             logger.warning("Judge0 không khả dụng khi chấm, submission_id=%s", submission_id)
             if now_utc() - submitted_at > PENDING_TTL:
@@ -358,6 +437,7 @@ def grade_submission(submission_id: int) -> None:
         submission.status = status
         submission.passed_count = passed_count
         submission.compile_output = compile_output
+        submission.testcase_results = results
         session.add(submission)
         session.commit()
 
@@ -374,6 +454,7 @@ def regrade(session: Session, submission_id: int, current_user: User) -> Submiss
     submission.passed_count = 0
     submission.compile_output = None
     submission.judge_tokens = None
+    submission.testcase_results = None
     session.add(submission)
     session.commit()
     session.refresh(submission)

@@ -144,6 +144,9 @@ class Submission(SQLModel, table=True):
     passed_count: int = Field(default=0)
     submitted_datetime: datetime = Field(sa_type=UTCDateTime)
     judge_tokens: list[str] | None = Field(default=None, sa_type=JSON)
+    # Kết quả từng testcase: [{"testcase_id", "status", "time"}]; NULL với bài chấm trước
+    # khi có cột này (khi đó chỉ biết tổng passed_count).
+    testcase_results: list[dict] | None = Field(default=None, sa_type=JSON)
 
     problem: Problem | None = Relationship(back_populates="submissions")
     student: User | None = Relationship(back_populates="submissions")

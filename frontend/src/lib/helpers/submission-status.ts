@@ -89,6 +89,24 @@ export function submissionStatusMeta(status: string): StatusMeta {
   };
 }
 
+export type TestcaseVerdictTone = "pass" | "fail" | "skip" | "unknown";
+
+/**
+ * Nhãn + màu cho kết quả chấm của MỘT testcase (`status` lấy từ backend).
+ *
+ * - `skipped`: hệ thống dừng chấm sớm sau test quá thời gian.
+ * - `null`/`undefined`: bài nộp cũ chưa lưu kết quả từng test.
+ */
+export function testcaseVerdict(status: string | null | undefined): {
+  label: string;
+  tone: TestcaseVerdictTone;
+} {
+  if (!status) return { label: "Chưa có kết quả", tone: "unknown" };
+  if (status === "accepted") return { label: "Đúng", tone: "pass" };
+  if (status === "skipped") return { label: "Bỏ qua", tone: "skip" };
+  return { label: submissionStatusMeta(status).label, tone: "fail" };
+}
+
 /**
  * Bài nộp được "Review code" bằng AI khi đã pass TOÀN BỘ testcase.
  *

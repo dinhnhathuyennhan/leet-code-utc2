@@ -54,7 +54,15 @@ async def lifespan(app: FastAPI):
         stop_grading()
 
 
-app = FastAPI(lifespan=lifespan)
+from app.core import config as app_config  # noqa: E402
+
+app = FastAPI(
+    lifespan=lifespan,
+    # Tắt Swagger/OpenAPI khi API_DOCS_ENABLED=false (production)
+    docs_url="/docs" if app_config.API_DOCS_ENABLED else None,
+    redoc_url="/redoc" if app_config.API_DOCS_ENABLED else None,
+    openapi_url="/openapi.json" if app_config.API_DOCS_ENABLED else None,
+)
 
 configured_frontend_url = os.getenv("FRONTEND_URL", "")
 frontend_origins = {

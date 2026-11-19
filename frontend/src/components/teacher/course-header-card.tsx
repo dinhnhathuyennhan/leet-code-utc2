@@ -1,6 +1,17 @@
-import type { ReactNode } from "react";
-import { CalendarCheck, Pencil, Plus, UserCheck } from "lucide-react";
+import { useState, type ReactNode } from "react";
+import { CalendarCheck, Loader2, Pencil, Plus, Trash2, UserCheck } from "lucide-react";
+import { toast } from "sonner";
 
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { Button } from "@/components/ui/button";
 import { formatDate } from "@/lib/helpers/format";
 import { formatUpdatedAt } from "@/lib/helpers/datetime";
@@ -19,9 +30,27 @@ interface CourseHeaderCardProps {
   course: CourseDetail;
   onCreateSession?: () => void;
   onEditCourse?: () => void;
+  /** Có thì hiện nút "Xoá lớp"; ném lỗi (vd 409 đã có bài nộp) để hiện thông báo. */
+  onDeleteCourse?: () => Promise<void>;
 }
 
-export function CourseHeaderCard({ course, onCreateSession, onEditCourse }: CourseHeaderCardProps) {
+export function CourseHeaderCard({ course, onCreateSession, onEditCourse, onDeleteCourse }: CourseHeaderCardProps) {
+  const [confirmOpen, setConfirmOpen] = useState(false);
+  const [deleting, setDeleting] = useState(false);
+
+  async function confirmDelete() {
+    if (!onDeleteCourse || deleting) return;
+    setDeleting(true);
+    try {
+      await onDeleteCourse();
+      setConfirmOpen(false);
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Không thể xoá lớp học.");
+    } finally {
+      setDeleting(false);
+    }
+  }
+
   return (
     <section className="relative flex flex-wrap items-start justify-between gap-6 overflow-hidden rounded-2xl border bg-card p-6 pl-8 shadow-sm">
       <span aria-hidden className="absolute inset-y-6 left-0 w-1.5 rounded-r-full bg-[#2f226b]" />
@@ -65,7 +94,40 @@ export function CourseHeaderCard({ course, onCreateSession, onEditCourse }: Cour
         >
           <Pencil className="size-4" /> Chỉnh sửa lớp
         </Button>
+        {onDeleteCourse && (
+          <Button
+            onClick={() => setConfirmOpen(true)}
+            variant="outline"
+            className="h-11 border-red-300 px-6 text-[15px] font-semibold text-red-600 hover:bg-red-50 dark:border-red-500/40 dark:text-red-400 dark:hover:bg-red-500/10"
+          >
+            <Trash2 className="size-4" /> Xoá lớp
+          </Button>
+        )}
       </div>
+
+      <AlertDialog open={confirmOpen} onOpenChange={(open) => !deleting && setConfirmOpen(open)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Xoá lớp học phần {course.code}?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Toàn bộ buổi học, bài tập trong lớp, testcase và danh sách sinh viên của lớp sẽ bị xoá vĩnh
+              viễn. Lớp đã có bài nộp của sinh viên thì không thể xoá.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={deleting}>Hủy</AlertDialogCancel>
+            <AlertDialogAction
+              disabled={deleting}
+              onClick={(event) => {
+                event.preventDefault();
+                void confirmDelete();
+              }}
+            >
+              {deleting && <Loader2 className="size-4 animate-spin" />} Xoá lớp
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </section>
   );
 }

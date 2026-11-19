@@ -2,12 +2,28 @@
 	email {$ACME_EMAIL}
 }
 
+# Header bảo mật dùng chung cho cả frontend và API.
+# CSP chưa bật vì Next.js dùng inline script; cần nonce trước khi bật chế độ chặn.
+(security_headers) {
+	header {
+		Strict-Transport-Security "max-age=31536000; includeSubDomains"
+		X-Content-Type-Options "nosniff"
+		X-Frame-Options "DENY"
+		Referrer-Policy "strict-origin-when-cross-origin"
+		Permissions-Policy "camera=(), microphone=(), geolocation=()"
+		-Server
+		-X-Powered-By
+	}
+}
+
 {$APP_DOMAIN} {
+	import security_headers
 	encode zstd gzip
 	reverse_proxy frontend:3000
 }
 
 {$API_DOMAIN} {
+	import security_headers
 	encode zstd gzip
 	reverse_proxy backend:8000
 }

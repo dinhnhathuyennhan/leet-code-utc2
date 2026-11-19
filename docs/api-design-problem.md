@@ -9,6 +9,10 @@
 - Datetime request phải kèm UTC offset; response dùng giờ Việt Nam với offset `+07:00`. `start_datetime` mở đề; `end_datetime` chỉ chặn Submit và không chặn xem đề.
 - Với Problem đã gắn Lesson, lịch được suy ra từ `Lesson.start_date`/`end_date`; không chỉnh lịch riêng trên Problem. Khi ngày Lesson thay đổi, các Problem thuộc Lesson được đồng bộ về đầu ngày bắt đầu và cuối ngày kết thúc theo giờ Việt Nam.
 - Mỗi Problem chỉ có một cách chấm, suy ra từ `function_name`: có tên thì chấm function-call (harness), `null` thì chấm stdin/stdout. `function_name` không đổi được sau khi tạo bài.
+- Ngôn ngữ hỗ trợ: `python`, `javascript`, `c`, `cpp`, `java`. Go đã bị loại bỏ khỏi hệ thống.
+- **Lưu ý khi soạn testcase** (rút ra từ review production `1.0.0-rc.1`):
+  - Đầu vào là dict có **khoá dạng số** (vd `{"FIRST_NAME": ..., "1": 35}`): JavaScript luôn đưa khoá số lên đầu object, nên lời giải phụ thuộc thứ tự khoá cho kết quả khác Python (đã gặp ở HumanEval/95, test #36). Tránh testcase phụ thuộc thứ tự khoá, hoặc chỉ cho phép Python với đề đó.
+  - Bộ testcase phải phân biệt được lời giải sai. Cảnh báo "N testcase có cùng expected_output" của `POST .../testcases/preview` là dấu hiệu bộ test yếu (HumanEval/163 có 37/50 test cùng kết quả `[]`, lời giải sai vẫn qua 20/50).
 
 ## POST /problems — Tạo Problem trong bank
 

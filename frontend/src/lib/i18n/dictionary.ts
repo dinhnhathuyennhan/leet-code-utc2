@@ -162,6 +162,9 @@ export const student = {
   "student.assignment.section.hint": { vi: "Gợi ý", en: "Hint" },
   "student.assignment.section.samples": { vi: "Testcase mẫu", en: "Sample test cases" },
   "student.assignment.noSamples": { vi: "Bài chưa có testcase mẫu.", en: "This problem has no sample test cases." },
+  "level.easy": { vi: "Dễ", en: "Easy" },
+  "level.medium": { vi: "Trung bình", en: "Medium" },
+  "level.hard": { vi: "Khó", en: "Hard" },
   "student.assignment.sampleInput": { vi: "Input", en: "Input" },
   "student.assignment.sampleOutput": { vi: "Output", en: "Output" },
   "student.assignment.actualOutput": { vi: "Thực tế", en: "Actual" },
@@ -209,6 +212,11 @@ export const student = {
   "result.sample": { vi: "mẫu", en: "sample" },
   "result.correct": { vi: "Đúng", en: "Correct" },
   "result.incorrect": { vi: "Sai", en: "Incorrect" },
+  "result.skipped": { vi: "Bỏ qua", en: "Skipped" },
+  "result.skippedHint": {
+    vi: "Hệ thống dừng chấm sớm sau test quá thời gian để không làm nghẽn máy chấm; các test bỏ qua được tính là không đạt.",
+    en: "Grading stopped early after a test exceeded the time limit to keep the judge responsive; skipped tests count as failed.",
+  },
 
   // ── Lịch sử nộp bài ─────────────────────────────────────────────────
   "history.title": { vi: "Lịch sử nộp bài", en: "Submission history" },

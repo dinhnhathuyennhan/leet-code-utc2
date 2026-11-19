@@ -120,6 +120,22 @@ Field gửi lên với giá trị `null` sẽ bị **bỏ qua** (giữ nguyên g
 - Không cho sửa `course_id`, `created_by`, `total_number_student` qua endpoint này (field lạ trong body bị bỏ qua).
 - **Yêu cầu quyền**: Admin, hoặc Teacher chủ lớp (`created_by == current_user.user_id`).
 
+## DELETE /courses/{course_id} — Xoá lớp học
+
+**Quyền**: Admin (mọi lớp) hoặc Teacher là chủ lớp (`created_by`).
+
+Xoá lớp cùng toàn bộ buổi học, bài tập (bản sao trong lớp), testcase của các bài đó và danh sách ghi danh. Đề nguồn trong ngân hàng (`lesson_id = null`) không bị ảnh hưởng.
+
+**Response 204 No Content**
+
+**Response lỗi**
+
+| Status | Khi nào |
+|---|---|
+| 403 | Teacher không phải chủ lớp, hoặc người gọi là Student |
+| 404 | Lớp không tồn tại |
+| 409 | Lớp đã có bài nộp của sinh viên ("Không thể xoá lớp học đã có bài nộp của sinh viên") — giữ lịch sử chấm |
+
 ## POST /courses/{course_id}/enrollments — Thêm sinh viên vào lớp
 
 **Request body**

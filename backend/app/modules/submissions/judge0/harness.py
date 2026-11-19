@@ -24,7 +24,13 @@ def _cham_main():
     _args = _json.loads(_sys.stdin.read())
     _fn = globals().get({name!r})
     if _fn is None and "Solution" in globals():
-        _fn = getattr(globals()["Solution"](), {name!r})
+        _fn = getattr(globals()["Solution"](), {name!r}, None)
+    if not callable(_fn):
+        # Ghi bytes UTF-8: sandbox có thể chạy với locale ASCII
+        _sys.stderr.flush()
+        _sys.stderr.buffer.write("Không tìm thấy hàm '{name}' trong bài làm.\\n".encode("utf-8"))
+        _sys.stderr.flush()
+        _sys.exit(1)
     _real_stdout = _sys.stdout
     _sys.stdout = _sys.stderr
     try:
@@ -34,13 +40,32 @@ def _cham_main():
     _real_stdout.write({marker!r} + _json.dumps(_result, separators=(",", ":"), ensure_ascii=False))
     _real_stdout.flush()
 
-_cham_main()
+try:
+    _cham_main()
+except Exception as _error:
+    # Chỉ giữ các dòng traceback thuộc code của sinh viên (dòng <= {student_lines}),
+    # không để lộ khung chấm bài (_cham_main, dòng của driver).
+    import traceback as _tb
+    _frames = [
+        _frame for _frame in _tb.extract_tb(_error.__traceback__)
+        if _frame.lineno is not None and _frame.lineno <= {student_lines}
+    ]
+    _sys.stderr.write(
+        "Traceback (most recent call last):\\n"
+        + "".join(_tb.format_list(_frames))
+        + "".join(_tb.format_exception_only(type(_error), _error))
+    )
+    _sys.exit(1)
 '''
 
 _JS_DRIVER = """
 ;(function () {{
   const __args = JSON.parse(require("fs").readFileSync(0, "utf8"));
   const __fn = typeof {name} === "function" ? {name} : null;
+  if (!__fn) {{
+    process.stderr.write("Không tìm thấy hàm '{name}' trong bài làm.\\n");
+    process.exit(1);
+  }}
   const __log = console.log;
   console.log = function () {{}};
   let __result;
@@ -64,7 +89,11 @@ def build_source(
     if not _IDENTIFIER.match(function_name):
         raise ValueError("function_name không hợp lệ")
     if language == "python":
-        driver = _PYTHON_DRIVER.format(name=function_name, marker=RESULT_MARKER)
+        driver = _PYTHON_DRIVER.format(
+            name=function_name,
+            marker=RESULT_MARKER,
+            student_lines=len(student_code.splitlines()),
+        )
         return f"{student_code}\n{driver}"
     if language == "javascript":
         driver = _JS_DRIVER.format(name=function_name, marker=json.dumps(RESULT_MARKER))

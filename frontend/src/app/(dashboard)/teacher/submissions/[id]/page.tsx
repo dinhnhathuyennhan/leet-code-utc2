@@ -6,6 +6,7 @@ import { useParams, useRouter, useSearchParams } from "next/navigation";
 import {
   ArrowLeft,
   CheckCircle2,
+  CircleSlash,
   Clock,
   Code2,
   RefreshCw,
@@ -20,6 +21,7 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { getSubmissionDetail, regradeSubmission, updateSubmission } from "@/lib/api/endpoints/dashboard";
 import type { SubmissionDetail } from "@/lib/types/dashboard";
+import { testcaseVerdict } from "@/lib/helpers/submission-status";
 
 /**
  * Giữ lại `returnTo` khi đó là đường dẫn nội bộ (`/...`), bỏ qua mọi URL tuyệt đối
@@ -202,17 +204,23 @@ export default function SubmissionDetailPage() {
             <h3 className="mb-3 text-sm font-bold text-slate-900 dark:text-slate-100">
               Kết quả chi tiết các Test Cases ({data.passed_count}/{data.total_testcases} Đúng)
             </h3>
-            <div className="grid gap-2 sm:grid-cols-2">
-              {data.testcases.map((testcase, index) => {
-                const passed = index < data.passed_count;
-                return <div key={testcase.id} className={`flex items-center justify-between rounded-lg border px-3 py-2 text-xs ${passed ? "bg-muted/30" : "border-red-200 bg-red-50/50 dark:bg-red-500/10"}`}>
-                  <span className="font-medium">Test #{index + 1}</span>
-                  <span className={`flex items-center gap-1 font-semibold ${passed ? "text-emerald-600 dark:text-emerald-400" : "text-red-600 dark:text-red-400"}`}>
-                    {passed ? <><CheckCircle2 className="size-3.5" /> Đúng</> : <><XCircle className="size-3.5" /> Sai kết quả</>}
-                  </span>
-                </div>;
-              })}
-            </div>
+            {data.testcases.every((testcase) => !testcase.status) ? (
+              <p className="text-xs text-muted-foreground">
+                Bài nộp này được chấm trước khi hệ thống lưu kết quả từng test, chỉ có tổng số test đạt.
+              </p>
+            ) : (
+              <div className="grid gap-2 sm:grid-cols-2">
+                {data.testcases.map((testcase, index) => {
+                  const verdict = testcaseVerdict(testcase.status);
+                  return <div key={testcase.id} className={`flex items-center justify-between rounded-lg border px-3 py-2 text-xs ${verdict.tone === "pass" ? "bg-muted/30" : verdict.tone === "fail" ? "border-red-200 bg-red-50/50 dark:bg-red-500/10" : "bg-muted/50 text-muted-foreground"}`}>
+                    <span className="font-medium">Test #{index + 1}{testcase.is_sample && <span className="ml-1.5 text-[10px] text-muted-foreground">(mẫu)</span>}</span>
+                    <span className={`flex items-center gap-1 font-semibold ${verdict.tone === "pass" ? "text-emerald-600 dark:text-emerald-400" : verdict.tone === "fail" ? "text-red-600 dark:text-red-400" : ""}`}>
+                      {verdict.tone === "pass" ? <CheckCircle2 className="size-3.5" /> : verdict.tone === "fail" ? <XCircle className="size-3.5" /> : <CircleSlash className="size-3.5" />} {verdict.label}
+                    </span>
+                  </div>;
+                })}
+              </div>
+            )}
           </div>
         </div>
 

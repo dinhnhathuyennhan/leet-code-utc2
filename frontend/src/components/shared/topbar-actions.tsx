@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { usePathname } from "next/navigation";
 import { ChevronDown, KeyRound, LogOut, Moon, Sun, User } from "lucide-react";
 import { useTheme } from "next-themes";
 
@@ -86,9 +87,12 @@ function UserMenu({ onLogout }: { onLogout: () => void }) {
 }
 
 export function TopbarActions({ onLogout }: { onLogout: () => void }) {
+  // Hiện mới chỉ khu vực sinh viên có song ngữ (Admin/Teacher viết cứng tiếng Việt):
+  // ẩn nút VI/EN ở nơi khác để không có một nút bấm vào mà không đổi gì.
+  const showLanguageToggle = usePathname()?.startsWith("/student") ?? false;
   return (
     <div className="flex items-center gap-1.5 sm:gap-3">
-      <LanguageToggle />
+      {showLanguageToggle && <LanguageToggle />}
       <ThemeToggle />
       <span aria-hidden className="mx-1 hidden h-6 w-px bg-border sm:block" />
       <UserMenu onLogout={onLogout} />

@@ -246,6 +246,25 @@ cat /etc/ssh/ssh_host_ed25519_key.pub
 ### 9.3 Trên EC2
 `/opt/chamcode/.env` phải có sẵn, theo mẫu `deploy/.env.prod.example`. Pipeline chỉ sửa 2 dòng `BACKEND_TAG` và `FRONTEND_TAG`.
 
+Biến môi trường mới từ bản sau `1.0.0-rc.1`. Thêm tay vào `/opt/chamcode/.env` trước khi deploy, vì `deploy.sh` không tự thêm:
+
+| Biến | Giá trị production | Ý nghĩa |
+|---|---|---|
+| `API_DOCS_ENABLED` | `false` | Ẩn Swagger `/docs`, `/redoc`, `/openapi.json` |
+| `GRADING_CHUNK_SIZE` | `10` | Chấm theo lô, dừng sớm sau test quá thời gian |
+
+Đồng thời xoá `"go":{...}` khỏi `JUDGE_LANGUAGES`, vì Go đã bị loại bỏ. Nếu để sót, backend chỉ ghi cảnh báo và bỏ qua.
+
+`Caddyfile` đã thêm header bảo mật (HSTS, `X-Content-Type-Options`, `X-Frame-Options`, `Referrer-Policy`, `Permissions-Policy`) và bỏ header `Server`. Sau lần deploy đầu tiên có thay đổi này, kiểm tra cấu hình bằng:
+
+```bash
+docker compose exec caddy caddy validate --config /etc/caddy/Caddyfile --adapter caddyfile
+```
+
+```bash
+curl -sI https://<API_DOMAIN>/ | grep -i -E "strict-transport|x-frame|server"
+```
+
 ---
 
 ## 10. Cấu hình cần CHỦ REPO thực hiện

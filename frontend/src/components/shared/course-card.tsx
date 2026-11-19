@@ -43,10 +43,12 @@ export function CourseCard({ course, href, view }: CourseCardProps) {
       <div className={cn("min-h-[142px] min-w-0 space-y-3 p-4", isList && "flex flex-1 flex-col justify-center")}>
         <StatusBadge label={t(status.labelKey)} tone={status.tone} className="w-fit" />
         <h3 className="truncate text-[15px] font-semibold leading-snug" title={course.name}>{course.name}</h3>
-        <p className="flex items-center gap-2 text-sm font-medium">
-          <CircleUser className="size-4 shrink-0 text-muted-foreground" />
-          <span className="truncate">{course.teacher_name}</span>
-        </p>
+        {course.teacher_name && (
+          <p className="flex items-center gap-2 text-sm font-medium">
+            <CircleUser className="size-4 shrink-0 text-muted-foreground" />
+            <span className="truncate">{course.teacher_name}</span>
+          </p>
+        )}
         <p className="flex items-center gap-2 text-sm text-muted-foreground">
           <CalendarDays className="size-4 shrink-0" />
           <span className="truncate">{formatTerm(course, locale)}</span>

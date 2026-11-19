@@ -9,7 +9,16 @@ from sqlmodel import Session, func, select
 from app.core.utils.datetime_utils import as_utc, now_utc
 from app.core.exceptions import AppError, ConflictError, NotFoundError
 from app.core.dependencies import Role
-from app.modules.problems.schemas import ProblemDetailResponse, ProblemTestcaseUpdate
+from app.modules.problems.schemas import (
+    MAX_PROBLEM_TESTCASES,
+    MIN_HIDDEN_TESTCASES,
+    MIN_PROBLEM_TESTCASES,
+    MIN_SAMPLE_TESTCASES,
+    ProblemDetailResponse,
+    ProblemTestcaseUpdate,
+    validate_testcase_coverage,
+    validate_problem_testcase_mode,
+)
 from app.modules.testcases.schemas import (
     PreviewErrorResponse,
     PreviewWarningResponse,
@@ -32,7 +41,8 @@ from app.modules.testcases.testcase_format import (
     JSON_VALUE,
     decode_testcase_value,
     encode_json,
-    testcase_to_storage,
+    problem_testcase_to_storage,
+    testcase_to_api_values,
 )
 from app.models.entities import Problem, Submission, Testcase, User
 
@@ -136,7 +146,16 @@ def add_testcase(
 ) -> ProblemDetailResponse:
     problem = _get_manageable_problem(session, course_id, lesson_id, problem_id, current_user)
     _assert_no_submissions(session, problem.problem_id)
-    session.add(Testcase(problem_id=problem.problem_id, **testcase_to_storage(data.model_dump())))
+    testcase_count = session.exec(
+        select(func.count()).select_from(Testcase).where(Testcase.problem_id == problem.problem_id)
+    ).one()
+    if testcase_count >= MAX_PROBLEM_TESTCASES:
+        raise ConflictError(f"Problem chỉ được có tối đa {MAX_PROBLEM_TESTCASES} testcase")
+    validate_problem_testcase_mode([data], problem.function_name)
+    session.add(Testcase(
+        problem_id=problem.problem_id,
+        **problem_testcase_to_storage(data.model_dump(), problem.function_name),
+    ))
     _refresh_testcase_count(session, problem)
     session.commit()
     return get_problem_detail(session, course_id, lesson_id, problem_id, current_user)
@@ -156,12 +175,30 @@ def update_testcase(
     _assert_no_submissions(session, problem.problem_id)
 
     update_fields = data.model_dump(exclude_unset=True)
-    if "input" in update_fields:
-        update_fields["input"] = encode_json(update_fields["input"])
-        update_fields["input_type"] = JSON_ARGUMENTS
-    if "expected_output" in update_fields:
-        update_fields["expected_output"] = encode_json(update_fields["expected_output"])
-        update_fields["expected_output_type"] = JSON_VALUE
+    current_values = testcase_to_api_values(testcase)
+    new_values = {
+        "input": update_fields.get("input", current_values["input"]),
+        "expected_output": update_fields.get("expected_output", current_values["expected_output"]),
+        "is_sample": update_fields.get("is_sample", testcase.is_sample),
+    }
+    validate_problem_testcase_mode([ProblemTestcaseUpdate(**new_values)], problem.function_name)
+    if (
+        update_fields.get("is_sample") is not None
+        and update_fields["is_sample"] != testcase.is_sample
+    ):
+        current_testcases = session.exec(
+            select(Testcase).where(Testcase.problem_id == problem.problem_id)
+        ).all()
+        if len(current_testcases) >= MIN_PROBLEM_TESTCASES:
+            validate_testcase_coverage([
+                {
+                    "is_sample": update_fields["is_sample"]
+                    if item.testcase_id == testcase_id else item.is_sample
+                }
+                for item in current_testcases
+            ])
+    if "input" in update_fields or "expected_output" in update_fields:
+        update_fields.update(problem_testcase_to_storage(new_values, problem.function_name))
     update_fields = {
         key: value for key, value in update_fields.items()
         if value is not None or key == "expected_output"
@@ -184,10 +221,14 @@ def delete_testcase(
     problem = _get_manageable_problem(session, course_id, lesson_id, problem_id, current_user)
     testcase = _get_testcase(session, problem.problem_id, testcase_id)
     _assert_no_submissions(session, problem.problem_id)
-    testcase_count = session.exec(
-        select(func.count()).select_from(Testcase).where(Testcase.problem_id == problem.problem_id)
-    ).one()
-    if testcase_count <= 1:
+    current_testcases = session.exec(
+        select(Testcase).where(Testcase.problem_id == problem.problem_id)
+    ).all()
+    if len(current_testcases) >= MIN_PROBLEM_TESTCASES:
+        validate_testcase_coverage(
+            [item for item in current_testcases if item.testcase_id != testcase.testcase_id]
+        )
+    elif len(current_testcases) <= 1:
         raise ConflictError("Problem phải có ít nhất một testcase")
     session.delete(testcase)
     _refresh_testcase_count(session, problem)
@@ -213,6 +254,18 @@ def batch_update_sample(
     if len(testcases) != len(testcase_ids):
         raise NotFoundError("Một hoặc nhiều testcase không tồn tại trong bài tập này")
     _assert_no_submissions(session, problem.problem_id)
+
+    current_testcases = session.exec(
+        select(Testcase).where(Testcase.problem_id == problem.problem_id)
+    ).all()
+    if (
+        any(item.is_sample != data.is_sample for item in testcases)
+        and len(current_testcases) >= MIN_PROBLEM_TESTCASES
+    ):
+        validate_testcase_coverage([
+            {"is_sample": data.is_sample if item.testcase_id in testcase_ids else item.is_sample}
+            for item in current_testcases
+        ])
 
     for testcase in testcases:
         testcase.is_sample = data.is_sample
@@ -269,19 +322,23 @@ def _preview_item_error(item: Any) -> str | None:
     for field in ("input", "expected_output"):
         if field not in item:
             return f"Thiếu {field}"
-    if not isinstance(item["input"], list):
-        return "input phải là mảng các tham số truyền vào function"
-    try:
-        encode_json(item["input"])
-        encode_json(item["expected_output"])
-    except AppError as error:
-        return str(error)
     if "is_sample" in item and not isinstance(item["is_sample"], bool):
         return "is_sample phải là true hoặc false"
-    if item.get("input_type", JSON_ARGUMENTS) != JSON_ARGUMENTS:
-        return f"input_type phải là '{JSON_ARGUMENTS}'"
-    if item.get("expected_output_type", JSON_VALUE) != JSON_VALUE:
-        return f"expected_output_type phải là '{JSON_VALUE}'"
+    input_type = item.get("input_type", JSON_ARGUMENTS)
+    output_type = item.get("expected_output_type", JSON_VALUE)
+    if (input_type, output_type) == ("stdin", "stdout"):
+        if not isinstance(item["input"], str) or not isinstance(item["expected_output"], str):
+            return "stdin/stdout testcase cần input và expected_output dạng chuỗi"
+    elif (input_type, output_type) == (JSON_ARGUMENTS, JSON_VALUE):
+        if not isinstance(item["input"], list):
+            return "input phải là mảng các tham số truyền vào function"
+        try:
+            encode_json(item["input"])
+            encode_json(item["expected_output"])
+        except AppError as error:
+            return str(error)
+    else:
+        return "cặp input_type/expected_output_type không được hỗ trợ"
     return None
 
 
@@ -297,6 +354,22 @@ def preview_testcases(data: TestcasePreviewRequest) -> TestcasePreviewResponse:
             errors.append(PreviewErrorResponse(index=index, message=message))
 
     sample_count = sum(1 for item in valid_items if item.get("is_sample", False))
+    hidden_count = len(valid_items) - sample_count
+    coverage_issues = []
+    if len(data.testcases) < MIN_PROBLEM_TESTCASES or len(data.testcases) > MAX_PROBLEM_TESTCASES:
+        coverage_issues.append(f"tổng testcase phải từ {MIN_PROBLEM_TESTCASES} đến {MAX_PROBLEM_TESTCASES}")
+    if sample_count < MIN_SAMPLE_TESTCASES:
+        coverage_issues.append(f"cần ít nhất {MIN_SAMPLE_TESTCASES} testcase mẫu")
+    if hidden_count < MIN_HIDDEN_TESTCASES:
+        coverage_issues.append(f"cần ít nhất {MIN_HIDDEN_TESTCASES} testcase ẩn")
+    if coverage_issues:
+        errors.append(PreviewErrorResponse(
+            index=len(data.testcases) + 1,
+            message=(
+                f"Payload chưa đạt yêu cầu ({'; '.join(coverage_issues)}; hiện có "
+                f"{len(data.testcases)} tổng, {sample_count} mẫu, {hidden_count} ẩn)"
+            ),
+        ))
     warnings: list[PreviewWarningResponse] = []
     if valid_items and sample_count == 0:
         warnings.append(

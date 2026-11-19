@@ -84,6 +84,7 @@ export interface AdminProblem {
   starter_code: string;
   starter_codes: Record<string, string>;
   testcases: AdminTestcase[];
+  supported_languages: string[];
 }
 
 export interface AdminProblemItem {
@@ -104,7 +105,8 @@ export interface AdminProblemList {
 
 export interface AdminProblemPayload {
   title: string;
-  function_name: string;
+  report: string | null;
+  function_name?: string | null;
   description: string;
   constraints: string;
   level: "easy" | "medium" | "hard";
@@ -114,7 +116,7 @@ export interface AdminProblemPayload {
   starter_codes: Record<string, string>;
   hint: string | null;
   complexity: string | null;
-  testcases: Array<{ input: unknown[]; expected_output: unknown; is_sample: boolean }>;
+  testcases: Array<{ input: unknown; expected_output: unknown; is_sample: boolean }>;
 }
 
 export interface AdminLesson {

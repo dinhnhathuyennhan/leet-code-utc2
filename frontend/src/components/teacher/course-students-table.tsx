@@ -86,14 +86,18 @@ export function CourseStudentsTable({
         ...result.created.map((student) => student.student_code),
         ...result.skipped.map((student) => student.student_code),
       ];
-      await Promise.all(
-        importedStudentIds.map((studentId) =>
-          addStudentToCourse(courseId, studentId),
+      const results = await Promise.allSettled(
+        importedStudentIds.map((studentCode) =>
+          addStudentToCourse(courseId, studentCode),
         ),
       );
+      const addedCount = results.filter(
+        (result) => result.status === "fulfilled",
+      ).length;
+      const skippedCount = results.length - addedCount;
       await refresh();
       toast.success(
-        `Đã thêm ${importedStudentIds.length} sinh viên vào lớp; bỏ qua ${result.errors.length} dòng lỗi.`,
+        `Đã thêm ${addedCount} sinh viên; bỏ qua ${skippedCount} sinh viên đã có hoặc gặp lỗi.`,
       );
       if (result.errors.length)
         toast.warning(`Có ${result.errors.length} dòng không hợp lệ.`);

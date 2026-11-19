@@ -13,7 +13,7 @@ import { getHomePath } from "@/lib/auth/redirect";
 import { Loader2 } from "lucide-react";
 import { ConnectionLostState, ForbiddenState, ServerErrorState } from "@/components/shared/page-state";
 
-const PUBLIC_ROUTES = ["/login", "/forgot-password"];
+const PUBLIC_ROUTES = ["/login"];
 const LOGIN_ROUTE = "/login";
 const CHANGE_PASSWORD_ROUTE = "/change-password";
 
@@ -64,7 +64,6 @@ function getRedirectTarget(
   auth: Extract<ReturnType<typeof useAuth>, { status: "authenticated" }>,
   lastAllowedPath: string | null,
 ): string | null {
-  if (pathname === "/forgot-password") return getHomePath(auth.user);
   if (auth.user.must_change_password && pathname !== CHANGE_PASSWORD_ROUTE) {
     return CHANGE_PASSWORD_ROUTE;
   }

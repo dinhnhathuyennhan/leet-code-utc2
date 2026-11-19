@@ -161,9 +161,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       cacheProfile(result.user);
       setState({ status: "authenticated", user: result.user });
       return result.user;
-    } catch (error) {
+    } finally {
       setLoginInProgress(false);
-      throw error;
     }
   }, [queryClient]);
 

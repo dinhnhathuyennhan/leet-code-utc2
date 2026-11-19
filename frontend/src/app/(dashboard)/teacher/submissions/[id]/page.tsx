@@ -66,13 +66,24 @@ export default function SubmissionDetailPage() {
 
   useEffect(() => {
     if (data?.status !== "pending" && data?.status !== "processing") return;
+    let consecutiveErrors = 0;
     const timer = window.setInterval(() => {
       void getSubmissionDetail(id)
         .then((submission) => {
+          consecutiveErrors = 0;
+          setSaveError(null);
           setData(submission);
           setStatus(submission.status);
         })
-        .catch(setSaveError);
+        .catch((error) => {
+          consecutiveErrors += 1;
+          setSaveError(
+            error instanceof Error
+              ? error.message
+              : "Không thể tải trạng thái bài nộp.",
+          );
+          if (consecutiveErrors >= 3) window.clearInterval(timer);
+        });
     }, 1_500);
     return () => window.clearInterval(timer);
   }, [data?.status, id]);

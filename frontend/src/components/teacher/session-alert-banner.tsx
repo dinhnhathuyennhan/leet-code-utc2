@@ -1,6 +1,5 @@
-import { CircleAlert, CircleCheck, Send } from "lucide-react";
+import { CircleAlert, CircleCheck } from "lucide-react";
 
-import { Button } from "@/components/ui/button";
 import { formatDeadline } from "@/lib/helpers/format";
 import type { CourseSession } from "@/lib/types/course";
 
@@ -25,9 +24,6 @@ export function SessionAlertBanner({ session, studentCount }: { session: CourseS
         )}
       </div>
       <div className="flex flex-col items-end gap-2">
-        <Button className="bg-amber-400 font-semibold text-amber-950 hover:bg-amber-500">
-          <Send className="size-4" /> Gửi nhắc nhở
-        </Button>
         <p className="text-xs text-muted-foreground">Hạn chót: {formatDeadline(session.deadline)}</p>
       </div>
     </div>

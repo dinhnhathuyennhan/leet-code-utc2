@@ -124,10 +124,8 @@ export function SessionEditorDialog({ course, session, open, onOpenChange, onSav
             </label>
           </div>
 
-          {/* TODO: Backend chưa có cột lưu các cấu hình này; ẩn để không tạo cảm giác đã được áp dụng. */}
-
           <section className="space-y-3">
-            <div className="flex items-center justify-between"><div><h3 className="font-bold">Danh sách bài tập dự kiến <span className="rounded bg-violet-100 px-2 py-0.5 text-xs text-violet-800">{selectedProblemIds.length} bài</span></h3><p className="text-xs text-muted-foreground">Chọn bài tập từ ngân hàng hiện có.</p></div><Button variant="outline" size="sm"><Plus className="size-4" /> Thêm từ ngân hàng bài tập</Button></div>
+            <div className="flex items-center justify-between"><div><h3 className="font-bold">Danh sách bài tập dự kiến <span className="rounded bg-violet-100 px-2 py-0.5 text-xs text-violet-800">{selectedProblemIds.length} bài</span></h3><p className="text-xs text-muted-foreground">Chọn bài tập từ ngân hàng hiện có.</p></div></div>
             <div className="max-h-[30vh] space-y-2 overflow-y-auto rounded-xl bg-indigo-50/70 p-3 sm:max-h-[360px]">
               {bankLoading ? <p className="py-6 text-center text-sm text-muted-foreground">Đang tải bài từ ngân hàng...</p> : availableProblems.length ? availableProblems.map((problem) => {
                 const selected = selectedProblemIds.includes(problem.id);

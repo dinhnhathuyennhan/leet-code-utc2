@@ -613,3 +613,72 @@ class TestStudentDashboardCounters:
         assert result.completed_problems == 1
         assert result.total_problems == 1
 
+
+
+class TestStudentDashboardDueThisWeek:
+    """`due_this_week`: số bài đang mở, hạn nộp trong 7 ngày tới, sinh viên chưa đạt."""
+
+    def test_counts_only_open_unsolved_problems_due_within_seven_days(
+        self, session, course, owner_teacher, student
+    ):
+        from app.core.utils.datetime_utils import today_vn
+        from tests.support.fixtures.builders import make_submission
+
+        today = today_vn()
+        past = datetime(2020, 1, 1, tzinfo=VN_TZ)
+        enroll_directly(session, course, student)
+
+        due_soon = make_lesson(
+            session, course, start_date=today - timedelta(days=2),
+            end_date=today + timedelta(days=6), lesson_number=1,
+        )
+        make_problem(session, due_soon, title="Chưa làm", start_datetime=past)
+        solved = make_problem(session, due_soon, title="Đã đạt", start_datetime=past)
+        wrong = make_problem(session, due_soon, title="Sai", start_datetime=past)
+        make_problem(
+            session, due_soon, title="Chưa phát hành",
+            start_datetime=datetime(2099, 1, 1, tzinfo=VN_TZ),
+        )
+        make_submission(session, solved, student, status="accepted", passed_count=1)
+        make_submission(session, wrong, student, status="wrong_answer")
+
+        later = make_lesson(
+            session, course, start_date=today - timedelta(days=1),
+            end_date=today + timedelta(days=7), lesson_number=2,
+        )
+        make_problem(session, later, title="Hạn xa", start_datetime=past)
+        closed = make_lesson(
+            session, course, start_date=today - timedelta(days=9),
+            end_date=today - timedelta(days=1), lesson_number=3,
+        )
+        make_problem(session, closed, title="Đã đóng", start_datetime=past)
+        upcoming = make_lesson(
+            session, course, start_date=today + timedelta(days=1),
+            end_date=today + timedelta(days=3), lesson_number=4,
+        )
+        make_problem(session, upcoming, title="Sắp mở", start_datetime=past)
+        session.commit()
+
+        result = get_student_dashboard(session, student.user_id, student)
+
+        assert result.due_this_week == 2  # "Chưa làm" + "Sai"
+
+    def test_zero_when_student_has_no_courses(self, session, student):
+        result = get_student_dashboard(session, student.user_id, student)
+
+        assert result.due_this_week == 0
+
+
+class TestCourseResponseTeacherName:
+    """FE cần tên giảng viên để hiển thị; `created_by` là UUID, không dùng để hiển thị được."""
+
+    def test_includes_creator_full_name(self, session, course, owner_teacher):
+        response = build_course_response(course, session)
+
+        assert response.teacher_name == owner_teacher.full_name
+        assert response.created_by == str(owner_teacher.user_id)
+
+    def test_includes_creator_full_name_without_session_details(self, session, course, owner_teacher):
+        response = build_course_response(course)
+
+        assert response.teacher_name == owner_teacher.full_name

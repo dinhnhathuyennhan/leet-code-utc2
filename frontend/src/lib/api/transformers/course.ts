@@ -11,7 +11,7 @@ export interface CourseResponseRaw {
   end_date: string;
   avt_link: string | null;
   created_by: string;
-  created_by_name?: string | null;
+  teacher_name?: string | null;
   total_number_student: number;
   sessions?: unknown[];
   grades?: unknown[];
@@ -60,7 +60,7 @@ export function toCourseSummary(raw: CourseResponseRaw): CourseSummary {
     start_date: raw.start_date,
     language: inferLanguage(raw.avt_link, raw.course_id),
     status: inferStatus(raw.start_date, raw.end_date),
-    teacher_name: raw.created_by_name || raw.created_by,
+    teacher_name: raw.teacher_name ?? "",
     semester: parseSemester(raw.term),
     academic_year: parseAcademicYear(raw.term, raw.end_date),
     group: parseGroup(raw.course_id),

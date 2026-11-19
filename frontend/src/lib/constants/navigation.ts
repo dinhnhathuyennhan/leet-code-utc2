@@ -51,7 +51,6 @@ export const TEACHER_NAV: NavItem[] = [
     href: "/teacher/problem-bank",
     icon: BookOpenCheck,
   },
-  // { label: "Quản lý tài khoản", labelKey: "nav.accounts", href: "/teacher/accounts", icon: ShieldCheck },
 ];
 
 export const STUDENT_NAV: NavItem[] = [

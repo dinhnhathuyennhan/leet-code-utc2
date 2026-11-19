@@ -12,7 +12,8 @@ export interface CourseApiRecord {
   avt_link: string | null;
   /** UUID người tạo — không hiển thị, dùng `created_by_name`. */
   created_by: string;
-  created_by_name?: string | null;
+  /** Tên người tạo lớp (giảng viên); `created_by` là UUID, không dùng để hiển thị. */
+  teacher_name?: string | null;
   term: string;
   start_date: string;
   end_date: string;
@@ -231,7 +232,7 @@ export interface SessionExercise {
   starter_codes?: Record<string, string>;
   start_datetime: string;
   end_datetime: string;
-  testcases: Array<{ id: number; input: string; expected_output: string; is_sample: boolean }>;
+  testcases: Array<{ id: number; input: unknown; expected_output: unknown; is_sample: boolean }>;
 }
 
 export interface SessionDetailData {
@@ -274,9 +275,9 @@ export interface ProblemUpdateRequest {
   start_datetime?: string;
   end_datetime?: string;
   starter_code?: string;
-  function_name?: string;
+  function_name?: string | null;
   starter_codes?: Record<string, string>;
-  testcases?: Array<{ input: unknown[]; expected_output: unknown; is_sample: boolean; input_type?: string; expected_output_type?: string }>;
+  testcases?: Array<{ input: unknown; expected_output: unknown; is_sample: boolean; input_type?: string; expected_output_type?: string }>;
 }
 
 export interface ProblemDetailData {
@@ -298,6 +299,7 @@ export interface ProblemDetailData {
   starter_code: string;
   /** Mã mẫu theo ngôn ngữ: { python, c, cpp, java }. */
   starter_codes?: Record<string, string>;
-  testcases: Array<{ id: number; input: string; expected_output: string; is_sample: boolean }>;
+  supported_languages: string[];
+  testcases: Array<{ id: number; input: unknown; expected_output: unknown; is_sample: boolean }>;
   submitted_count?: number;
 }

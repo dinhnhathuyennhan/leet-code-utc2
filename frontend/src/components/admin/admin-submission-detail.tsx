@@ -41,7 +41,6 @@ export function AdminSubmissionDetail({ id }: { id: string }) {
 function SubmissionWorkspace({ submission }: { submission: Submission }) {
   const client = useQueryClient();
   const [feedback, setFeedback] = useState(submission.feedback ?? "");
-  const [status] = useState(submission.status);
   const [score, setScore] = useState(submission.manual_score == null ? "" : String(submission.manual_score));
   const [saving, setSaving] = useState(false);
   const [regrading, setRegrading] = useState(false);

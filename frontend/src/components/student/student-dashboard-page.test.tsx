@@ -120,9 +120,11 @@ describe("StudentDashboardPage", () => {
     const search = screen.getByPlaceholderText("Tìm kiếm lớp học phần…");
     await user.type(search, "khong-co-lop-nao-ca");
 
+    // SV đã có lớp, chỉ là không khớp từ khoá → không được báo "chưa ghi danh".
     await waitFor(() => {
-      expect(screen.getByText(/Chưa có lớp học phần nào/)).toBeInTheDocument();
+      expect(screen.getByText("Không tìm thấy lớp phù hợp")).toBeInTheDocument();
     });
+    expect(screen.queryByText(/Chưa có lớp học phần nào/)).not.toBeInTheDocument();
   });
 
   it("renders the 3 mini-stat cards on top", async () => {

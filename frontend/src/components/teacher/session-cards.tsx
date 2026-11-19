@@ -1,11 +1,19 @@
+"use client";
+
+import { useState } from "react";
 import Link from "next/link";
-import { Clock, Flag, Pencil, Plus } from "lucide-react";
-import { ActionMenu } from "@/components/teacher/action-menu";
+import { Clock, Flag, Loader2, Pencil, Plus } from "lucide-react";
+import { toast } from "sonner";
+
+import { SessionActions } from "@/components/teacher/session-actions";
 import { Button } from "@/components/ui/button";
+import { updateLesson } from "@/lib/api/endpoints/courses";
+import { getErrorMessage } from "@/lib/helpers/error-message";
+import { toDateInput } from "@/lib/helpers/datetime";
 import { formatDeadline } from "@/lib/helpers/format";
 import type { CourseSession } from "@/lib/types/course";
 import { cn } from "@/lib/utils";
-import { DateChip, SESSION_MENU, SessionTitle } from "./session-meta";
+import { DateChip, SessionTitle } from "./session-meta";
 
 const PRIMARY_BTN = "bg-[#2f226b] text-white hover:bg-[#251b56]";
 type SessionCardProps = { session: CourseSession; courseId: string | number; selected?: boolean; onSelect?: () => void };
@@ -17,10 +25,33 @@ export function OpenSessionCard({ session, courseId, studentCount, selected = fa
   </section>;
 }
 
-export function UpcomingSessionCard({ session, courseId, selected = false, onSelect }: SessionCardProps) {
+/** "Mở sớm": dời ngày mở của buổi học về hôm nay (giữ nguyên hạn nộp). */
+function OpenEarlyButton({ session, courseId, onChanged }: { session: CourseSession; courseId: string | number; onChanged?: () => void }) {
+  const [busy, setBusy] = useState(false);
+  async function openNow() {
+    setBusy(true);
+    try {
+      await updateLesson(String(courseId), session.id, {
+        lesson_name: session.title,
+        start_date: toDateInput(new Date()),
+        end_date: toDateInput(session.deadline),
+        problem_ids: [],
+      });
+      toast.success(`Đã mở buổi ${session.order}.`);
+      onChanged?.();
+    } catch (error) {
+      toast.error(getErrorMessage(error));
+    } finally {
+      setBusy(false);
+    }
+  }
+  return <Button size="sm" disabled={busy} onClick={(event) => { event.stopPropagation(); void openNow(); }} className="h-9 bg-amber-500 font-medium text-white hover:bg-amber-600">{busy && <Loader2 className="size-4 animate-spin" />}Mở sớm</Button>;
+}
+
+export function UpcomingSessionCard({ session, courseId, selected = false, onSelect, onChanged }: SessionCardProps & { onChanged?: () => void }) {
   return <section onClick={onSelect} className={cn("flex cursor-pointer flex-wrap items-center justify-between gap-4 rounded-xl border p-5 shadow-sm transition-colors hover:bg-indigo-50/70", selected ? "border-indigo-200 bg-indigo-50/60" : "border-slate-200 bg-card")}>
     <div className="space-y-2"><SessionTitle session={session} /><p className="text-sm text-muted-foreground">Sắp mở: <strong className="font-medium text-foreground">{formatDeadline(session.opens_at ?? session.deadline)}</strong></p></div>
-    <div className="flex flex-wrap items-center gap-3"><span className="text-sm font-semibold text-slate-700 dark:text-slate-300">{session.problems.length} bài tập</span><Button size="sm" className="h-9 bg-amber-500 font-medium text-white hover:bg-amber-600">Mở sớm</Button><Button asChild size="sm" className={`h-9 gap-1.5 ${PRIMARY_BTN}`}><Link href={`/teacher/courses/${courseId}/sessions/${session.id}?mode=edit`} onClick={(event) => event.stopPropagation()}><Plus className="size-4" /> Sửa buổi học</Link></Button><ActionMenu label="Thao tác buổi học" items={SESSION_MENU} className="size-9" /></div>
+    <div className="flex flex-wrap items-center gap-3"><span className="text-sm font-semibold text-slate-700 dark:text-slate-300">{session.problems.length} bài tập</span><OpenEarlyButton session={session} courseId={courseId} onChanged={onChanged} /><Button asChild size="sm" className={`h-9 gap-1.5 ${PRIMARY_BTN}`}><Link href={`/teacher/courses/${courseId}/sessions/${session.id}?mode=edit`} onClick={(event) => event.stopPropagation()}><Plus className="size-4" /> Sửa buổi học</Link></Button><div onClick={(event) => event.stopPropagation()}><SessionActions courseId={String(courseId)} sessionId={String(session.id)} exerciseCount={session.problems.length} onDone={onChanged} /></div></div>
   </section>;
 }
 

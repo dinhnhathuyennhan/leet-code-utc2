@@ -1,0 +1,82 @@
+name: chamcode
+
+services:
+  postgres:
+    image: postgres:17-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: chamcode
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?thiếu POSTGRES_PASSWORD}
+      POSTGRES_DB: ChamCodeDB
+    command: >
+      postgres -c shared_buffers=64MB -c max_connections=30
+               -c work_mem=4MB -c maintenance_work_mem=32MB
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    ports:
+      - "127.0.0.1:5432:5432"      # chỉ mở cho localhost, truy cập từ xa qua SSH tunnel
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U chamcode -d ChamCodeDB"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    mem_limit: 200m
+
+  backend:
+    image: ${DOCKERHUB_USERNAME:?thiếu DOCKERHUB_USERNAME}/chamcode-backend:${BACKEND_TAG:?thiếu BACKEND_TAG}
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      DB_SERVER: postgres
+      DB_PORT: "5432"
+      DB_NAME: ChamCodeDB
+      DB_USER: chamcode
+      DB_PASSWORD: ${POSTGRES_PASSWORD}
+    depends_on:
+      postgres:
+        condition: service_healthy
+    ports:
+      - "127.0.0.1:8000:8000"
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://localhost:8000/ || exit 1"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 60s
+    mem_limit: 350m
+
+  frontend:
+    image: ${DOCKERHUB_USERNAME}/chamcode-frontend:${FRONTEND_TAG:?thiếu FRONTEND_TAG}
+    restart: unless-stopped
+    environment:
+      NODE_OPTIONS: --max-old-space-size=192
+    depends_on:
+      - backend
+    ports:
+      - "127.0.0.1:3000:3000"
+    mem_limit: 256m
+
+  caddy:
+    image: caddy:2-alpine
+    restart: unless-stopped
+    environment:
+      APP_DOMAIN: ${APP_DOMAIN}
+      API_DOMAIN: ${API_DOMAIN}
+      ACME_EMAIL: ${ACME_EMAIL}
+    ports:
+      - "80:80"
+      - "443:443"
+      - "443:443/udp"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on:
+      - frontend
+      - backend
+    mem_limit: 64m
+
+volumes:
+  postgres_data:
+  caddy_data:
+  caddy_config:

@@ -16,18 +16,15 @@ export default function LoginPage() {
   const auth = useAuth();
   const [isLoggingOut, setIsLoggingOut] = useState(false);
   const [isRedirecting, setIsRedirecting] = useState(false);
+  const [isSubmittingLogin, setIsSubmittingLogin] = useState(false);
+
+  const handleSubmittingChange = (isSubmitting: boolean) => {
+    setIsSubmittingLogin(isSubmitting);
+  };
 
   const handleLoginSuccess = (user: UserResponse) => {
     setIsRedirecting(true);
     router.replace(getHomePath(user));
-  };
-
-  const handleLoginStart = () => {
-    setIsRedirecting(true);
-  };
-
-  const handleLoginError = () => {
-    setIsRedirecting(false);
   };
 
   const handleLogout = async () => {
@@ -36,7 +33,7 @@ export default function LoginPage() {
     setIsLoggingOut(false);
   };
 
-  if (isRedirecting || auth.loginInProgress) {
+  if (isRedirecting) {
     return (
       <div className="flex h-[100dvh] w-full items-center justify-center bg-slate-900" aria-busy="true">
         <Loader2 className="size-8 animate-spin text-white" />
@@ -44,7 +41,10 @@ export default function LoginPage() {
     );
   }
 
-  if (auth.status === "authenticated" && !isRedirecting) {
+  if (
+    auth.status === "authenticated" &&
+    !isSubmittingLogin
+  ) {
     return (
       <AuthLayout>
         <div className="w-full max-w-md rounded-3xl bg-white p-8 text-center shadow-2xl">
@@ -72,8 +72,7 @@ export default function LoginPage() {
     <AuthLayout>
       <LoginForm
         onSuccess={handleLoginSuccess}
-        onLoginStart={handleLoginStart}
-        onLoginError={handleLoginError}
+        onSubmittingChange={handleSubmittingChange}
       />
     </AuthLayout>
   );

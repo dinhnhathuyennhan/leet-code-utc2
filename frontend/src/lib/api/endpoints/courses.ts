@@ -37,16 +37,20 @@ export interface CourseUpdateRequest {
 
 export interface ProblemCreateRequest {
   title: string;
-  function_name: string;
+  report?: string | null;
+  function_name?: string | null;
   description: string;
   constraints: string;
   level: "easy" | "medium" | "hard";
   time_limit_seconds: number;
-  starter_codes: Record<"python" | "c" | "cpp" | "java", string>;
+  starter_codes: Partial<
+    Record<"python" | "c" | "cpp" | "java" | "javascript", string>
+  >;
   start_datetime: string;
   end_datetime: string;
   hint?: string | null;
   complexity?: string | null;
+
   testcases: Array<{
     input: unknown[];
     expected_output: unknown;
@@ -167,7 +171,7 @@ function toSummary(record: CourseApiRecord) {
       record.course_name,
     ),
     status: statusFromDates(record.start_date, record.end_date),
-    teacher_name: record.created_by,
+    teacher_name: record.teacher_name ?? "",
     semester,
     academic_year: academicYear,
     group: 1,
@@ -375,37 +379,16 @@ export async function addStudentToCourse(
   }
 }
 
-async function addStudentByIdToCourse(
-  courseId: string,
-  studentId: string,
-): Promise<void> {
-  try {
-    await axiosInstance.post(`/courses/${courseId}/enrollments`, {
-      student_id: studentId,
-    });
-  } catch (error) {
-    throw wrapAxiosError(error);
-  }
-}
-
 export async function addClassToCourse(
   courseId: string,
   classId: string,
 ): Promise<{ added_count: number; skipped_count: number }> {
   try {
-    // Backend chỉ có endpoint thêm từng sinh viên, không có endpoint enrollment theo lớp.
-    const students = await getClassStudents(classId);
-    const results = await Promise.allSettled(
-      students.map((student) =>
-        addStudentByIdToCourse(courseId, student.user_id),
-      ),
-    );
-    return {
-      added_count: results.filter((result) => result.status === "fulfilled")
-        .length,
-      skipped_count: results.filter((result) => result.status === "rejected")
-        .length,
-    };
+    const response = await axiosInstance.post<{
+      added_count: number;
+      skipped_count: number;
+    }>(`/courses/${courseId}/enrollments/class`, { class_id: classId });
+    return response.data;
   } catch (error) {
     throw wrapAxiosError(error);
   }

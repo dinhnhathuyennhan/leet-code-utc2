@@ -5,13 +5,6 @@ import { StatusBadge } from "@/components/shared/status-badge";
 import { SESSION_STATUS } from "@/lib/constants/status";
 import type { CourseSession } from "@/lib/types/course";
 
-// TODO: menu này chưa có thiết kế — các mục tạm, chưa nối hành động.
-export const SESSION_MENU = [
-  { label: "Chỉnh sửa buổi học" },
-  { label: "Nhân bản buổi học" },
-  { label: "Xoá buổi học", destructive: true },
-];
-
 /** Tiêu đề "Buổi N: ..." + badge trạng thái — dùng chung cho cả 3 kiểu thẻ buổi học. */
 export function SessionTitle({ session }: { session: CourseSession }) {
   const status = SESSION_STATUS[session.status];

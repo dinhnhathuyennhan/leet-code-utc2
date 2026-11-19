@@ -2,7 +2,6 @@
 
 import * as React from "react";
 import Image from "next/image";
-import Link from "next/link";
 import {
   Controller,
   FormProvider,
@@ -30,8 +29,7 @@ import type { UserResponse } from "@/lib/api/types";
 
 interface LoginFormProps {
   onSuccess?: (user: UserResponse) => void;
-  onLoginStart?: () => void;
-  onLoginError?: () => void;
+  onSubmittingChange?: (isSubmitting: boolean) => void;
 }
 
 const FormField = Controller;
@@ -87,7 +85,7 @@ function FormMessage({ name }: { name: string }) {
   ) : null;
 }
 
-export function LoginForm({ onSuccess, onLoginStart, onLoginError }: LoginFormProps) {
+export function LoginForm({ onSuccess, onSubmittingChange }: LoginFormProps) {
   const { login } = useAuth();
   const { t, locale } = useLocale();
   const [connectionError, setConnectionError] = React.useState<string | null>(null);
@@ -108,7 +106,7 @@ export function LoginForm({ onSuccess, onLoginStart, onLoginError }: LoginFormPr
 
   async function onSubmit(values: LoginFormValues) {
     setConnectionError(null);
-    onLoginStart?.();
+    onSubmittingChange?.(true);
     try {
       const user = await login({
         email: values.email,
@@ -122,7 +120,6 @@ export function LoginForm({ onSuccess, onLoginStart, onLoginError }: LoginFormPr
     } catch (error) {
       if (error instanceof ApiError) {
         if (error.isNetworkError) {
-          onLoginError?.();
           setConnectionError(t("error.network"));
           toast.error(t("error.network"));
           return;
@@ -133,14 +130,14 @@ export function LoginForm({ onSuccess, onLoginStart, onLoginError }: LoginFormPr
           message,
         });
         form.resetField("password", { keepError: true });
-        onLoginError?.();
         toast.error(message);
         return;
       }
 
-      onLoginError?.();
       setConnectionError(t("error.generic"));
       toast.error(t("error.generic"));
+    } finally {
+      onSubmittingChange?.(false);
     }
   }
 
@@ -211,17 +208,9 @@ export function LoginForm({ onSuccess, onLoginStart, onLoginError }: LoginFormPr
               name="password"
               render={({ field }) => (
                 <FormItem className="flex w-full min-w-0 flex-col gap-1.5">
-                  <div className="flex items-baseline justify-between gap-2">
-                    <FormLabel className="text-slate-700 text-xs sm:text-sm font-semibold">
-                      {t("auth.login.password")} <span className="text-red-500">*</span>
-                    </FormLabel>
-                    <Link
-                      href="/forgot-password"
-                      className="text-slate-700 text-xs sm:text-sm font-semibold hover:text-blue-600 transition-colors"
-                    >
-                      {t("auth.login.forgot")}
-                    </Link>
-                  </div>
+                  <FormLabel className="text-slate-700 text-xs sm:text-sm font-semibold">
+                    {t("auth.login.password")} <span className="text-red-500">*</span>
+                  </FormLabel>
                   <FormControl>
                     <PasswordInput
                       {...field}

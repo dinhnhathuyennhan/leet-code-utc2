@@ -16,6 +16,7 @@ from app.modules.courses.schemas import (
 )
 from app.modules.courses.service import (
     create_course as _create_course,
+    delete_course as _delete_course,
     get_course as _get_course,
     get_course_terms as _get_course_terms,
     get_courses as _get_courses,
@@ -113,6 +114,15 @@ def update_course_route(
         session=session,
         current_user=current_user,
     )
+
+
+@router.delete("/courses/{course_id}", status_code=status.HTTP_204_NO_CONTENT)
+def delete_course_route(
+    course_id: str,
+    session: Session = Depends(get_session),
+    current_user: User = Depends(require_role(Role.ADMIN, Role.TEACHER)),
+) -> None:
+    _delete_course(course_id=course_id, session=session, current_user=current_user)
 
 
 # ─── Lỗi 7: Lấy danh sách lớp của 1 sinh viên ──────────────────────────────

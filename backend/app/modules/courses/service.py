@@ -30,6 +30,7 @@ from app.models import (
     Lesson,
     Problem,
     Submission,
+    Testcase,
     User,
 )
 
@@ -122,6 +123,43 @@ def update_course(
     session.commit()
     session.refresh(course)
     return build_course_response(course)
+
+
+def delete_course(course_id: str, session: Session, current_user: User) -> None:
+    """Xoá lớp học phần cùng buổi học, bài tập (bản sao trong lớp), testcase và ghi danh.
+
+    - Quyền: Admin mọi lớp, hoặc Teacher là chủ lớp.
+    - Lớp đã có bài nộp thì KHÔNG xoá (giữ lịch sử chấm của sinh viên).
+    - Đề nguồn trong ngân hàng (problem.lesson_id = NULL) không bị ảnh hưởng.
+    """
+    course = get_manageable_course(
+        course_id, session, current_user, "Bạn không có quyền xoá lớp học này"
+    )
+    lesson_ids = list(session.exec(select(Lesson.lesson_id).where(Lesson.course_id == course_id)).all())
+    problem_ids = (
+        list(session.exec(select(Problem.problem_id).where(Problem.lesson_id.in_(lesson_ids))).all())
+        if lesson_ids
+        else []
+    )
+    if problem_ids and session.exec(
+        select(Submission.submission_id).where(Submission.problem_id.in_(problem_ids))
+    ).first():
+        raise ConflictError("Không thể xoá lớp học đã có bài nộp của sinh viên")
+
+    for model, column, ids in (
+        (Testcase, Testcase.problem_id, problem_ids),
+        (Problem, Problem.problem_id, problem_ids),
+        (Lesson, Lesson.lesson_id, lesson_ids),
+    ):
+        if ids:
+            for row in session.exec(select(model).where(column.in_(ids))).all():
+                session.delete(row)
+            session.flush()
+    for enrollment in session.exec(select(Enrollment).where(Enrollment.course_id == course_id)).all():
+        session.delete(enrollment)
+    session.flush()
+    session.delete(course)
+    session.commit()
 
 
 def _parse_term(term: str) -> tuple[int, str]:

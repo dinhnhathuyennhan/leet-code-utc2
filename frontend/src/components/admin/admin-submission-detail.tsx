@@ -10,6 +10,7 @@ import { ErrorState } from "@/components/shared/page-state";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
+import { testcaseVerdict } from "@/lib/helpers/submission-status";
 import { getAdminSubmission, regradeAdminSubmission, saveAdminSubmission } from "@/lib/api/endpoints/admin-management";
 import { formatDeadline } from "@/lib/helpers/datetime";
 import { getErrorMessage } from "@/lib/helpers/error-message";
@@ -96,7 +97,7 @@ function SubmissionWorkspace({ submission }: { submission: Submission }) {
         <section className="space-y-3 rounded-xl border bg-card p-5">
           <h2 className="font-semibold">Dữ liệu testcase ({submission.testcases.length})</h2>
           <p className="text-xs text-muted-foreground">Kết quả tổng hợp: {submission.passed_count}/{submission.total_testcases} testcase đạt.</p>
-          {submission.testcases.map((testcase, index) => <details key={testcase.id} className="rounded-lg border p-3"><summary className="cursor-pointer text-sm font-medium">Test #{index + 1} {testcase.is_sample && "· Mẫu"}</summary><div className="mt-3 grid gap-3 sm:grid-cols-2">
+          {submission.testcases.map((testcase, index) => <details key={testcase.id} className="rounded-lg border p-3"><summary className="cursor-pointer text-sm font-medium">Test #{index + 1} {testcase.is_sample && "· Mẫu"} · <span className={testcaseVerdict(testcase.status).tone === "pass" ? "text-emerald-600 dark:text-emerald-400" : testcaseVerdict(testcase.status).tone === "fail" ? "text-red-600 dark:text-red-400" : "text-muted-foreground"}>{testcaseVerdict(testcase.status).label}</span></summary><div className="mt-3 grid gap-3 sm:grid-cols-2">
             <div><p className="mb-1 text-xs text-muted-foreground">Input</p><pre className="max-h-48 overflow-auto rounded bg-muted p-3 text-xs">{jsonText(testcase.input)}</pre></div>
             <div><p className="mb-1 text-xs text-muted-foreground">Kết quả mong đợi</p><pre className="max-h-48 overflow-auto rounded bg-muted p-3 text-xs">{jsonText(testcase.expected_output)}</pre></div>
           </div></details>)}

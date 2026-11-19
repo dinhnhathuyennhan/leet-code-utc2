@@ -55,6 +55,9 @@ export interface SubmissionTestcase {
   input: string;
   expected_output: string;
   is_sample: boolean;
+  /** Kết quả chấm thật của test này; null với bài nộp cũ (chưa lưu kết quả từng test). */
+  status?: string | null;
+  time?: number | null;
 }
 
 export interface SubmissionDetail {

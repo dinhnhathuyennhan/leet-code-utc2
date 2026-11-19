@@ -26,9 +26,12 @@ export interface AdminTestcase {
   is_sample: boolean;
   input_type: "json_args" | "stdin";
   expected_output_type: "json" | "stdout";
+  /** Chỉ có trong chi tiết bài nộp: kết quả chấm thật của test này. */
+  status?: string | null;
+  time?: number | null;
 }
 
-export type AdminTestcasePayload = Omit<AdminTestcase, "id">;
+export type AdminTestcasePayload = Omit<AdminTestcase, "id" | "status" | "time">;
 
 export interface AdminPreviewResult {
   status: string;

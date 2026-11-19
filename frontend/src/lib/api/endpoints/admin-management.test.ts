@@ -73,10 +73,10 @@ describe("Admin API contracts", () => {
 
   it("preserves null to remove a manual grade override", async () => {
     server.use(http.patch(`${API}/submissions/42`, async ({ request }) => {
-      expect(await request.json()).toEqual({ feedback: "Đã kiểm tra", status: "accepted", manual_score: null });
+      expect(await request.json()).toEqual({ feedback: "Đã kiểm tra", manual_score: null });
       return HttpResponse.json({ id: 42, manual_score: null });
     }));
-    expect(await saveAdminSubmission("42", { feedback: "Đã kiểm tra", status: "accepted", manual_score: null })).toMatchObject({ id: 42, manual_score: null });
+    expect(await saveAdminSubmission("42", { feedback: "Đã kiểm tra", manual_score: null })).toMatchObject({ id: 42, manual_score: null });
   });
 
   it("passes problem search and pagination to the existing endpoint", async () => {

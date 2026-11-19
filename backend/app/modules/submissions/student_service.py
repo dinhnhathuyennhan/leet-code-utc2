@@ -12,6 +12,7 @@ from sqlmodel import Session, select
 
 from app.core.dependencies import Role
 from app.core.exceptions import ForbiddenError, NotFoundError
+from app.modules.testcases.testcase_format import testcase_to_api_values
 from app.modules.submissions.schemas import (
     StudentSubmissionDetailResponse,
     StudentSubmissionListResponse,
@@ -109,11 +110,11 @@ def _build_student_detail(
         testcases=[
             StudentSubmissionTestcaseResponse(
                 id=testcase.testcase_id,
-                input=testcase.input,
-                expected_output=testcase.expected_output,
-                is_sample=testcase.is_sample,
+                **testcase_to_api_values(testcase),
+                is_sample=True,
             )
             for testcase in testcases
+            if testcase.is_sample
         ],
     )
 

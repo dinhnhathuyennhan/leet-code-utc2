@@ -29,6 +29,7 @@ import type { UserResponse } from "@/lib/api/types";
 
 interface LoginFormProps {
   onSuccess?: (user: UserResponse) => void;
+  onSubmittingChange?: (isSubmitting: boolean) => void;
 }
 
 const FormField = Controller;
@@ -84,7 +85,7 @@ function FormMessage({ name }: { name: string }) {
   ) : null;
 }
 
-export function LoginForm({ onSuccess }: LoginFormProps) {
+export function LoginForm({ onSuccess, onSubmittingChange }: LoginFormProps) {
   const { login } = useAuth();
   const { t, locale } = useLocale();
   const [connectionError, setConnectionError] = React.useState<string | null>(null);
@@ -105,6 +106,7 @@ export function LoginForm({ onSuccess }: LoginFormProps) {
 
   async function onSubmit(values: LoginFormValues) {
     setConnectionError(null);
+    onSubmittingChange?.(true);
     try {
       const user = await login({
         email: values.email,
@@ -134,6 +136,8 @@ export function LoginForm({ onSuccess }: LoginFormProps) {
 
       setConnectionError(t("error.generic"));
       toast.error(t("error.generic"));
+    } finally {
+      onSubmittingChange?.(false);
     }
   }
 

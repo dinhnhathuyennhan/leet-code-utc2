@@ -55,7 +55,8 @@ export function CourseStudentsTable({
   const [open, setOpen] = useState(false);
   const [mode, setMode] = useState<"class" | "individual">("class");
   const [query, setQuery] = useState("");
-  const [studentId, setStudentId] = useState("");
+  /** MSSV (mã sinh viên 10 chữ số) — KHÔNG phải UUID `user_id`. */
+  const [studentCode, setStudentCode] = useState("");
   const [classId, setClassId] = useState("");
   const classes = useClasses(open && mode === "class");
   const classStudents = useClassStudents(classId, open && mode === "class");
@@ -122,7 +123,7 @@ export function CourseStudentsTable({
         const result = await addClassToCourse(courseId, classId);
         toast.success(`Đã thêm ${result.added_count} sinh viên.`);
       } else {
-        await addStudentToCourse(courseId, studentId.trim());
+        await addStudentToCourse(courseId, null, studentCode.trim());
         toast.success("Đã thêm sinh viên.");
       }
       await refresh();
@@ -284,22 +285,18 @@ export function CourseStudentsTable({
                   </>
                 ) : (
                   <Input
-                    value={studentId}
-                    onChange={(e) => setStudentId(e.target.value)}
-                    placeholder="MSSV"
+                    value={studentCode}
+                    onChange={(e) => setStudentCode(e.target.value.replace(/\D/g, ""))}
+                    inputMode="numeric"
+                    maxLength={10}
+                    placeholder="MSSV (10 chữ số)"
+                    aria-label="MSSV sinh viên"
                   />
                 )}
               </div>
               <div className="flex justify-end">
                 <Button
-                  disabled={
-                    adding ||
-                    (mode === "class"
-                      ? !classId ||
-                        classStudents.isPending ||
-                        !candidates.length
-                      : !studentId.trim())
-                  }
+                  disabled={adding || (mode === "class" ? !classId || classStudents.isPending || !candidates.length : !/^\d{10}$/.test(studentCode.trim()))}
                   onClick={() => void add()}
                   className="bg-[#34227a] text-white"
                 >

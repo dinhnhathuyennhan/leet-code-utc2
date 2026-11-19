@@ -33,8 +33,8 @@ export const createAdminClass = (data: Pick<AdminClass, "type" | "course_number"
 export const deleteAdminClass = (id: string) => request<void>({ method: "DELETE", url: `/classes/${segment(id)}` });
 
 export const getAdminEnrollments = (id: string) => request<AdminEnrollment[]>({ url: `${adminCourseUrl(id)}/enrollments` });
-export const addAdminEnrollment = (id: string, studentId: string) =>
-  request<AdminEnrollment>({ method: "POST", url: `${adminCourseUrl(id)}/enrollments`, data: { student_id: studentId } });
+export const addAdminEnrollment = (id: string, studentCode: string) =>
+  request<AdminEnrollment>({ method: "POST", url: `${adminCourseUrl(id)}/enrollments`, data: { student_code: studentCode } });
 export const addAdminClassEnrollment = (id: string, classId: string) =>
   request<{ added_count: number; skipped_count: number }>({ method: "POST", url: `${adminCourseUrl(id)}/enrollments/class`, data: { class_id: classId } });
 export const deleteAdminEnrollment = (id: string, studentId: string) =>

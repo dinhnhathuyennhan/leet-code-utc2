@@ -139,7 +139,14 @@ class ClassResponse(BaseModel):
 
 
 class ClassStudentResponse(BaseModel):
+    """Một sinh viên thuộc lớp hành chính.
+
+    ``user_id`` là UUID (khoá/gọi API), ``student_code`` là MSSV (hiển thị cho
+    người dùng). Hai trường này KHÔNG được dùng lẫn nhau.
+    """
+
     user_id: str
+    student_code: str | None = None
     full_name: str
     email: AppEmailStr
     class_id: str | None

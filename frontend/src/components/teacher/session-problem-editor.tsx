@@ -23,6 +23,18 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 
+/** Ngôn ngữ giáo viên có thể soạn mẫu mã nguồn cho bài. */
+const STARTER_LANGUAGES = ["python", "c", "cpp", "java", "javascript"] as const;
+type StarterLanguage = (typeof STARTER_LANGUAGES)[number];
+
+const STARTER_LABELS: Record<StarterLanguage, string> = {
+  python: "Python",
+  c: "C",
+  cpp: "C++",
+  java: "Java",
+  javascript: "JavaScript",
+};
+
 interface Props {
   courseId: string;
   sessionId: string;
@@ -50,6 +62,14 @@ type Draft = Pick<
 };
 
 function toDraft(exercise: SessionExercise): Draft {
+  // `starter_code` legacy chính là mẫu Python; gộp vào `starter_codes` để
+  // giáo viên soạn mẫu cho đủ 5 ngôn ngữ trong cùng một khối.
+  const starterCodes: Record<string, string> = {
+    ...(exercise.starter_codes ?? {}),
+  };
+  if (!starterCodes.python && exercise.starter_code) {
+    starterCodes.python = exercise.starter_code;
+  }
   return {
     title: exercise.title,
     description: exercise.description,
@@ -57,7 +77,7 @@ function toDraft(exercise: SessionExercise): Draft {
     level: exercise.level,
     time_limit_seconds: exercise.time_limit_seconds,
     starter_code: exercise.starter_code,
-    starter_codes: exercise.starter_codes,
+    starter_codes: starterCodes,
     function_name: exercise.function_name,
     hint: exercise.hint ?? "",
     complexity: exercise.complexity ?? "",
@@ -82,6 +102,10 @@ export function SessionProblemEditor({
   lessonEndDate,
 }: Props) {
   const [draft, setDraft] = useState<Draft>(() => toDraft(exercise));
+  /** Ngôn ngữ đang soạn mã mẫu. */
+  const [starterLanguage, setStarterLanguage] = useState<StarterLanguage>(
+    "python",
+  );
   const [saving, setSaving] = useState(false);
   const [readingFile, setReadingFile] = useState(false);
   const [errors, setErrors] = useState<string[]>([]);
@@ -248,6 +272,13 @@ export function SessionProblemEditor({
     }
     setErrors(nextErrors);
     if (nextErrors.length) return;
+    // Chỉ gửi mẫu của ngôn ngữ có nội dung; ngôn ngữ trống sẽ bị backend xoá.
+    const starterCodes = Object.fromEntries(
+      STARTER_LANGUAGES.map((language) => [
+        language,
+        (draft.starter_codes?.[language] ?? "").trim(),
+      ]).filter(([, code]) => code.length > 0),
+    );
     const payload: ProblemUpdateRequest = {
       title: draft.title.trim(),
       description: draft.description,
@@ -261,6 +292,7 @@ export function SessionProblemEditor({
         : {
             time_limit_seconds: Number(draft.time_limit_seconds),
             starter_code: draft.starter_code,
+            starter_codes: starterCodes,
             testcases,
           }),
     };
@@ -543,15 +575,56 @@ export function SessionProblemEditor({
           />
         </label>
       </div>
-      <label className="block space-y-1 text-xs font-semibold">
-        Mã nguồn khởi tạo
+      {/* ── Mã nguồn khởi tạo theo ngôn ngữ ────────────────────────────── */}
+      <div className="space-y-2">
+        <div className="flex flex-wrap items-center gap-2">
+          <span className="text-xs font-semibold">Mã nguồn khởi tạo</span>
+          <div className="flex flex-wrap gap-1">
+            {STARTER_LANGUAGES.map((language) => {
+              const active = starterLanguage === language;
+              const hasCode = Boolean(draft.starter_codes?.[language]?.trim());
+              return (
+                <Button
+                  key={language}
+                  type="button"
+                  size="xs"
+                  variant={active ? "default" : "outline"}
+                  aria-pressed={active}
+                  onClick={() => setStarterLanguage(language)}
+                >
+                  {STARTER_LABELS[language]}
+                  {hasCode ? " ✓" : ""}
+                </Button>
+              );
+            })}
+          </div>
+          <span className="text-xs text-muted-foreground">
+            Ngôn ngữ không có mẫu sẽ không được hiển thị cho sinh viên.
+          </span>
+        </div>
         <textarea
           disabled={hasSubmissions}
-          value={draft.starter_code}
-          onChange={(event) => setField("starter_code", event.target.value)}
-          className="min-h-[320px] w-full resize-y rounded-lg border bg-slate-900 p-4 font-mono text-sm leading-6 text-white"
+          value={draft.starter_codes?.[starterLanguage] ?? ""}
+          onChange={(event) =>
+            setDraft((current) => {
+              const starterCodes = {
+                ...current.starter_codes,
+                [starterLanguage]: event.target.value,
+              };
+              return {
+                ...current,
+                starter_codes: starterCodes,
+                // `starter_code` là cột legacy chứa mẫu Python — giữ đồng bộ.
+                ...(starterLanguage === "python"
+                  ? { starter_code: event.target.value }
+                  : {}),
+              };
+            })
+          }
+          placeholder={`Mẫu mã nguồn cho ${STARTER_LABELS[starterLanguage]}`}
+          className="min-h-[280px] w-full resize-y rounded-lg border bg-slate-900 p-4 font-mono text-sm leading-6 text-white"
         />
-      </label>
+      </div>
       {hasSubmissions && (
         <p className="rounded-lg bg-amber-50 p-3 text-xs text-amber-800">
           Bài đã có bài nộp: không thể thêm, sửa, xóa hoặc đánh dấu mẫu

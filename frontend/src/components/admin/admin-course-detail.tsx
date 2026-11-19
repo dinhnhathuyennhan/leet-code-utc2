@@ -122,7 +122,8 @@ function EnrollmentForm({ id, onClose }: { id: string; onClose: () => void }) {
   const client = useQueryClient();
   const classes = useAdminClasses();
   const [mode, setMode] = useState("student");
-  const [studentId, setStudentId] = useState("");
+  /** MSSV (mã sinh viên 10 chữ số) — KHÔNG phải UUID `user_id`. */
+  const [studentCode, setStudentCode] = useState("");
   const [classId, setClassId] = useState("");
   const [busy, setBusy] = useState(false);
   async function submit(event: React.FormEvent) {
@@ -133,18 +134,18 @@ function EnrollmentForm({ id, onClose }: { id: string; onClose: () => void }) {
       if (mode === "class") {
         const result = await addAdminClassEnrollment(id, classId);
         toast.success(`Đã thêm ${result.added_count} sinh viên, bỏ qua ${result.skipped_count} sinh viên đã có trong lớp.`);
-      } else { await addAdminEnrollment(id, studentId.trim()); toast.success("Đã thêm sinh viên vào lớp học phần."); }
+      } else { await addAdminEnrollment(id, studentCode.trim()); toast.success("Đã thêm sinh viên vào lớp học phần."); }
       await client.invalidateQueries({ queryKey: adminKeys.all }); onClose();
     } catch (error) { toast.error(getErrorMessage(error)); } finally { setBusy(false); }
   }
   return <AdminDialog open title="Thêm sinh viên vào lớp học phần" description="Thêm một sinh viên hoặc toàn bộ sinh viên của một lớp hành chính." onClose={onClose} busy={busy}>
     <form onSubmit={(event) => void submit(event)} className="space-y-4">
       <div className="flex gap-2"><Button type="button" variant={mode === "student" ? "secondary" : "outline"} disabled={busy} onClick={() => setMode("student")}>Theo MSSV</Button><Button type="button" variant={mode === "class" ? "secondary" : "outline"} disabled={busy} onClick={() => setMode("class")}>Theo lớp hành chính</Button></div>
-      {mode === "student" ? <label className="block space-y-2 text-sm font-medium">MSSV<Input value={studentId} onChange={(event) => setStudentId(event.target.value.replace(/\D/g, ""))} inputMode="numeric" maxLength={10} placeholder="10 chữ số" required disabled={busy} /></label> : <>
+      {mode === "student" ? <label className="block space-y-2 text-sm font-medium">MSSV<Input value={studentCode} onChange={(event) => setStudentCode(event.target.value.replace(/\D/g, ""))} inputMode="numeric" maxLength={10} placeholder="10 chữ số" required disabled={busy} /></label> : <>
         <label className="block space-y-2 text-sm font-medium">Lớp hành chính<select className={`${ADMIN_SELECT} w-full`} value={classId} onChange={(event) => setClassId(event.target.value)} required disabled={busy || classes.isPending}><option value="">Chọn lớp</option>{classes.data?.map((item) => <option key={item.class_id} value={item.class_id}>{item.class_id} · {item.student_count} sinh viên</option>)}</select></label>
         {classes.error && <ErrorState error={classes.error} onRetry={() => void classes.refetch()} />}
       </>}
-      <div className="flex justify-end gap-2"><Button type="button" variant="outline" disabled={busy} onClick={onClose}>Hủy</Button><Button type="submit" disabled={busy || (mode === "student" ? !/^\d{10}$/.test(studentId) : !classId)} className={ADMIN_PRIMARY}>{busy ? "Đang thêm..." : "Thêm vào lớp"}</Button></div>
+      <div className="flex justify-end gap-2"><Button type="button" variant="outline" disabled={busy} onClick={onClose}>Hủy</Button><Button type="submit" disabled={busy || (mode === "student" ? !/^\d{10}$/.test(studentCode) : !classId)} className={ADMIN_PRIMARY}>{busy ? "Đang thêm..." : "Thêm vào lớp"}</Button></div>
     </form>
   </AdminDialog>;
 }

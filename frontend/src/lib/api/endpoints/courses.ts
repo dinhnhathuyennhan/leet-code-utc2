@@ -601,3 +601,17 @@ export async function reorderLessons(
     throw wrapAxiosError(error);
   }
 }
+
+/**
+ * Xoá lớp học phần (Admin hoặc giáo viên chủ lớp).
+ *
+ * Backend xoá kèm buổi học, bài tập trong lớp, testcase và ghi danh; trả 409
+ * nếu lớp đã có bài nộp của sinh viên.
+ */
+export async function deleteCourse(courseId: string): Promise<void> {
+  try {
+    await axiosInstance.delete(`/courses/${courseId}`);
+  } catch (error) {
+    throw wrapAxiosError(error);
+  }
+}

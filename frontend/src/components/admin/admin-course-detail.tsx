@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { ArrowLeft, CalendarDays, Download, Pencil, Plus, Search, Users } from "lucide-react";
@@ -15,6 +16,7 @@ import { Input } from "@/components/ui/input";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { addAdminClassEnrollment, addAdminEnrollment, deleteAdminEnrollment, getAdminEnrollments, saveAdminLesson } from "@/lib/api/endpoints/admin-management";
 import { toCourseDetail } from "@/lib/api/transformers/course";
+import { deleteCourse } from "@/lib/api/endpoints/courses";
 import { formatDeadline, toDateInput } from "@/lib/helpers/datetime";
 import { downloadCsv } from "@/lib/helpers/download";
 import { getErrorMessage } from "@/lib/helpers/error-message";
@@ -28,6 +30,8 @@ export function AdminCourseDetail({ id }: { id: string }) {
   const query = useAdminCourse(id);
   const [tab, setTab] = useState<CourseTab>("sessions");
   const [courseEditor, setCourseEditor] = useState(false);
+  const router = useRouter();
+  const client = useQueryClient();
   const [lessonEditor, setLessonEditor] = useState<CourseSession | "new" | null>(null);
   useBreadcrumbLabels(query.data?.course_id ?? id, null);
   if (query.isPending) return <AdminLoading />;
@@ -36,7 +40,7 @@ export function AdminCourseDetail({ id }: { id: string }) {
   const detail = toCourseDetail(course);
   return <div className="space-y-6">
     <Link href="/admin/courses" className="inline-flex items-center gap-2 text-sm text-indigo-700 dark:text-indigo-300"><ArrowLeft className="size-4" />Lớp học phần</Link>
-    <CourseHeaderCard course={detail} onCreateSession={() => setLessonEditor("new")} onEditCourse={() => setCourseEditor(true)} />
+    <CourseHeaderCard course={detail} onCreateSession={() => setLessonEditor("new")} onEditCourse={() => setCourseEditor(true)} onDeleteCourse={async () => { await deleteCourse(course.course_id); await client.invalidateQueries({ queryKey: adminKeys.all }); toast.success("Đã xoá lớp học phần."); router.push("/admin/courses"); }} />
     <p className="text-sm text-muted-foreground">Người tạo: <strong>{course.teacher_name || course.created_by}</strong> · Học kỳ: {course.term}</p>
     <CourseDetailTabs value={tab} onValueChange={setTab}
       sessions={<div className="space-y-4">

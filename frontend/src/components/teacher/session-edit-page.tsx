@@ -800,7 +800,7 @@ export function SessionEditPage({
           icon={<Clock3 />}
           label="ĐIỂM TỔNG BUỔI HỌC"
           value="Theo testcase"
-          hint="Database chưa có cột điểm tối đa"
+          hint="Mỗi bài thang 10, tính theo tỉ lệ testcase đạt"
         />
         <InfoCard
           icon={<Check />}
@@ -877,7 +877,7 @@ export function SessionEditPage({
             </label>
           </div>
           <div className="rounded-lg bg-indigo-50 p-3 text-xs text-muted-foreground">
-            Thời gian và trạng thái được lấy từ Lesson trong database.
+            Thời gian mở và hạn nộp của mọi bài tập trong buổi đi theo buổi học.
           </div>
           <div className="rounded-lg bg-red-50 p-3 text-xs leading-5 text-red-700">
             Các thay đổi về thời gian sẽ áp dụng cho tất cả sinh viên sau khi

@@ -139,7 +139,7 @@ export interface StudentSearchResult {
   /** UUID `user_id` — chỉ dùng làm khoá/gọi API, không hiển thị. */
   user_id: string;
   /** MSSV hiển thị cho người dùng. */
-  student_code?: string | null;
+  student_code: string | null;
   full_name: string;
   email: string;
   class_id: string | null;
@@ -165,7 +165,7 @@ export interface CourseStudent {
   /** UUID `user_id` — chỉ dùng làm khoá/gọi API, không hiển thị. */
   student_id: string;
   /** MSSV hiển thị cho người dùng (mã sinh viên 10 chữ số). */
-  student_code?: string | null;
+  student_code: string | null;
   full_name: string;
   email: string;
   submitted_lessons: number;

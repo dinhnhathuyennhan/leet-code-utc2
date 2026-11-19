@@ -18,11 +18,17 @@ export function SessionDeadlineAlert({ alert, status, listHref }: Props) {
   return (
     <section
       className={`flex flex-wrap items-center justify-between gap-4 rounded-2xl border p-5 shadow-xs ${
-        open ? "border-amber-200 bg-[#fefce8] dark:border-amber-500/30 dark:bg-amber-500/10" : "bg-card"
+        open
+          ? "border-amber-200 bg-[#fefce8] dark:border-amber-500/30 dark:bg-amber-500/10"
+          : "bg-card"
       }`}
     >
       <div className="flex items-center gap-4">
-        <div className={`flex size-12 shrink-0 items-center justify-center rounded-xl text-white shadow-sm ${open ? "bg-red-600" : "bg-slate-500"}`}>
+        <div
+          className={`flex size-12 shrink-0 items-center justify-center rounded-xl text-white shadow-sm ${
+            open ? "bg-red-600" : "bg-slate-500"
+          }`}
+        >
           <Bell className="size-6" />
         </div>
         <div>
@@ -32,17 +38,16 @@ export function SessionDeadlineAlert({ alert, status, listHref }: Props) {
           <p className="text-sm text-slate-700 dark:text-slate-300">
             <strong>{alert.missing_students} sinh viên</strong>{" "}
             {open
-              ? `chưa nộp bài ${alert.problem_name ?? ""}. Hạn chót đóng hệ thống tự động vào ${alert.deadline_text ?? ""}.`
+              ? `chưa nộp bài ${alert.problem_name ?? ""}. Hạn chót đóng hệ thống tự động vào ${
+                  alert.deadline_text ?? ""
+                }.`
               : "không nộp bài trong thời hạn."}
           </p>
         </div>
       </div>
-
-      <div className="flex flex-wrap items-center gap-3">
-        <Button asChild variant="outline" className="h-10 bg-white font-semibold dark:bg-slate-800">
-          <Link href={listHref}>Xem danh sách {alert.missing_students} SV</Link>
-        </Button>
-      </div>
+      <Button asChild variant="outline" className="h-10 bg-white font-semibold dark:bg-slate-800">
+        <Link href={listHref}>Xem danh sách {alert.missing_students} SV</Link>
+      </Button>
     </section>
   );
 }

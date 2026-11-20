@@ -308,13 +308,24 @@ def submit(
     return submission
 
 
+class _SubmissionDeleted(Exception):
+    """Bài nộp bị xoá (admin xoá khoá học) trong lúc đang chấm; dừng chấm, không retry."""
+
+
 def _save_tokens(submission_id: int, tokens: list[str]) -> None:
     with Session(engine) as session:
         submission = session.get(Submission, submission_id)
         if submission is not None:
             submission.judge_tokens = tokens
             session.add(submission)
-            session.commit()
+            try:
+                session.commit()
+            except StaleDataError:
+                session.rollback()
+                logger.info(
+                    "Bài nộp %s đã bị xoá trong lúc lưu token chấm, bỏ qua kết quả", submission_id
+                )
+                raise _SubmissionDeleted from None
 
 
 SKIPPED_STATUS = "skipped"
@@ -391,7 +402,14 @@ def grade_submission(submission_id: int) -> None:
             return
         submission.status = "processing"
         session.add(submission)
-        session.commit()
+        try:
+            session.commit()
+        except StaleDataError:
+            session.rollback()
+            logger.info(
+                "Bài nộp %s đã bị xoá trước khi bắt đầu chấm, bỏ qua kết quả", submission_id
+            )
+            return
         session.refresh(submission)
 
         problem = session.get(Problem, submission.problem_id)
@@ -424,6 +442,8 @@ def grade_submission(submission_id: int) -> None:
             passed_count = statuses.count("accepted")
             compile_output = _compile_output_of(judged)
             results = _testcase_results(problem, data.language, testcases, judged)
+        except _SubmissionDeleted:
+            return
         except Judge0Error:
             logger.warning("Judge0 không khả dụng khi chấm, submission_id=%s", submission_id)
             if now_utc() - submitted_at > PENDING_TTL:

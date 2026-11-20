@@ -16,6 +16,7 @@ from app.modules.users.service import (
     create_teacher,
     reset_password, list_users,
     _ensure_can_manage_account,
+    user_response,
 )
 from app.models import Class, Course, Enrollment, User
 
@@ -717,3 +718,34 @@ def test_list_users_class_id_only_exposed_for_students(session):
     assert teachers[0].class_id is None
 
 # endregion
+
+
+# --- is_active ---------------------------------------------------------------
+
+
+def test_new_user_is_active_by_default(session):
+    user = _make_user(session, "active1", "active1@example.com", Role.TEACHER)
+
+    assert user.is_active is True
+
+
+def test_user_response_exposes_is_active(session):
+    user = _make_user(session, "active2", "active2@example.com", Role.TEACHER)
+    assert user_response(user).is_active is True
+
+    user.is_active = False
+    assert user_response(user).is_active is False
+
+
+def test_list_users_items_include_is_active(session):
+    admin = _make_listed_user(session, "admin1", Role.ADMIN)
+    locked = _make_listed_user(session, "teacher1", Role.TEACHER)
+    locked.is_active = False
+    session.add(locked)
+    session.commit()
+
+    result = _call(session, admin, role_id=Role.TEACHER)
+
+    assert [(i.user_id, i.is_active) for i in result.items] == [
+        (str(locked.user_id), False)
+    ]

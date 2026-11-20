@@ -93,6 +93,7 @@ def user_response(user: User) -> UserResponse:
         role_id=user.role_id,
         student_code=user.student_code if user.role_id == Role.STUDENT else None,
         class_id=user.class_id if user.role_id == Role.STUDENT else None,
+        is_active=user.is_active,
     )
 
 

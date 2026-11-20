@@ -198,5 +198,7 @@ class TestListEnrollmentsRoute:
                 "student_code": student.student_code,
                 "full_name": student.full_name,
                 "email": student.email,
+                "class_id": None,
+                "is_active": True,
             }
         ]

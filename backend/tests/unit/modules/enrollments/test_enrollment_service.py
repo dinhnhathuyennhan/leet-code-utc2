@@ -386,3 +386,36 @@ class TestGetCourseEnrollments:
         result = get_course_enrollments(session, course.course_id, owner_teacher)
 
         assert result == []
+
+
+class TestEnrollmentListStatusFields:
+    # admin/teacher thấy class_id và is_active của sinh viên
+    @pytest.mark.parametrize("caller_fixture", ["admin", "owner_teacher"])
+    def test_admin_and_teacher_see_class_id_and_is_active(
+        self, request, session, course, student, caller_fixture
+    ):
+        caller = request.getfixturevalue(caller_fixture)
+        student.class_id = "CQ.64.CNTT"
+        student.is_active = False
+        session.add(student)
+        session.commit()
+        enroll_directly(session, course, student)
+
+        result = get_course_enrollments(session, course.course_id, caller)
+
+        assert result[0].class_id == "CQ.64.CNTT"
+        assert result[0].is_active is False
+
+    # sinh viên xem bạn cùng lớp không thấy class_id/is_active
+    def test_student_does_not_see_class_id_or_is_active(
+        self, session, course, student
+    ):
+        student.class_id = "CQ.64.CNTT"
+        session.add(student)
+        session.commit()
+        enroll_directly(session, course, student)
+
+        result = get_course_enrollments(session, course.course_id, student)
+
+        assert result[0].class_id is None
+        assert result[0].is_active is None

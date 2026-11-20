@@ -1,7 +1,7 @@
 import uuid
 from datetime import date, datetime
 
-from sqlalchemy import JSON, UniqueConstraint
+from sqlalchemy import JSON, UniqueConstraint, true
 from sqlmodel import Field, Relationship, SQLModel
 
 from app.core.utils.datetime_utils import UTCDateTime
@@ -29,6 +29,7 @@ class User(SQLModel, table=True):
     must_change_password: bool = Field(default=False)
     role_id: int  # 1: admin, 2: teacher, 3: student (tùy quy ước của bạn)
     token_version: int = Field(default=0)
+    is_active: bool = Field(default=True, sa_column_kwargs={"server_default": true()})
     class_id: str | None = Field(
         default=None, foreign_key="class.class_id", max_length=50
     )

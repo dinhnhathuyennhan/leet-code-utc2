@@ -51,3 +51,5 @@ class GetStudentListResponse(BaseModel):
     student_code: str | None = None     # MSSV (User.student_code)
     full_name: str
     email: AppEmailStr
+    class_id: str | None = None         # chỉ Admin/Teacher thấy
+    is_active: bool | None = None       # chỉ Admin/Teacher thấy

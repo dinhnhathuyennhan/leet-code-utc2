@@ -33,6 +33,8 @@ def get_course_enrollments(
         .where(Enrollment.course_id == course_id)
     )
     enrollments = session.exec(statement).all()
+    # Whitelist: chỉ Admin/Teacher thấy lớp hành chính và trạng thái khoá
+    can_see_status = current_user.role_id in (Role.ADMIN, Role.TEACHER)
     return [
         GetStudentListResponse(
             enrollment_id=enrollment.enrollment_id,
@@ -40,6 +42,8 @@ def get_course_enrollments(
             student_code=student.student_code,
             full_name=student.full_name,
             email=student.email,
+            class_id=student.class_id if can_see_status else None,
+            is_active=student.is_active if can_see_status else None,
         )
         for enrollment, student in enrollments
     ]

@@ -70,6 +70,7 @@ class UserResponse(BaseModel):
     role_id: int
     student_code: str | None = None
     class_id: str | None = None
+    is_active: bool
 
 
 class UserListResponse(BaseModel):

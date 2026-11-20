@@ -2,15 +2,20 @@
 
 Lớp hành chính còn được tự tạo khi import sinh viên
 (``student_service._create_missing_classes``). Các hàm ở đây phục vụ
-tạo/xem/xoá lớp bằng tay qua ``/classes``.
+tạo/xem/đổi mã/xoá lớp bằng tay qua ``/classes``.
 """
 
 from sqlalchemy.exc import IntegrityError
-from sqlmodel import Session, delete, func, select
+from sqlmodel import Session, delete, func, select, update
 
 from app.core.exceptions import ConflictError, NotFoundError
 from app.core.dependencies import Role
-from app.modules.classrooms.schemas import ClassResponse, ClassStudentResponse, CreateClassRequest
+from app.modules.classrooms.schemas import (
+    ClassResponse,
+    ClassStudentResponse,
+    CreateClassRequest,
+    UpdateClassRequest,
+)
 from app.models import Class, User
 
 
@@ -72,6 +77,51 @@ def delete_class(session: Session, class_id: str) -> None:
         raise ConflictError(
             f"Lớp {class_id} đang có sinh viên, không thể xóa"
         ) from err
+
+
+def update_class(session: Session, class_id: str, data: UpdateClassRequest) -> ClassResponse:
+    """Đổi mã lớp: mã lớp là khoá chính nên phải tạo lớp mới, chuyển sinh viên, xoá lớp cũ.
+
+    Khoá ngoại ``user.class_id`` không có ON UPDATE CASCADE nên thứ tự bắt buộc là
+    thêm lớp mới trước, rồi chuyển sinh viên, rồi mới xoá lớp cũ. Tất cả nằm trong
+    một giao dịch: lỗi ở bước nào thì rollback, DB giữ nguyên như trước.
+    """
+    if session.get(Class, class_id) is None:
+        raise NotFoundError(f"Không tìm thấy lớp {class_id}")
+
+    new_id = data.class_id
+    if new_id == class_id:
+        return get_class(session, class_id)
+    if session.get(Class, new_id) is not None:
+        raise ConflictError(f"Lớp {new_id} đã tồn tại")
+
+    session.add(
+        Class(
+            class_id=new_id,
+            type=data.type,
+            course_number=data.course_number,
+            department=data.department,
+        )
+    )
+    try:
+        session.flush()
+    except IntegrityError as err:
+        # request khác vừa tạo đúng mã lớp mới này
+        session.rollback()
+        raise ConflictError(f"Lớp {new_id} đã tồn tại") from err
+
+    try:
+        session.exec(update(User).where(User.class_id == class_id).values(class_id=new_id))
+        # DELETE trực tiếp (không session.delete()) để khoá ngoại chặn nếu lớp cũ
+        # vừa nhận thêm sinh viên sau câu UPDATE ở trên
+        session.exec(delete(Class).where(Class.class_id == class_id))
+        session.commit()
+    except IntegrityError as err:
+        session.rollback()
+        raise ConflictError(
+            f"Lớp {class_id} vừa có sinh viên mới, vui lòng thử lại"
+        ) from err
+    return get_class(session, new_id)
 
 
 def _class_with_student_count():

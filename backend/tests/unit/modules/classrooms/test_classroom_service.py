@@ -10,18 +10,20 @@ import uuid
 
 import pytest
 from sqlalchemy import event
+from sqlalchemy.exc import IntegrityError
 from sqlmodel import Session, SQLModel, create_engine, select
 from sqlmodel.pool import StaticPool
 
 from app.core.exceptions import ConflictError, NotFoundError
 from app.core.dependencies import Role
-from app.modules.classrooms.schemas import ClassResponse, CreateClassRequest
+from app.modules.classrooms.schemas import ClassResponse, CreateClassRequest, UpdateClassRequest
 from app.modules.classrooms import service as classroom_service
 from app.modules.classrooms.service import (
     create_class,
     delete_class,
     get_class,
     list_classes,
+    update_class,
 )
 from app.models import Class, User
 
@@ -271,3 +273,194 @@ def test_delete_class_never_touches_students_of_other_classes(fk_session):
 
     assert fk_session.get(User, student.user_id).class_id == "CQ.68.CNTT"
     assert [c.class_id for c in list_classes(fk_session)] == ["CQ.68.CNTT"]
+
+
+# ---------- update_class ----------
+
+
+def _update_request(class_type="CQ", course_number=68, department="CNTT") -> UpdateClassRequest:
+    return UpdateClassRequest(
+        type=class_type, course_number=course_number, department=department
+    )
+
+
+def test_update_class_moves_students_and_removes_old_code(fk_session):
+    _add_class(fk_session)
+    sv1 = _add_user(fk_session, "sv1", "CQ.67.CNTT")
+    sv2 = _add_user(fk_session, "sv2", "CQ.67.CNTT")
+
+    result = update_class(fk_session, "CQ.67.CNTT", _update_request("CQ", 68, "KTXDCTGT.2"))
+
+    assert result == ClassResponse(
+        class_id="CQ.68.KTXDCTGT.2",
+        type="CQ",
+        course_number=68,
+        department="KTXDCTGT.2",
+        student_count=2,
+    )
+    fk_session.expire_all()
+    assert fk_session.get(Class, "CQ.67.CNTT") is None
+    assert fk_session.get(User, sv1.user_id).class_id == "CQ.68.KTXDCTGT.2"
+    assert fk_session.get(User, sv2.user_id).class_id == "CQ.68.KTXDCTGT.2"
+
+
+def test_update_class_without_students_renames(fk_session):
+    _add_class(fk_session)
+
+    result = update_class(fk_session, "CQ.67.CNTT", _update_request())
+
+    assert result.class_id == "CQ.68.CNTT"
+    assert result.student_count == 0
+    assert [c.class_id for c in list_classes(fk_session)] == ["CQ.68.CNTT"]
+
+
+def test_update_class_same_code_is_noop_with_count(fk_session):
+    _add_class(fk_session)
+    student = _add_user(fk_session, "sv1", "CQ.67.CNTT")
+
+    result = update_class(fk_session, "CQ.67.CNTT", _update_request("CQ", 67, "CNTT"))
+
+    assert result.class_id == "CQ.67.CNTT"
+    assert result.student_count == 1
+    assert fk_session.get(User, student.user_id).class_id == "CQ.67.CNTT"
+    assert len(fk_session.exec(select(Class)).all()) == 1
+
+
+def test_update_class_case_change_is_a_new_code(fk_session):
+    """Mã lớp phân biệt hoa/thường (xem ``CreateClassRequest``), nên đổi hoa/thường là đổi mã."""
+    _add_class(fk_session)
+    student = _add_user(fk_session, "sv1", "CQ.67.CNTT")
+
+    result = update_class(fk_session, "CQ.67.CNTT", _update_request("cq", 67, "CNTT"))
+
+    assert result.class_id == "cq.67.CNTT"
+    assert result.student_count == 1
+    fk_session.expire_all()
+    assert fk_session.get(User, student.user_id).class_id == "cq.67.CNTT"
+    assert fk_session.get(Class, "CQ.67.CNTT") is None
+
+
+def test_update_class_to_existing_code_conflict_leaves_everything(fk_session):
+    _add_class(fk_session, "CQ", 67, "CNTT")
+    _add_class(fk_session, "CQ", 68, "CNTT")
+    sv1 = _add_user(fk_session, "sv1", "CQ.67.CNTT")
+    sv2 = _add_user(fk_session, "sv2", "CQ.68.CNTT")
+
+    with pytest.raises(ConflictError, match=re.escape("Lớp CQ.68.CNTT đã tồn tại")):
+        update_class(fk_session, "CQ.67.CNTT", _update_request())
+
+    assert [(c.class_id, c.student_count) for c in list_classes(fk_session)] == [
+        ("CQ.67.CNTT", 1),
+        ("CQ.68.CNTT", 1),
+    ]
+    assert fk_session.get(User, sv1.user_id).class_id == "CQ.67.CNTT"
+    assert fk_session.get(User, sv2.user_id).class_id == "CQ.68.CNTT"
+
+
+def test_update_class_not_found(fk_session):
+    with pytest.raises(NotFoundError, match=re.escape("Không tìm thấy lớp CQ.67.CNTT")):
+        update_class(fk_session, "CQ.67.CNTT", _update_request())
+
+    assert list_classes(fk_session) == []
+
+
+def test_new_code_created_concurrently_conflict(fk_session, monkeypatch):
+    """Request khác vừa tạo mã mới: bước kiểm tra trượt, INSERT vấp khoá chính."""
+    _add_class(fk_session, "CQ", 67, "CNTT")
+    _add_class(fk_session, "CQ", 68, "CNTT")
+    student = _add_user(fk_session, "sv1", "CQ.67.CNTT")
+    real_get = fk_session.get
+
+    def get_missing_new_code(entity, ident, *args, **kwargs):
+        if ident == "CQ.68.CNTT":
+            return None
+        return real_get(entity, ident, *args, **kwargs)
+
+    monkeypatch.setattr(fk_session, "get", get_missing_new_code)
+
+    with pytest.raises(ConflictError, match=re.escape("Lớp CQ.68.CNTT đã tồn tại")):
+        update_class(fk_session, "CQ.67.CNTT", _update_request())
+
+    monkeypatch.undo()
+    assert [(c.class_id, c.student_count) for c in list_classes(fk_session)] == [
+        ("CQ.67.CNTT", 1),
+        ("CQ.68.CNTT", 0),
+    ]
+    assert fk_session.get(User, student.user_id).class_id == "CQ.67.CNTT"
+
+
+def test_student_added_to_old_class_midway_conflict_and_rolls_back(fk_session, monkeypatch):
+    """Có sinh viên vào lớp cũ ngay trước câu DELETE: FK chặn, rollback sạch.
+
+    Sinh viên mới được gán vào lớp cũ sau câu UPDATE nên không được chuyển
+    sang mã mới; DELETE lớp cũ vấp khoá ngoại → toàn bộ giao dịch bị huỷ.
+    """
+    _add_class(fk_session)
+    original = _add_user(fk_session, "sv1", "CQ.67.CNTT")
+    real_delete = classroom_service.delete
+
+    def delete_after_student_joins(*args, **kwargs):
+        fk_session.add(
+            User(
+                user_id=uuid.uuid4(),
+                student_code="6751070001",
+                full_name="Sinh viên mới",
+                email="6751070001@st.utc2.edu.vn",
+                hashed_password="placeholder",
+                role_id=Role.STUDENT,
+                class_id="CQ.67.CNTT",
+            )
+        )
+        fk_session.flush()
+        return real_delete(*args, **kwargs)
+
+    monkeypatch.setattr(classroom_service, "delete", delete_after_student_joins)
+
+    with pytest.raises(
+        ConflictError,
+        match=re.escape("Lớp CQ.67.CNTT vừa có sinh viên mới, vui lòng thử lại"),
+    ):
+        update_class(fk_session, "CQ.67.CNTT", _update_request())
+
+    monkeypatch.undo()
+    assert fk_session.get(Class, "CQ.68.CNTT") is None
+    assert fk_session.get(Class, "CQ.67.CNTT") is not None
+    assert fk_session.get(User, original.user_id).class_id == "CQ.67.CNTT"
+    assert get_class(fk_session, "CQ.67.CNTT").student_count == 1
+
+
+def test_update_class_delete_integrity_error_rolls_back(fk_session, monkeypatch):
+    """DELETE lớp cũ báo IntegrityError bất kỳ: DB giữ nguyên như trước."""
+    _add_class(fk_session)
+    student = _add_user(fk_session, "sv1", "CQ.67.CNTT")
+
+    def failing_delete(*args, **kwargs):
+        raise IntegrityError("DELETE", {}, Exception("fk"))
+
+    monkeypatch.setattr(classroom_service, "delete", failing_delete)
+
+    with pytest.raises(ConflictError, match="vừa có sinh viên mới"):
+        update_class(fk_session, "CQ.67.CNTT", _update_request())
+
+    monkeypatch.undo()
+    assert fk_session.get(Class, "CQ.68.CNTT") is None
+    assert fk_session.get(User, student.user_id).class_id == "CQ.67.CNTT"
+
+
+def test_update_class_never_touches_other_classes(fk_session):
+    _add_class(fk_session, "CQ", 67, "CNTT")
+    _add_class(fk_session, "CQ", 66, "CNTT")
+    moved = _add_user(fk_session, "sv1", "CQ.67.CNTT")
+    other = _add_user(fk_session, "sv2", "CQ.66.CNTT")
+    teacher = _add_user(fk_session, "gv1", None, role_id=Role.TEACHER)
+
+    update_class(fk_session, "CQ.67.CNTT", _update_request())
+
+    fk_session.expire_all()
+    assert fk_session.get(User, moved.user_id).class_id == "CQ.68.CNTT"
+    assert fk_session.get(User, other.user_id).class_id == "CQ.66.CNTT"
+    assert fk_session.get(User, teacher.user_id).class_id is None
+    assert [(c.class_id, c.student_count) for c in list_classes(fk_session)] == [
+        ("CQ.66.CNTT", 1),
+        ("CQ.68.CNTT", 1),
+    ]

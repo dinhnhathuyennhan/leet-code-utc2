@@ -15,6 +15,7 @@ from app.modules.classrooms.schemas import (
     CLASS_ID_MAX_LEN,
     ClassIdParts,
     CreateClassRequest,
+    UpdateClassRequest,
     build_class_id,
     parse_class_id,
 )
@@ -243,3 +244,40 @@ def test_create_request_class_id_exactly_max_length_is_valid():
     request = _request(department="X" * (CLASS_ID_MAX_LEN - 6))
 
     assert len(request.class_id) == CLASS_ID_MAX_LEN
+
+
+# ---------- UpdateClassRequest (body của PATCH /classes/{class_id}) ----------
+
+
+def test_update_request_builds_class_id():
+    request = UpdateClassRequest(type="CQ", course_number=68, department="KTXDCTGT.2")
+
+    assert request.class_id == "CQ.68.KTXDCTGT.2"
+
+
+def test_update_request_requires_all_three_parts():
+    with pytest.raises(ValidationError):
+        UpdateClassRequest(type="CQ", course_number=68)
+
+
+@pytest.mark.parametrize(
+    ("kwargs", "error", "message"),
+    [
+        ({"type": "   "}, EmptyFieldError, "Hệ đào tạo không được trống"),
+        ({"type": "C.Q"}, InvalidFormatError, "Hệ đào tạo chỉ được gồm chữ cái không dấu"),
+        ({"course_number": 0}, InvalidFormatError, "Khoá phải là số nguyên dương"),
+        ({"course_number": True}, InvalidFormatError, "Khoá phải là số nguyên dương"),
+        ({"department": ""}, EmptyFieldError, "Ngành không được trống"),
+        ({"department": "CNTT/1"}, InvalidFormatError, "Ngành chỉ được gồm chữ cái, chữ số"),
+        ({"department": ["CNTT"]}, InvalidFormatError, "Ngành phải là chuỗi"),
+        ({"department": "X" * 45}, InvalidFormatError, "không được dài quá 50 ký tự"),
+    ],
+)
+def test_update_request_reuses_create_validation(kwargs, error, message):
+    data = {"type": "CQ", "course_number": 67, "department": "CNTT", **kwargs}
+
+    with pytest.raises(error, match=message) as update_error:
+        UpdateClassRequest(**data)
+    with pytest.raises(error, match=message) as create_error:
+        CreateClassRequest(**data)
+    assert str(update_error.value) == str(create_error.value)

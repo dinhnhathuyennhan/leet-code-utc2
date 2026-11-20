@@ -281,13 +281,48 @@ def test_patch_teacher_outside_scope_returns_403(client, teacher, student):
     assert response.json() == NOT_ALLOWED
 
 
-def test_patch_admin_self_returns_403(client, admin):
+def test_patch_admin_self_returns_200(client, admin):
     _login_as(admin)
 
-    response = client.patch(f"/users/{admin.user_id}", json={"full_name": "X"})
+    response = client.patch(
+        f"/users/{admin.user_id}",
+        json={"full_name": "Quản trị viên", "email": "quantri@st.utc2.edu.vn"},
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["full_name"] == "Quản trị viên"
+    assert body["email"] == "quantri@st.utc2.edu.vn"
+    assert body["role_id"] == Role.ADMIN
+    assert "hashed_password" not in body
+
+
+def test_patch_admin_other_admin_returns_403(client, session, admin):
+    other_admin = _create_user(session, Role.ADMIN, "admin2")
+    _login_as(admin)
+
+    response = client.patch(f"/users/{other_admin.user_id}", json={"full_name": "X"})
 
     assert response.status_code == 403
     assert response.json() == NOT_ALLOWED
+
+
+def test_patch_teacher_self_returns_403(client, teacher):
+    _login_as(teacher)
+
+    response = client.patch(f"/users/{teacher.user_id}", json={"full_name": "X"})
+
+    assert response.status_code == 403
+    assert response.json() == NOT_ALLOWED
+
+
+def test_patch_student_self_returns_403(client, student):
+    _login_as(student)
+
+    response = client.patch(f"/users/{student.user_id}", json={"full_name": "X"})
+
+    assert response.status_code == 403
+    assert response.json()["error_code"] == "FORBIDDEN"
 
 
 def test_patch_requires_login_returns_401(client, student):

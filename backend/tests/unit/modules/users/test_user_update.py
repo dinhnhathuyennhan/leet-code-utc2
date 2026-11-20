@@ -264,13 +264,15 @@ def test_update_permission_matrix(session, admin, teacher, student):
 
     denied = [
         (admin, other_admin),
-        (admin, admin),
         (teacher, foreign_student),  # sinh viên của giáo viên khác
         (teacher, student),  # chưa ghi danh khoá nào của teacher
         (teacher, other_teacher),
         (teacher, admin),
+        (teacher, teacher),  # giáo viên không tự sửa tài khoản của mình
         (student_caller, student),
+        (student_caller, student_caller),  # sinh viên không tự sửa tài khoản của mình
         (unknown_caller, student),
+        (unknown_caller, unknown_caller),
     ]
     for caller, target in denied:
         name = target.full_name
@@ -278,6 +280,44 @@ def test_update_permission_matrix(session, admin, teacher, student):
             update_user(session, caller, target.user_id, data)
         session.refresh(target)
         assert target.full_name == name
+
+
+def test_admin_updates_own_name_and_email(session, admin):
+    updated = update_user(
+        session,
+        admin,
+        admin.user_id,
+        UpdateUserRequest(full_name="Quản trị viên", email="quantri@st.utc2.edu.vn"),
+    )
+
+    assert updated.full_name == "Quản trị viên"
+    assert updated.email == "quantri@st.utc2.edu.vn"
+    assert updated.role_id == Role.ADMIN
+    assert updated.token_version == 0
+
+
+@pytest.mark.parametrize("payload", [{"student_code": "6851071009"}, {"class_id": "CQ.67.CNTT"}])
+def test_admin_self_student_code_or_class_rejected(session, admin, payload):
+    with pytest.raises(FieldNotEditableError):
+        update_user(session, admin, admin.user_id, UpdateUserRequest(**payload))
+    session.refresh(admin)
+    assert admin.student_code is None
+    assert admin.class_id is None
+
+
+def test_admin_self_duplicate_email_conflict_leaves_admin_unchanged(session, admin):
+    taken = _user(session, Role.TEACHER, "gv2", email="gv2@st.utc2.edu.vn")
+
+    with pytest.raises(ConflictError, match="Email đã được đăng ký"):
+        update_user(
+            session,
+            admin,
+            admin.user_id,
+            UpdateUserRequest(full_name="Đổi tên", email=taken.email),
+        )
+    session.refresh(admin)
+    assert admin.full_name == "admin"
+    assert admin.email == "admin@example.com"
 
 
 @pytest.mark.parametrize("target_id", [uuid.uuid4(), "not-a-uuid"])

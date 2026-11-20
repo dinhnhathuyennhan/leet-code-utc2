@@ -307,9 +307,24 @@ def unlock_user(
 
 
 _EDITABLE_FIELDS = {
+    Role.ADMIN: {"full_name", "email"},  # chỉ áp dụng khi Admin tự sửa chính mình
     Role.TEACHER: {"full_name", "email"},
     Role.STUDENT: {"full_name", "student_code", "class_id"},
 }
+
+
+def _ensure_can_edit_account(session: Session, current_user: User, target: User) -> None:
+    """Quyền sửa thông tin tài khoản.
+
+    - ADMIN: sửa chính mình, và mọi Teacher/Student (không sửa Admin khác).
+    - TEACHER: chỉ sửa Student đang học khoá do mình tạo (không tự sửa mình).
+    - STUDENT và mọi vai trò khác: không sửa tài khoản nào, kể cả của mình.
+
+    Khác quyền khoá/mở khoá: Admin được tự sửa thông tin nhưng không được tự khoá mình.
+    """
+    if current_user.role_id == Role.ADMIN and target.user_id == current_user.user_id:
+        return
+    _ensure_can_manage_account(session, current_user, target)
 
 
 def _other_user_with(session: Session, target: User, *conditions) -> User | None:
@@ -324,12 +339,12 @@ def update_user(
     target_user_id: str | uuid.UUID,
     data: UpdateUserRequest,
 ) -> User:
-    """Sửa thông tin tài khoản. Quyền như lock/unlock; field cho phép theo vai trò đích.
+    """Sửa thông tin tài khoản. Quyền xem ``_ensure_can_edit_account``; field cho phép theo vai trò đích.
 
     Toàn bộ thay đổi được kiểm tra trước khi gán, nên lỗi không để lại thay đổi dở dang.
     """
     target = _get_user_or_404(session, target_user_id)
-    _ensure_can_manage_account(session, current_user, target)
+    _ensure_can_edit_account(session, current_user, target)
 
     changes = {
         key: value
@@ -341,7 +356,9 @@ def update_user(
         raise FieldNotEditableError(
             "Email sinh viên được tạo tự động theo MSSV, không thể sửa trực tiếp"
         )
-    if target.role_id == Role.TEACHER and ({"student_code", "class_id"} & changes.keys()):
+    if target.role_id in (Role.ADMIN, Role.TEACHER) and (
+        {"student_code", "class_id"} & changes.keys()
+    ):
         raise FieldNotEditableError(
             "Chỉ tài khoản sinh viên mới có mã sinh viên và lớp hành chính"
         )
@@ -360,7 +377,7 @@ def update_user(
         changes.pop("student_code", None)
 
     if (
-        target.role_id == Role.TEACHER
+        target.role_id in (Role.ADMIN, Role.TEACHER)
         and "email" in changes
         and _other_user_with(session, target, User.email == changes["email"])
     ):

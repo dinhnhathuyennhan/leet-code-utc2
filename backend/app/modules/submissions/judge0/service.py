@@ -6,6 +6,7 @@ from contextlib import contextmanager
 from datetime import timedelta
 from typing import Any
 
+from sqlalchemy.orm.exc import StaleDataError
 from sqlmodel import Session, func, select
 
 from app.core import config
@@ -434,12 +435,20 @@ def grade_submission(submission_id: int) -> None:
             status = "internal_error"
 
         submission = session.get(Submission, submission_id)
+        if submission is None:
+            logger.info("Bài nộp %s đã bị xoá trong lúc chấm, bỏ qua kết quả", submission_id)
+            return
         submission.status = status
         submission.passed_count = passed_count
         submission.compile_output = compile_output
         submission.testcase_results = results
         session.add(submission)
-        session.commit()
+        try:
+            session.commit()
+        except StaleDataError:
+            session.rollback()
+            logger.info("Bài nộp %s bị xoá trong lúc lưu kết quả chấm, bỏ qua", submission_id)
+            return
 
     if retry:
         grading_queue.enqueue(submission_id, GRADE_RETRY_DELAY_SECONDS)

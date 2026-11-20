@@ -1,6 +1,9 @@
 """Xoá lớp học phần: chỉ chủ lớp/Admin, chặn khi đã có bài nộp, giữ đề nguồn."""
 
+import logging
+
 import pytest
+from sqlalchemy import text
 from sqlmodel import Session, select
 
 from app.core.dependencies import Role
@@ -158,16 +161,77 @@ def test_owner_teacher_force_is_forbidden_and_keeps_data(session: Session, owner
     assert _count_submissions_in(session, [problem.problem_id]) == 2
 
 
-def test_unknown_role_force_is_forbidden(session: Session, course_with_content):
+@pytest.mark.parametrize("role_id", [Role.STUDENT, 99])
+def test_non_admin_non_teacher_force_is_forbidden(session: Session, course_with_content, role_id):
     _, _, problem, student, _ = course_with_content
     _two_submissions(session, problem, student)
-    stranger = make_user(session, "role_99", 99)
+    stranger = make_user(session, f"role_{role_id}", role_id)
 
     with pytest.raises(ForbiddenError):
         delete_course("DELC1", session, stranger, force=True)
 
     assert session.get(Course, "DELC1") is not None
     assert _count_submissions_in(session, [problem.problem_id]) == 2
+
+
+def test_force_delete_is_audit_logged(session: Session, course_with_content, caplog):
+    _, _, problem, student, _ = course_with_content
+    _two_submissions(session, problem, student)
+    admin = make_user(session, "admin_x", Role.ADMIN)
+
+    with caplog.at_level(logging.INFO, logger=course_service.logger.name):
+        delete_course("DELC1", session, admin, force=True)
+
+    messages = [r.getMessage() for r in caplog.records if r.levelno == logging.INFO]
+    assert f"Admin {admin.user_id} đã xoá cưỡng bức lớp DELC1 cùng 2 bài nộp" in messages
+
+
+def test_non_force_delete_is_not_audit_logged(session: Session, owner, course_with_content, caplog):
+    with caplog.at_level(logging.INFO, logger=course_service.logger.name):
+        delete_course("DELC1", session, owner)
+
+    assert not any("cưỡng bức" in r.getMessage() for r in caplog.records)
+
+
+def test_submission_arriving_during_force_delete_blocks_it(fk_session: Session, monkeypatch, caplog):
+    session = fk_session
+    owner = make_user(session, "teacher_owner", Role.TEACHER)
+    admin = make_user(session, "admin_x", Role.ADMIN)
+    course = make_course(session, owner, "DELC1")
+    problem = make_problem(session, make_lesson(session, course))
+    student = _student(session, "6451000001")
+    make_enrollment(session, course, student)
+    make_submission(session, problem, student)
+    session.commit()
+    problem_id, student_id = problem.problem_id, student.user_id
+
+    real_exec = session.exec
+
+    def exec_then_race(statement, *args, **kwargs):
+        result = real_exec(statement, *args, **kwargs)
+        if str(statement).startswith("DELETE FROM submission"):
+            # Bài nộp mới chen vào sau lúc xoá hàng loạt, trước khi xoá đề bài
+            session.execute(
+                text(
+                    "INSERT INTO submission (problem_id, student_id, language, submitted_code, "
+                    "status, passed_count, submitted_datetime) VALUES "
+                    "(:p, :s, 'python', 'x', 'pending', 0, '2026-01-11 00:00:00')"
+                ),
+                {"p": problem_id, "s": student_id.hex},
+            )
+        return result
+
+    monkeypatch.setattr(session, "exec", exec_then_race)
+
+    with caplog.at_level(logging.INFO, logger=course_service.logger.name):
+        with pytest.raises(CourseHasSubmissionsError, match="vừa có bài nộp mới"):
+            delete_course("DELC1", session, admin, force=True)
+
+    session.expire_all()
+    assert session.get(Course, "DELC1") is not None
+    assert session.get(Problem, problem_id) is not None
+    assert _count_submissions_in(session, [problem_id]) == 1  # giao dịch rollback, bài nộp gốc còn
+    assert not any("cưỡng bức" in r.getMessage() for r in caplog.records)
 
 
 def test_submission_arriving_after_check_blocks_non_force_delete(

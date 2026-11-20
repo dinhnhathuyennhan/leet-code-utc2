@@ -1,3 +1,4 @@
+import logging
 import re
 from datetime import timedelta
 from uuid import UUID
@@ -34,6 +35,8 @@ from app.models import (
     Testcase,
     User,
 )
+
+logger = logging.getLogger(__name__)
 
 
 def get_course(session: Session, course_id: str, current_user: User) -> CourseResponse:
@@ -194,6 +197,13 @@ def delete_course(
         raise CourseHasSubmissionsError(
             "Lớp học vừa có bài nộp mới của sinh viên, vui lòng thử lại"
         ) from exc
+    if force:
+        logger.info(
+            "Admin %s đã xoá cưỡng bức lớp %s cùng %s bài nộp",
+            current_user.user_id,
+            course_id,
+            submission_count,
+        )
 
 
 def _parse_term(term: str) -> tuple[int, str]:

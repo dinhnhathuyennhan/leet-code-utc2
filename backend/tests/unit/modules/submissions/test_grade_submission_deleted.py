@@ -132,7 +132,7 @@ def test_stale_row_on_token_save_stops_grading_without_retry(
     submission_id = pending_submission.submission_id
     reached = []
 
-    def grade_saving_tokens(problem, data, testcases, tokens, save):
+    def grade_saving_tokens(problem, data, testcases, tokens, save, heartbeat=None):
         _delete_row(engine, submission_id)
         save(["tok"])
         reached.append("after_save")  # không được tới đây: phải dừng chấm

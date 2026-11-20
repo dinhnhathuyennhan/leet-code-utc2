@@ -28,6 +28,7 @@ from tests.support.fixtures.user_fixtures import make_user, vn
 from tests.support.fixtures.builders import make_enrollment, make_lesson, make_problem, make_submission
 from tests.support.fixtures.enrollment_fixtures import enroll_directly
 from tests.support.fixtures.course_fixtures import make_course
+from tests.support.query_counter import count_queries
 
 pytest_plugins = (
     "tests.support.fixtures.user_fixtures",
@@ -715,6 +716,26 @@ class TestStudentDashboardAverageScore:
         assert teacher_view.average_score == 2.5
         assert teacher_view.total_problems == 1
         assert admin_view.average_score == student_view.average_score == 6.25
+
+
+class TestStudentDashboardAverageQueries:
+    def test_average_reads_submissions_once(self, engine, session, course, student):
+        lesson = make_lesson(session, course)
+        for index in range(3):
+            problem = make_problem(session, lesson, title=f"Bài {index}", total_number_testcase=2)
+            make_submission(session, problem, student, passed_count=index % 3)
+        enroll_directly(session, course, student)
+        session.commit()
+
+        with count_queries(engine) as queries:
+            result = get_student_dashboard(session, student.user_id, student)
+
+        assert result.average_score == 5.0
+        average_reads = [
+            statement for statement in queries.statements
+            if "FROM submission" in statement and "row_number" in statement.lower()
+        ]
+        assert len(average_reads) == 2  # bảng điểm trong build_course_response + điểm trung bình
 
 
 class TestStudentDashboardDueThisWeek:

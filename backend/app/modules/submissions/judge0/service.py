@@ -54,9 +54,10 @@ GRADE_RETRY_DELAY_SECONDS = config.GRADE_RETRY_DELAY_SECONDS
 # Bài active quá hạn này bị coi là hỏng: không còn chặn sinh viên nộp lại, và thôi chấm thử lại
 PENDING_TTL = timedelta(minutes=config.PENDING_TTL_MINUTES)
 _ACTIVE_STATUSES = ("pending", "processing")
-# Thời hạn giữ quyền chấm một bài: worker gia hạn mỗi khi bắt đầu một lô test. Quá hạn mà
-# chưa gia hạn thì coi worker đã chết (backend bị dừng giữa chừng) và worker khác được nhận.
-GRADING_LEASE = PENDING_TTL
+# Thời hạn giữ quyền chấm một bài: worker gia hạn trong lúc chờ Judge0 (heartbeat). Quá hạn
+# mà chưa gia hạn thì coi worker đã chết (backend bị dừng giữa chừng) và worker khác được nhận.
+GRADING_LEASE = timedelta(seconds=config.GRADING_LEASE_SECONDS)
+GRADING_HEARTBEAT = GRADING_LEASE / 4
 
 
 class SubmissionClosedError(ForbiddenError):
@@ -151,6 +152,7 @@ def _run_judge(
     timeout: float,
     tokens: list[str] | None = None,
     on_tokens: Callable[[list[str]], None] | None = None,
+    heartbeat: Callable[[], None] | None = None,
 ) -> list[tuple[Judge0Result, str, Any]]:
     source = _build_source(problem, data.language, data.code)
     client = Judge0Client()
@@ -161,7 +163,7 @@ def _run_judge(
             )
             if on_tokens is not None:
                 on_tokens(tokens)
-        results = client.wait_for_results(tokens, timeout)
+        results = client.wait_for_results(tokens, timeout, heartbeat)
     finally:
         client.close()
     uses_harness = problem.function_name is not None
@@ -333,24 +335,33 @@ class _GradingClaim:
             Submission.grading_claimed_at == self.claimed_at,
         )
 
-    def save_tokens(self, tokens: list[str]) -> None:
-        """Lưu token Judge0 và gia hạn lease; raise ``_SubmissionDeleted`` nếu đã mất quyền chấm."""
+    def _renew(self, what: str, **values: Any) -> None:
         renewed_at = now_utc()
         with Session(engine) as session:
             result = session.execute(
                 update(Submission)
                 .where(self._owned())
-                .values(judge_tokens=tokens, grading_claimed_at=renewed_at)
+                .values(**values, grading_claimed_at=renewed_at)
             )
             session.commit()
         if result.rowcount == 0:
             logger.info(
-                "Bài nộp %s đã bị xoá hoặc đã được worker khác nhận chấm trong lúc lưu token chấm,"
+                "Bài nộp %s đã bị xoá hoặc đã được worker khác nhận chấm trong lúc %s,"
                 " bỏ qua kết quả",
                 self.submission_id,
+                what,
             )
             raise _SubmissionDeleted
         self.claimed_at = renewed_at
+
+    def save_tokens(self, tokens: list[str]) -> None:
+        """Lưu token Judge0 và gia hạn lease; raise ``_SubmissionDeleted`` nếu đã mất quyền chấm."""
+        self._renew("lưu token chấm", judge_tokens=tokens)
+
+    def heartbeat(self) -> None:
+        """Gọi trong vòng poll Judge0: gia hạn lease khi đã qua ``GRADING_HEARTBEAT``."""
+        if now_utc() - self.claimed_at >= GRADING_HEARTBEAT:
+            self._renew("gia hạn quyền chấm")
 
     def finish(self, **values: Any) -> bool:
         """Ghi kết quả và trả lại quyền chấm; ``False`` nếu bài đã bị xoá hoặc đã mất quyền."""
@@ -429,6 +440,7 @@ def _grade_in_chunks(
     testcases: list[Testcase],
     tokens: list[str] | None,
     on_tokens: Callable[[list[str]], None],
+    heartbeat: Callable[[], None] | None = None,
 ) -> list[tuple[Judge0Result | None, str, Any]]:
     """Chấm theo từng lô; lô có test TLE thì các test còn lại được đánh dấu `skipped`.
 
@@ -446,16 +458,14 @@ def _grade_in_chunks(
             saved[start:] = new_tokens
             on_tokens(list(saved))
 
-        reuse = len(chunk_tokens) == len(chunk)
-        if reuse:
-            on_tokens(list(saved))  # chấm tiếp bằng token cũ: vẫn gia hạn quyền chấm như lô mới
         judged += _run_judge(
             problem,
             data,
             chunk,
             _chunk_timeout(problem, data.language, len(chunk)),
-            chunk_tokens if reuse else None,
+            chunk_tokens if len(chunk_tokens) == len(chunk) else None,
             remember,
+            heartbeat=heartbeat,
         )
         statuses = [status for _, status, _ in judged]
         if "compile_error" in statuses or any(s in _STOP_STATUSES for s in statuses):
@@ -488,31 +498,39 @@ def grade_submission(submission_id: int) -> None:
     if claim is None:
         return
 
-    with Session(engine) as session:
-        submission = session.get(Submission, submission_id)
-        if submission is None:
-            logger.info(
-                "Bài nộp %s đã bị xoá trước khi bắt đầu chấm, bỏ qua kết quả", submission_id
+    try:
+        with Session(engine) as session:
+            submission = session.get(Submission, submission_id)
+            if submission is None:
+                logger.info(
+                    "Bài nộp %s đã bị xoá trước khi bắt đầu chấm, bỏ qua kết quả", submission_id
+                )
+                return
+            problem = session.get(Problem, submission.problem_id)
+            testcases = list(
+                session.exec(
+                    select(Testcase)
+                    .where(Testcase.problem_id == submission.problem_id)
+                    .order_by(Testcase.testcase_id)
+                ).all()
             )
-            return
-        problem = session.get(Problem, submission.problem_id)
-        testcases = list(
-            session.exec(
-                select(Testcase)
-                .where(Testcase.problem_id == submission.problem_id)
-                .order_by(Testcase.testcase_id)
-            ).all()
-        )
-        data = CodeRequest(language=submission.language, code=submission.submitted_code)
-        tokens = submission.judge_tokens
-        submitted_at = as_utc(submission.submitted_datetime)
+            data = CodeRequest(language=submission.language, code=submission.submitted_code)
+            tokens = submission.judge_tokens
+            submitted_at = as_utc(submission.submitted_datetime)
+    except Exception:
+        # Vẫn đang giữ lease: hẹn chấm lại khi lease hết hạn thay vì để bài treo tới lần restart
+        logger.exception("Không đọc được bài nộp để chấm, submission_id=%s", submission_id)
+        grading_queue.enqueue(submission_id, GRADING_LEASE.total_seconds() + 1)
+        return
 
     retry = False
     passed_count = 0
     compile_output = None
     results = None
     try:
-        judged = _grade_in_chunks(problem, data, testcases, tokens, claim.save_tokens)
+        judged = _grade_in_chunks(
+            problem, data, testcases, tokens, claim.save_tokens, heartbeat=claim.heartbeat
+        )
         statuses = [status for _, status, _ in judged]
         status = _overall_status(statuses)
         passed_count = statuses.count("accepted")

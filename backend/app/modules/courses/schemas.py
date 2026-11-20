@@ -96,8 +96,9 @@ class StudentDashboardResponse(BaseModel):
     - ``total_classes``: số lớp đang học (đã enroll).
     - ``completed_problems``: số bài tập đã nộp và đạt (status = "accepted").
     - ``total_problems``: tổng số bài tập của tất cả các lớp đang học.
-    - ``average_score``: điểm trung bình (0-10) tính theo passed_count / total_number_testcase.
-      Trả về ``None`` nếu sinh viên chưa có submission nào.
+    - ``average_score``: điểm trung bình (0-10) trên các bài đã nộp; mỗi bài lấy điểm như bảng
+      điểm (điểm tay ưu tiên, sau đó passed_count / total_number_testcase cao nhất), cùng phạm
+      vi khoá học với ``total_problems``. Trả về ``None`` nếu chưa có bài nào có điểm.
     - ``due_this_week``: số bài đang mở, hạn nộp trong 7 ngày tới (tính cả hôm nay)
       mà sinh viên chưa nộp đạt.
     - ``courses``: danh sách các lớp đang học (kèm thông tin cơ bản) để FE dựng grid card.

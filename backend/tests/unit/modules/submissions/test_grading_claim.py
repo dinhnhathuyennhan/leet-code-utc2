@@ -16,6 +16,7 @@ from app.models.entities import Problem, Submission, User
 from app.modules.submissions.judge0 import service as judge_service
 from app.modules.submissions.judge0.judge0_client import Judge0Error
 from tests.support.fixtures.builders import make_submission
+from tests.support.query_counter import count_queries
 
 pytest_plugins = ("tests.support.fixtures.submission_fixtures",)
 
@@ -87,6 +88,24 @@ class TestClaimSubmission:
         lease = judge_service.GRADING_LEASE.total_seconds()
         assert lease - 5 <= delay <= lease + 1
 
+    def test_recheck_after_lease_expiry_reclaims_abandoned_submission(
+        self, session, enqueue_calls, submission_problem, submission_student, monkeypatch
+    ):
+        """Worker giữ lease bị chết: lượt kiểm tra lại (hẹn lúc lease hết hạn) nhận được bài."""
+        submission = _submission(
+            session, submission_problem, submission_student, "processing", claimed_at=now_utc()
+        )
+        assert judge_service._claim_submission(submission.submission_id) is None
+        assert len(enqueue_calls) == 1
+        submission_id, delay = enqueue_calls[0]
+
+        later = now_utc() + timedelta(seconds=delay)
+        monkeypatch.setattr(judge_service, "now_utc", lambda: later)
+        claim = judge_service._claim_submission(submission_id)
+
+        assert claim is not None
+        assert as_utc(_row(session, submission_id).grading_claimed_at) == later
+
     def test_processing_with_expired_lease_is_reclaimed(
         self, session, enqueue_calls, submission_problem, submission_student
     ):
@@ -132,7 +151,131 @@ class TestClaimSubmission:
         assert any("đã bị xoá trước khi bắt đầu chấm" in r.getMessage() for r in caplog.records)
 
 
+class TestHeartbeat:
+    def _claimed(self, session, problem, student):
+        submission = _submission(session, problem, student, "pending")
+        return submission, judge_service._claim_submission(submission.submission_id)
+
+    def test_skips_write_before_heartbeat_interval(
+        self, engine, session, enqueue_calls, submission_problem, submission_student
+    ):
+        _submission_row, claim = self._claimed(session, submission_problem, submission_student)
+        first = claim.claimed_at
+
+        with count_queries(engine) as queries:
+            claim.heartbeat()
+
+        assert queries.count == 0
+        assert claim.claimed_at == first
+
+    def test_renews_lease_after_interval(
+        self, session, enqueue_calls, submission_problem, submission_student, monkeypatch
+    ):
+        submission, claim = self._claimed(session, submission_problem, submission_student)
+        later = claim.claimed_at + judge_service.GRADING_HEARTBEAT
+        monkeypatch.setattr(judge_service, "now_utc", lambda: later)
+
+        claim.heartbeat()
+
+        assert claim.claimed_at == later
+        assert as_utc(_row(session, submission.submission_id).grading_claimed_at) == later
+
+    def test_raises_when_lease_was_taken_over(
+        self, engine, session, enqueue_calls, submission_problem, submission_student, monkeypatch
+    ):
+        submission, claim = self._claimed(session, submission_problem, submission_student)
+        with Session(engine) as other:
+            row = other.get(Submission, submission.submission_id)
+            row.grading_claimed_at = now_utc() + timedelta(seconds=5)
+            other.add(row)
+            other.commit()
+        later = claim.claimed_at + judge_service.GRADING_HEARTBEAT
+        monkeypatch.setattr(judge_service, "now_utc", lambda: later)
+
+        with pytest.raises(judge_service._SubmissionDeleted):
+            claim.heartbeat()
+
+    def test_lease_is_shorter_than_pending_ttl(self):
+        """Restart chỉ làm bài dở dang chờ tối đa một lease, không phải cả PENDING_TTL."""
+        assert judge_service.GRADING_LEASE < judge_service.PENDING_TTL
+        assert judge_service.GRADING_HEARTBEAT < judge_service.GRADING_LEASE
+
+
 class TestGradeSubmissionClaim:
+    def test_heartbeat_of_the_claim_is_used_while_grading(
+        self, session, enqueue_calls, submission_problem, submission_student, monkeypatch
+    ):
+        submission = _submission(session, submission_problem, submission_student, "pending")
+        beats: list = []
+
+        def grade(problem, data, testcases, tokens, save_tokens, heartbeat=None):
+            beats.append(heartbeat)
+            heartbeat()
+            return [(None, "accepted", None)]
+
+        _fake_judging(monkeypatch, grade)
+
+        judge_service.grade_submission(submission.submission_id)
+
+        assert len(beats) == 1
+        assert beats[0] is not None
+        assert _row(session, submission.submission_id).status == "accepted"
+
+    def test_lost_lease_during_polling_stops_without_writing(
+        self, engine, session, enqueue_calls, submission_problem, submission_student, monkeypatch
+    ):
+        submission = _submission(session, submission_problem, submission_student, "pending")
+        takeover = now_utc() + timedelta(seconds=5)
+
+        def grade(problem, data, testcases, tokens, save_tokens, heartbeat=None):
+            with Session(engine) as other:
+                row = other.get(Submission, submission.submission_id)
+                row.grading_claimed_at = takeover
+                other.add(row)
+                other.commit()
+            monkeypatch.setattr(
+                judge_service, "now_utc", lambda: takeover + judge_service.GRADING_HEARTBEAT
+            )
+            heartbeat()
+            raise AssertionError("không được chấm tiếp khi đã mất lease")
+
+        _fake_judging(monkeypatch, grade)
+
+        judge_service.grade_submission(submission.submission_id)
+
+        row = _row(session, submission.submission_id)
+        assert (row.status, as_utc(row.grading_claimed_at)) == ("processing", takeover)
+        assert enqueue_calls == []
+
+    def test_db_error_after_claim_schedules_recheck_after_lease(
+        self, session, enqueue_calls, submission_problem, submission_student, monkeypatch, caplog
+    ):
+        submission = _submission(session, submission_problem, submission_student, "pending")
+        real_session = judge_service.Session
+        calls = {"n": 0}
+
+        class FlakySession(real_session):
+            def get(self, *args, **kwargs):
+                calls["n"] += 1
+                raise RuntimeError("db down")
+
+        monkeypatch.setattr(judge_service, "Session", FlakySession)
+
+        def must_not_run(*args, **kwargs):
+            raise AssertionError("không được chấm khi chưa đọc được bài nộp")
+
+        _fake_judging(monkeypatch, must_not_run)
+
+        with caplog.at_level(logging.ERROR, logger=judge_service.logger.name):
+            judge_service.grade_submission(submission.submission_id)
+
+        assert calls["n"] == 1
+        assert enqueue_calls == [
+            (submission.submission_id, judge_service.GRADING_LEASE.total_seconds() + 1)
+        ]
+        assert _row(session, submission.submission_id).status == "processing"
+        assert any("Không đọc được bài nộp" in r.getMessage() for r in caplog.records)
+
     def test_duplicate_enqueue_while_grading_does_not_grade_twice(
         self, session, enqueue_calls, submission_problem, submission_student, monkeypatch
     ):
@@ -140,7 +283,7 @@ class TestGradeSubmissionClaim:
         submission = _submission(session, submission_problem, submission_student, "pending")
         graded: list[int] = []
 
-        def grade(problem, data, testcases, tokens, save_tokens):
+        def grade(problem, data, testcases, tokens, save_tokens, heartbeat=None):
             graded.append(submission.submission_id)
             # Lượt chấm thứ hai bắt đầu khi lượt đầu còn đang chờ Judge0
             judge_service.grade_submission(submission.submission_id)
@@ -203,7 +346,7 @@ class TestGradeSubmissionClaim:
         submission = _submission(session, submission_problem, submission_student, "pending")
         reached: list[str] = []
 
-        def grade(problem, data, testcases, tokens, save_tokens):
+        def grade(problem, data, testcases, tokens, save_tokens, heartbeat=None):
             with Session(engine) as other:
                 row = other.get(Submission, submission.submission_id)
                 row.grading_claimed_at = now_utc() + timedelta(seconds=30)

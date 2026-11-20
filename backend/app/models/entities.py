@@ -1,7 +1,7 @@
 import uuid
 from datetime import date, datetime
 
-from sqlalchemy import JSON, UniqueConstraint, true
+from sqlalchemy import JSON, Index, UniqueConstraint, true
 from sqlmodel import Field, Relationship, SQLModel
 
 from app.core.utils.datetime_utils import UTCDateTime
@@ -48,7 +48,7 @@ class Course(SQLModel, table=True):
     course_id: str = Field(primary_key=True, max_length=50)
     course_name: str
     avt_link: str | None = Field(default=None, max_length=2048)
-    created_by: uuid.UUID = Field(foreign_key="user.user_id")
+    created_by: uuid.UUID = Field(foreign_key="user.user_id", index=True)
     term: str
     start_date: datetime = Field(sa_type=UTCDateTime)
     end_date: datetime = Field(sa_type=UTCDateTime)
@@ -70,7 +70,7 @@ class Enrollment(SQLModel, table=True):
     )
     enrollment_id: int | None = Field(default=None, primary_key=True)
     course_id: str = Field(foreign_key="course.course_id", max_length=50)
-    student_id: uuid.UUID = Field(foreign_key="user.user_id")
+    student_id: uuid.UUID = Field(foreign_key="user.user_id", index=True)
 
     course: Course | None = Relationship(back_populates="enrollments")
     student: User | None = Relationship(back_populates="enrollments")
@@ -81,7 +81,7 @@ class Lesson(SQLModel, table=True):
     lesson_id: int | None = Field(default=None, primary_key=True)
     lesson_number: int
     lesson_name: str
-    course_id: str = Field(foreign_key="course.course_id", max_length=50)
+    course_id: str = Field(foreign_key="course.course_id", max_length=50, index=True)
     total_number_assignment: int = Field(default=0)
     total_number_student_finished: int = Field(default=0)
     start_date: date
@@ -95,7 +95,9 @@ class Lesson(SQLModel, table=True):
 class Problem(SQLModel, table=True):
     problem_id: int | None = Field(default=None, primary_key=True)
     # NULL = bài nằm trong ngân hàng đề, chưa gắn buổi học nào
-    lesson_id: int | None = Field(default=None, foreign_key="lesson.lesson_id")
+    lesson_id: int | None = Field(
+        default=None, foreign_key="lesson.lesson_id", index=True
+    )
     title: str = Field(max_length=255)
     # Method runner sẽ gọi; NULL biểu thị Problem chấm theo stdin/stdout.
     function_name: str | None = Field(default=None, max_length=100)
@@ -121,7 +123,7 @@ class Problem(SQLModel, table=True):
 # ==================== TESTCASE ====================
 class Testcase(SQLModel, table=True):
     testcase_id: int | None = Field(default=None, primary_key=True)
-    problem_id: int = Field(foreign_key="problem.problem_id")
+    problem_id: int = Field(foreign_key="problem.problem_id", index=True)
     input: str
     expected_output: str
     is_sample: bool = Field(default=False)
@@ -133,6 +135,15 @@ class Testcase(SQLModel, table=True):
 
 # ==================== SUBMISSION ====================
 class Submission(SQLModel, table=True):
+    __table_args__ = (
+        Index("ix_submission_problem_student", "problem_id", "student_id"),
+        Index(
+            "ix_submission_student_submitted",
+            "student_id",
+            "submitted_datetime",
+            "submission_id",
+        ),
+    )
     submission_id: int | None = Field(default=None, primary_key=True)
     problem_id: int = Field(foreign_key="problem.problem_id")
     student_id: uuid.UUID = Field(foreign_key="user.user_id")
@@ -148,6 +159,8 @@ class Submission(SQLModel, table=True):
     # Kết quả từng testcase: [{"testcase_id", "status", "time"}]; NULL với bài chấm trước
     # khi có cột này (khi đó chỉ biết tổng passed_count).
     testcase_results: list[dict] | None = Field(default=None, sa_type=JSON)
+    # Lease của worker đang chấm bài (status processing); NULL khi không ai giữ quyền chấm.
+    grading_claimed_at: datetime | None = Field(default=None, sa_type=UTCDateTime)
 
     problem: Problem | None = Relationship(back_populates="submissions")
     student: User | None = Relationship(back_populates="submissions")

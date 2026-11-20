@@ -145,6 +145,44 @@ def test_wait_for_results_survives_judge0_restart():
     assert calls["n"] == 4
 
 
+def test_wait_for_results_calls_heartbeat_every_poll(monkeypatch):
+    monkeypatch.setattr(judge0_client.time, "sleep", lambda _s: None)
+    calls = {"n": 0}
+    beats: list[int] = []
+
+    def handler(request):
+        calls["n"] += 1
+        status = 2 if calls["n"] < 3 else 3
+        return httpx.Response(200, json={"submissions": [{"token": "a", "status": {"id": status}}]})
+
+    client = Judge0Client(transport=httpx.MockTransport(handler))
+    client.wait_for_results(["a"], timeout_seconds=30, heartbeat=lambda: beats.append(calls["n"]))
+
+    # trước mỗi lần hỏi kết quả
+    assert beats == [0, 1, 2]
+
+
+def test_wait_for_results_heartbeat_error_stops_polling(monkeypatch):
+    monkeypatch.setattr(judge0_client.time, "sleep", lambda _s: None)
+    calls = {"n": 0}
+
+    def handler(request):
+        calls["n"] += 1
+        return httpx.Response(200, json={"submissions": [{"token": "a", "status": {"id": 2}}]})
+
+    class LostLease(Exception):
+        pass
+
+    def heartbeat():
+        if calls["n"] >= 2:
+            raise LostLease
+
+    client = Judge0Client(transport=httpx.MockTransport(handler))
+    with pytest.raises(LostLease):
+        client.wait_for_results(["a"], timeout_seconds=30, heartbeat=heartbeat)
+    assert calls["n"] == 2
+
+
 def test_wait_for_results_gives_up_at_deadline():
     client = Judge0Client(transport=httpx.MockTransport(lambda r: httpx.Response(503)))
     with pytest.raises(Judge0Error):

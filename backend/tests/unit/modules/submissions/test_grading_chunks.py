@@ -24,7 +24,7 @@ def _fake_judge(status_of):
     """`_run_judge` giả: trạng thái theo testcase_id, ghi lại số test của mỗi lô."""
     calls: list[int] = []
 
-    def fake(problem, data, testcases, timeout, tokens=None, on_tokens=None):
+    def fake(problem, data, testcases, timeout, tokens=None, on_tokens=None, heartbeat=None):
         calls.append(len(testcases))
         if on_tokens is not None:
             on_tokens([f"t{tc.testcase_id}" for tc in testcases])
@@ -90,7 +90,7 @@ def test_compile_error_is_not_resubmitted_for_every_chunk(monkeypatch, problem):
 def test_resumes_with_saved_tokens_per_chunk(monkeypatch, problem):
     seen_tokens: list = []
 
-    def fake(problem, data, testcases, timeout, tokens=None, on_tokens=None):
+    def fake(problem, data, testcases, timeout, tokens=None, on_tokens=None, heartbeat=None):
         seen_tokens.append(tokens)
         return [(SimpleNamespace(time=None), "accepted", None) for _ in testcases]
 
@@ -102,6 +102,26 @@ def test_resumes_with_saved_tokens_per_chunk(monkeypatch, problem):
     )
 
     assert seen_tokens == [tokens[:10], None]
+
+
+def test_heartbeat_is_passed_to_every_chunk(monkeypatch, problem):
+    seen: list = []
+
+    def fake(problem, data, testcases, timeout, tokens=None, on_tokens=None, heartbeat=None):
+        seen.append(heartbeat)
+        return [(SimpleNamespace(time=None), "accepted", None) for _ in testcases]
+
+    def beat():
+        return None
+
+    monkeypatch.setattr(judge_service, "_run_judge", fake)
+
+    judge_service._grade_in_chunks(
+        problem, CodeRequest(language="python", code="x"), _testcases(15), None, lambda _: None,
+        heartbeat=beat,
+    )
+
+    assert seen == [beat, beat]
 
 
 def test_chunk_timeout_covers_every_test_hitting_wall_time(problem):

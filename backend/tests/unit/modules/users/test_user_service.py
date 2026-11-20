@@ -9,11 +9,13 @@ from app.core.security.passwords import hash_password, verify_password
 from app.core.dependencies import Role
 from app.modules.users.schemas import CreateStudentRequest, CreateTeacherRequest
 from app.modules.users.service import (
+    NotAllowedToManageAccountError,
     NotAllowedToResetError,
     UserNotFoundError,
     create_student,
     create_teacher,
     reset_password, list_users,
+    _ensure_can_manage_account,
 )
 from app.models import Class, Course, Enrollment, User
 
@@ -397,6 +399,107 @@ def test_reset_password_rejects_unknown_target_role(session):
     session.refresh(target)
     assert verify_password("keep-me-123", target.hashed_password)
     assert target.token_version == 0
+
+
+def test_reset_password_unknown_caller_role_is_rejected(session):
+    """Caller có role lạ không được rơi xuống nhánh Admin (whitelist)."""
+    caller = _make_user(session, "caller99", "caller99@example.com", 99)
+    target = _make_user(
+        session,
+        "victim1",
+        "victim1@example.com",
+        Role.STUDENT,
+        password="keep-me-123",
+    )
+
+    with pytest.raises(NotAllowedToResetError):
+        reset_password(session, caller, target.user_id)
+
+    session.refresh(target)
+    assert verify_password("keep-me-123", target.hashed_password)
+    assert target.token_version == 0
+
+# endregion
+
+#region test _ensure_can_manage_account
+
+
+def test_ensure_can_manage_account_admin_allows_teacher_and_student(session):
+    admin = _make_user(session, "adminm1", "adminm1@example.com", Role.ADMIN)
+    teacher = _make_user(session, "teacherm1", "teacherm1@example.com", Role.TEACHER)
+    student = _make_user(session, "studentm1", "studentm1@example.com", Role.STUDENT)
+
+    _ensure_can_manage_account(session, admin, teacher)
+    _ensure_can_manage_account(session, admin, student)
+
+
+def test_ensure_can_manage_account_admin_rejects_admin_target_and_self(session):
+    admin = _make_user(session, "adminm2", "adminm2@example.com", Role.ADMIN)
+    other_admin = _make_user(session, "adminm3", "adminm3@example.com", Role.ADMIN)
+
+    with pytest.raises(NotAllowedToManageAccountError):
+        _ensure_can_manage_account(session, admin, other_admin)
+    with pytest.raises(NotAllowedToManageAccountError):
+        _ensure_can_manage_account(session, admin, admin)
+
+
+def test_ensure_can_manage_account_teacher_allows_student_enrolled_in_own_course(session):
+    teacher = _make_user(session, "teacherm2", "teacherm2@example.com", Role.TEACHER)
+    student = _make_user(session, "studentm2", "studentm2@example.com", Role.STUDENT)
+    _enroll(session, _make_course(session, "COURSE-M2", teacher), student)
+
+    _ensure_can_manage_account(session, teacher, student)
+
+
+def test_ensure_can_manage_account_teacher_rejects_student_of_other_teacher(session):
+    teacher = _make_user(session, "teacherm3", "teacherm3@example.com", Role.TEACHER)
+    other = _make_user(session, "teacherm4", "teacherm4@example.com", Role.TEACHER)
+    student = _make_user(session, "studentm3", "studentm3@example.com", Role.STUDENT)
+    _make_course(session, "COURSE-M3A", teacher)
+    _enroll(session, _make_course(session, "COURSE-M3B", other), student)
+
+    with pytest.raises(NotAllowedToManageAccountError):
+        _ensure_can_manage_account(session, teacher, student)
+
+
+def test_ensure_can_manage_account_teacher_rejects_unenrolled_student(session):
+    teacher = _make_user(session, "teacherm5", "teacherm5@example.com", Role.TEACHER)
+    student = _make_user(session, "studentm4", "studentm4@example.com", Role.STUDENT)
+
+    with pytest.raises(NotAllowedToManageAccountError):
+        _ensure_can_manage_account(session, teacher, student)
+
+
+def test_ensure_can_manage_account_teacher_rejects_teacher_admin_and_self(session):
+    teacher = _make_user(session, "teacherm6", "teacherm6@example.com", Role.TEACHER)
+    other = _make_user(session, "teacherm7", "teacherm7@example.com", Role.TEACHER)
+    admin = _make_user(session, "adminm4", "adminm4@example.com", Role.ADMIN)
+
+    for target in (other, admin, teacher):
+        with pytest.raises(NotAllowedToManageAccountError):
+            _ensure_can_manage_account(session, teacher, target)
+
+
+@pytest.mark.parametrize("caller_role", [Role.STUDENT, 99])
+def test_ensure_can_manage_account_rejects_student_and_unknown_role_callers(
+    session, caller_role
+):
+    caller = _make_user(session, "callerm1", "callerm1@example.com", caller_role)
+    student = _make_user(session, "studentm5", "studentm5@example.com", Role.STUDENT)
+    teacher = _make_user(session, "teacherm8", "teacherm8@example.com", Role.TEACHER)
+    admin = _make_user(session, "adminm5", "adminm5@example.com", Role.ADMIN)
+
+    for target in (student, teacher, admin):
+        with pytest.raises(NotAllowedToManageAccountError):
+            _ensure_can_manage_account(session, caller, target)
+
+
+def test_ensure_can_manage_account_rejects_unknown_target_role(session):
+    admin = _make_user(session, "adminm6", "adminm6@example.com", Role.ADMIN)
+    ghost = _make_user(session, "ghostm1", "ghostm1@example.com", 99)
+
+    with pytest.raises(NotAllowedToManageAccountError):
+        _ensure_can_manage_account(session, admin, ghost)
 
 # endregion
 

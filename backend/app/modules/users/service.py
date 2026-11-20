@@ -24,6 +24,15 @@ class NotAllowedToResetError(AppError):
     error_code = "NOT_ALLOWED_TO_RESET"
 
 
+class NotAllowedToManageAccountError(AppError):
+    status_code = 403
+    error_code = "NOT_ALLOWED_TO_MANAGE_ACCOUNT"
+
+
+MANAGE_ACCOUNT_FORBIDDEN = "Bạn không có quyền quản lý tài khoản này"
+RESET_FORBIDDEN = "Bạn không có quyền đặt lại mật khẩu cho tài khoản này"
+
+
 def create_teacher(session: Session, data: CreateTeacherRequest) -> User:
     existing = session.exec(select(User).where(User.email == data.email)).first()
     if existing:
@@ -156,9 +165,58 @@ def _temporary_password_for(user: User) -> str:
         return user.student_code
     if user.role_id in (Role.TEACHER, Role.ADMIN):
         return user.email
-    raise NotAllowedToResetError(
-        "Bạn không có quyền đặt lại mật khẩu cho tài khoản này"
+    raise NotAllowedToResetError(RESET_FORBIDDEN)
+
+
+def _get_user_or_404(session: Session, user_id: str | uuid.UUID) -> User:
+    try:
+        user_uuid = uuid.UUID(str(user_id))
+    except ValueError:
+        raise UserNotFoundError("Không tìm thấy tài khoản") from None
+
+    user = session.get(User, user_uuid)
+    if user is None:
+        raise UserNotFoundError("Không tìm thấy tài khoản")
+    return user
+
+
+def _is_student_of_teacher(session: Session, teacher: User, student: User) -> bool:
+    """Student có đang học một khoá do teacher tạo (Course.created_by) hay không."""
+    return (
+        session.exec(
+            select(Enrollment.enrollment_id)
+            .join(Course, Course.course_id == Enrollment.course_id)
+            .where(
+                Enrollment.student_id == student.user_id,
+                Course.created_by == teacher.user_id,
+            )
+        ).first()
+        is not None
     )
+
+
+def _can_manage_account(
+    session: Session,
+    actor: User,
+    target: User,
+    *,
+    admin_target_roles: tuple[int, ...] = (Role.TEACHER, Role.STUDENT),
+) -> bool:
+    """Whitelist quyền quản lý tài khoản theo vai trò người gọi."""
+    if actor.role_id == Role.ADMIN:
+        return target.role_id in admin_target_roles
+    if actor.role_id == Role.TEACHER:
+        return target.role_id == Role.STUDENT and _is_student_of_teacher(
+            session, actor, target
+        )
+    return False  # whitelist: Student, role lạ, role phát sinh sau này
+
+
+def _ensure_can_manage_account(session: Session, current_user: User, target: User) -> None:
+    if target.user_id == current_user.user_id or not _can_manage_account(
+        session, current_user, target
+    ):
+        raise NotAllowedToManageAccountError(MANAGE_ACCOUNT_FORBIDDEN)
 
 
 def reset_password(
@@ -168,10 +226,10 @@ def reset_password(
 
     Mật khẩu tạm thời: sinh viên = student_code (MSSV); giáo viên/admin = email.
 
-    Quyền:
-        - ADMIN: đặt lại mật khẩu bất kỳ tài khoản nào.
-        - TEACHER: chỉ được đặt lại mật khẩu sinh viên thuộc lớp mình quản lý.
-        - STUDENT: không được phép đặt lại mật khẩu ai.
+    Quyền (whitelist theo vai trò người gọi):
+        - ADMIN: đặt lại mật khẩu bất kỳ tài khoản nào (Admin, Teacher, Student).
+        - TEACHER: chỉ được đặt lại mật khẩu sinh viên đang học khoá do mình tạo.
+        - STUDENT và mọi vai trò khác: không được phép đặt lại mật khẩu ai.
 
     Returns:
         tuple ``(user_id_str, temporary_password)`` để router trả về response.
@@ -180,44 +238,15 @@ def reset_password(
         UserNotFoundError: không tìm thấy tài khoản mục tiêu.
         NotAllowedToResetError: người gọi không đủ quyền, hoặc tài khoản mục tiêu có vai trò lạ.
     """
-    try:
-        target_uuid = uuid.UUID(str(target_user_id))
-    except ValueError:
-        raise UserNotFoundError("Không tìm thấy tài khoản") from None
+    target = _get_user_or_404(session, target_user_id)
 
-    target = session.get(User, target_uuid)
-    if target is None:
-        raise UserNotFoundError("Không tìm thấy tài khoản")
-
-    # STUDENT bị chặn hoàn toàn (kể cả tự reset chính mình)
-    if current_user.role_id == Role.STUDENT:
-        raise NotAllowedToResetError(
-            "Bạn không có quyền đặt lại mật khẩu cho tài khoản này"
-        )
-
-    # TEACHER chỉ được reset sinh viên thuộc lớp do mình tạo
-    if current_user.role_id == Role.TEACHER:
-        if target.role_id != Role.STUDENT:
-            raise NotAllowedToResetError(
-                "Bạn không có quyền đặt lại mật khẩu cho tài khoản này"
-            )
-        teacher_courses = session.exec(
-            select(Course.course_id).where(Course.created_by == current_user.user_id)
-        ).all()
-        if not teacher_courses:
-            raise NotAllowedToResetError(
-                "Bạn không có quyền đặt lại mật khẩu cho tài khoản này"
-            )
-        enrolled = session.exec(
-            select(Enrollment).where(
-                Enrollment.student_id == target.user_id,
-                Enrollment.course_id.in_(teacher_courses),
-            )
-        ).first()
-        if enrolled is None:
-            raise NotAllowedToResetError(
-                "Bạn không có quyền đặt lại mật khẩu cho tài khoản này"
-            )
+    if not _can_manage_account(
+        session,
+        current_user,
+        target,
+        admin_target_roles=(Role.ADMIN, Role.TEACHER, Role.STUDENT),
+    ):
+        raise NotAllowedToResetError(RESET_FORBIDDEN)
 
     temporary_password = _temporary_password_for(target)
     target.hashed_password = hash_password(temporary_password)

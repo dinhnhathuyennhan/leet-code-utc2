@@ -1,6 +1,7 @@
 """best_grade_scores: chọn bài nộp tốt nhất mỗi (sinh viên, bài) ngay trong SQL."""
 
 from datetime import datetime
+from types import SimpleNamespace
 
 import pytest
 from sqlmodel import Session
@@ -182,3 +183,40 @@ class TestBestGradeScores:
         assert queries.count == 1
         assert "submitted_code" not in queries.statements[0]
         assert "testcase_results" not in queries.statements[0]
+
+    def test_attempts_counts_every_submission_of_the_pair(self, session, problems, student_a, student_b):
+        p1, p2 = problems
+        for passed in (0, 3, 1):
+            _submit(session, p1, student_a, passed=passed)
+        _submit(session, p2, student_a, passed=1)
+        _submit(session, p1, student_b, passed=0, manual=4.0)
+
+        best = grade_service.best_grade_scores(session, [p1.problem_id, p2.problem_id])
+
+        assert best[(student_a.user_id, p1.problem_id)].attempts == 3
+        assert best[(student_a.user_id, p2.problem_id)].attempts == 1
+        assert best[(student_b.user_id, p1.problem_id)].attempts == 1
+
+
+class TestGradedScore:
+    def _problem(self, total):
+        return Problem(title="P", lesson_id=1, total_number_testcase=total)
+
+    def _row(self, passed, manual=None):
+        return SimpleNamespace(passed_count=passed, manual_score=manual)
+
+    def test_none_when_not_submitted(self):
+        assert grade_service.graded_score(self._problem(4), None) is None
+
+    def test_scaled_passed_count(self):
+        assert grade_service.graded_score(self._problem(4), self._row(3)) == 7.5
+
+    def test_manual_score_overrides_passed_count(self):
+        assert grade_service.graded_score(self._problem(4), self._row(4, manual=1.0)) == 1.0
+
+    def test_manual_zero_is_kept(self):
+        assert grade_service.graded_score(self._problem(4), self._row(4, manual=0.0)) == 0.0
+
+    def test_problem_without_testcases(self):
+        assert grade_service.graded_score(self._problem(0), self._row(0)) is None
+        assert grade_service.graded_score(self._problem(0), self._row(0, manual=6.0)) == 6.0

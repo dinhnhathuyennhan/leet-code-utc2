@@ -1,6 +1,6 @@
 from uuid import UUID
 
-from sqlmodel import Session, func, select
+from sqlmodel import Session, select
 
 from app.core.dependencies import Role
 from app.core.exceptions import ConflictError, InvalidFormatError, NotFoundError, ForbiddenError
@@ -12,7 +12,7 @@ from app.modules.courses import grade_service
 from app.modules.courses.access import get_lesson_in_course, get_manageable_course, get_viewable_course
 from app.modules.courses.view import build_course_response
 from app.modules.problems.service import copy_problems_to_lesson, refresh_assignment_count, sync_problem_schedule
-from app.models import Enrollment, Lesson, Problem, Submission, Testcase, User, Course
+from app.models import Enrollment, Lesson, Problem, Testcase, User, Course
 from app.modules.testcases.testcase_format import testcase_to_api_values
 
 
@@ -175,7 +175,7 @@ def get_lesson_detail(session: Session, course_id: str, lesson_id: int, current_
     testcases_by_problem: dict[int, list[Testcase]] = {pid: [] for pid in problem_ids}
     submitted_by_problem: dict[int, int] = {}
     submitted_student_ids: set[UUID] = set()
-    best: dict[tuple[UUID, int], int] = {}
+    scores: list[float] = []
     if problem_ids:
         testcase_query = select(Testcase).where(Testcase.problem_id.in_(problem_ids))
         if is_student:
@@ -185,27 +185,16 @@ def get_lesson_detail(session: Session, course_id: str, lesson_id: int, current_
         ).all():
             testcases_by_problem[tc.problem_id].append(tc)
         if not is_student and enrolled_student_ids:
-            # 1 truy vấn cho cả số lượt nộp, số sinh viên đã nộp và passed_count cao nhất
-            for student_id, problem_id, attempts, max_passed in session.exec(
-                select(
-                    Submission.student_id,
-                    Submission.problem_id,
-                    func.count(),
-                    func.max(Submission.passed_count),
-                )
-                .where(
-                    Submission.problem_id.in_(problem_ids),
-                    Submission.student_id.in_(enrolled_student_ids),
-                )
-                .group_by(Submission.student_id, Submission.problem_id)
-            ).all():
-                submitted_by_problem[problem_id] = submitted_by_problem.get(problem_id, 0) + attempts
+            # 1 truy vấn: số lượt nộp, sinh viên đã nộp và bài nộp được chấm điểm (giống bảng điểm)
+            best = grade_service.best_grade_scores(session, problem_ids, enrolled_student_ids)
+            for (student_id, problem_id), row in best.items():
+                submitted_by_problem[problem_id] = submitted_by_problem.get(problem_id, 0) + row.attempts
                 submitted_student_ids.add(student_id)
-                best[(student_id, problem_id)] = max_passed
+                score = grade_service.graded_score(problem_by_id[problem_id], row)
+                if score is not None:
+                    scores.append(score)
             submitted_students = len(submitted_student_ids)
 
-    scores = [s for (_sid, pid), cnt in best.items()
-              if (s := grade_service.problem_score(problem_by_id[pid], cnt)) is not None]
     avg_score = round(sum(scores) / len(scores), 1) if scores else 0
     first = problems[0] if problems else None
 

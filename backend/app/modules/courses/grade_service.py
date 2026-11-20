@@ -14,6 +14,15 @@ def problem_score(problem: Problem, passed: int | None) -> float | None:
     return round(MAX_SCORE_PER_PROBLEM * passed / problem.total_number_testcase, 1)
 
 
+def graded_score(problem: Problem, submission: Row | None) -> float | None:
+    """Điểm của bài nộp được chấm điểm: điểm tay (nếu có) ưu tiên hơn điểm tính từ testcase."""
+    if submission is None:
+        return None
+    if submission.manual_score is not None:
+        return submission.manual_score
+    return problem_score(problem, submission.passed_count)
+
+
 def best_grade_scores(
     session: Session, problem_ids: list[int], student_ids: list[UUID] | None = None
 ) -> dict[tuple[UUID, int], Row]:
@@ -21,12 +30,14 @@ def best_grade_scores(
 
     Ưu tiên: có điểm tay > passed_count cao hơn > nộp muộn hơn > submission_id lớn hơn.
     Chỉ lấy các cột cần cho bảng điểm (không kéo submitted_code, testcase_results...).
+    Cột ``attempts`` là tổng số lượt nộp của (sinh viên, bài) đó.
     """
     if not problem_ids:
         return {}
     if student_ids is not None and not student_ids:
         return {}
     has_manual_score = case((Submission.manual_score.is_(None), 0), else_=1)
+    partition = (Submission.student_id, Submission.problem_id)
     ranked = select(
         Submission.submission_id,
         Submission.student_id,
@@ -36,9 +47,10 @@ def best_grade_scores(
         Submission.feedback,
         Submission.status,
         Submission.submitted_datetime,
+        func.count().over(partition_by=partition).label("attempts"),
         func.row_number()
         .over(
-            partition_by=(Submission.student_id, Submission.problem_id),
+            partition_by=partition,
             order_by=(
                 has_manual_score.desc(),
                 Submission.passed_count.desc(),
@@ -60,6 +72,7 @@ def best_grade_scores(
         subquery.c.feedback,
         subquery.c.status,
         subquery.c.submitted_datetime,
+        subquery.c.attempts,
     ).where(subquery.c.rn == 1)
     return {(row.student_id, row.problem_id): row for row in session.exec(statement).all()}
 
@@ -86,8 +99,7 @@ def build_grade_rows(lessons, problems_by_lesson, enrollments, best) -> list[dic
             cells = []
             for problem in problems_by_lesson.get(lesson.lesson_id, []):
                 submission = best.get((student.user_id, problem.problem_id))
-                passed = submission.passed_count if submission else None
-                score = submission.manual_score if submission and submission.manual_score is not None else problem_score(problem, passed)
+                score = graded_score(problem, submission)
                 if score is not None:
                     total += score
                     has_any = True

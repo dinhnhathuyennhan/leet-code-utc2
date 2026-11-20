@@ -10,7 +10,9 @@ from app.core.exceptions import EmptyFieldError, InvalidFormatError
 # nên đặt trong schemas/ten_file.py
 # định nghĩa function tại validator để tái sử dụng nhiều nơi
 def _validate_email(v: str) -> str:
-    if not v or not str(v).strip():
+    if v is not None and not isinstance(v, str):
+        raise InvalidFormatError("Email không đúng định dạng")
+    if not v or not v.strip():
         raise EmptyFieldError("Email không được để trống")
     try:
         validate_email(v, check_deliverability=False)

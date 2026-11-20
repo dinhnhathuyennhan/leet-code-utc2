@@ -303,3 +303,12 @@ def test_patch_unknown_user_returns_404_user_not_found(client, admin):
 
     assert response.status_code == 404
     assert response.json()["error_code"] == "USER_NOT_FOUND"
+
+
+def test_patch_non_string_email_returns_422_invalid_format(client, admin, student):
+    _login_as(admin)
+
+    response = client.patch(f"/users/{student.user_id}", json={"email": 123})
+
+    assert response.status_code == 422
+    assert response.json()["error_code"] == "INVALID_FORMAT"

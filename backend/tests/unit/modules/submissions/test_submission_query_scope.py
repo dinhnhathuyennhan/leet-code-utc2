@@ -155,6 +155,43 @@ class TestVisibilityScope:
         assert (nobody.items, nobody.total, nobody.counts["all"]) == ([], 0, 0)
 
 
+class TestScopeFailsClosedForNonTeacherRoles:
+    """Vai trò không phải ADMIN/TEACHER (kể cả role lạ) không được thấy bài nộp của khoá người khác."""
+
+    @pytest.fixture(params=[Role.STUDENT, 99], ids=["student", "undefined_role"])
+    def outsider(self, session: Session, request) -> User:
+        return make_user(session, "OUT001", request.param)
+
+    def test_list_returns_nothing(
+        self, session: Session, outsider: User, foreign_submission: Submission
+    ):
+        result = list_pending_submissions(session, outsider, include_graded=True)
+
+        assert (result.items, result.total) == ([], 0)
+
+    def test_detail_is_not_found(
+        self, session: Session, outsider: User, foreign_submission: Submission
+    ):
+        with pytest.raises(NotFoundError, match="Không tìm thấy bài nộp"):
+            get_submission_detail(session, foreign_submission.submission_id, outsider)
+
+    def test_update_is_not_found_and_leaves_row_unchanged(
+        self, session: Session, outsider: User, foreign_submission: Submission
+    ):
+        with pytest.raises(NotFoundError, match="Không tìm thấy bài nộp"):
+            update_submission(
+                session,
+                foreign_submission.submission_id,
+                SubmissionUpdateRequest(status="accepted", feedback="hack"),
+                outsider,
+            )
+
+        session.expire_all()
+        row = session.get(Submission, foreign_submission.submission_id)
+        assert row.status == "wrong_answer"
+        assert row.feedback is None
+
+
 @pytest.fixture
 def two_lessons(session: Session, submission_course: Course, submission_lesson: Lesson):
     """Thêm buổi học + bài tập thứ hai trong cùng khoá."""

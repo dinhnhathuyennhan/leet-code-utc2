@@ -3,6 +3,8 @@
 from datetime import timedelta
 
 import pytest
+from sqlalchemy import event
+from sqlalchemy.exc import InvalidRequestError
 from sqlmodel import Session
 
 from app.core.dependencies import Role
@@ -111,6 +113,31 @@ class TestBuildCourseResponseQueries:
         assert len(problem_selects) == 1
         for column in ("description", "starter_codes", "constraints", "hint", "complexity"):
             assert f"problem.{column}" not in problem_selects[0]
+
+    def test_unloaded_problem_columns_raise_instead_of_lazy_loading(
+        self, engine, session, course, problem
+    ):
+        session.commit()
+        session.expunge_all()  # buộc view tự nạp các Problem mới, không dùng lại bản cũ
+        loaded: list[Problem] = []
+
+        def capture(_session, instance):
+            if isinstance(instance, Problem):
+                loaded.append(instance)
+
+        event.listen(session, "loaded_as_persistent", capture)
+        try:
+            build_course_response(session.merge(course, load=False), session)
+        finally:
+            event.remove(session, "loaded_as_persistent", capture)
+
+        assert loaded
+        with count_queries(engine) as queries:
+            for obj in loaded:
+                assert obj.title  # cột cần dùng đã được nạp
+                with pytest.raises(InvalidRequestError):
+                    _ = obj.description
+        assert queries.count == 0
 
     def test_course_without_lessons(self, session, course):
         response = build_course_response(course, session)

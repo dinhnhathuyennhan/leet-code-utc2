@@ -40,7 +40,7 @@ def _scope_to_viewer(statement, current_user: User):
     return statement.where(Course.created_by == current_user.user_id)
 
 
-def _get_visible_submission(
+def get_visible_submission(
     session: Session, submission_id: int, current_user: User
 ) -> tuple[Submission, Problem, Lesson, Course, User]:
     """Một bài nộp (đủ cột) mà người gọi được phép thấy, hoặc NotFoundError."""
@@ -210,7 +210,7 @@ def list_pending_submissions(
 def get_submission_detail(
     session: Session, submission_id: int, current_user: User
 ) -> SubmissionDetailResponse:
-    submission, problem, lesson, course, student = _get_visible_submission(
+    submission, problem, lesson, course, student = get_visible_submission(
         session, submission_id, current_user
     )
     testcases = session.exec(
@@ -263,7 +263,7 @@ def update_submission(
     data: SubmissionUpdateRequest,
     current_user: User,
 ) -> SubmissionDetailResponse:
-    submission = _get_visible_submission(session, submission_id, current_user)[0]
+    submission = get_visible_submission(session, submission_id, current_user)[0]
     if data.status is not None and data.status not in _ALLOWED_UPDATE_STATUSES:
         raise InvalidFormatError("Trạng thái bài nộp không hợp lệ")
 

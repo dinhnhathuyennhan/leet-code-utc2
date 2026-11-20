@@ -44,7 +44,7 @@ from app.modules.submissions.judge0.schemas import (
     RunResponse,
     SubmissionResultResponse,
 )
-from app.modules.submissions.service import _get_visible_submission
+from app.modules.submissions.service import get_visible_submission
 from app.modules.testcases.testcase_format import decode_testcase_value
 
 logger = logging.getLogger(__name__)
@@ -475,7 +475,7 @@ def grade_submission(submission_id: int) -> None:
 
 
 def regrade(session: Session, submission_id: int, current_user: User) -> Submission:
-    submission = _get_visible_submission(session, submission_id, current_user)[0]  # raise nếu không đủ quyền xem
+    submission = get_visible_submission(session, submission_id, current_user)[0]  # raise nếu không đủ quyền xem
     if submission.status != "internal_error":
         raise ConflictError("Chỉ chấm lại được bài bị lỗi hệ thống chấm")
     submission.status = "pending"

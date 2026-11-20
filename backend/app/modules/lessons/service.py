@@ -1,3 +1,5 @@
+from uuid import UUID
+
 from sqlmodel import Session, func, select
 
 from app.core.dependencies import Role
@@ -163,7 +165,7 @@ def get_lesson_detail(session: Session, course_id: str, lesson_id: int, current_
     problem_by_id = {p.problem_id: p for p in problems}
 
     total_students = submitted_students = 0
-    enrolled_student_ids: list[str] = []
+    enrolled_student_ids: list[UUID] = []
     if not is_student:
         enrolled_student_ids = session.exec(
             select(Enrollment.student_id).where(Enrollment.course_id == course_id)
@@ -172,8 +174,8 @@ def get_lesson_detail(session: Session, course_id: str, lesson_id: int, current_
 
     testcases_by_problem: dict[int, list[Testcase]] = {pid: [] for pid in problem_ids}
     submitted_by_problem: dict[int, int] = {}
-    submitted_student_ids: set = set()
-    best: dict[tuple, int] = {}
+    submitted_student_ids: set[UUID] = set()
+    best: dict[tuple[UUID, int], int] = {}
     if problem_ids:
         testcase_query = select(Testcase).where(Testcase.problem_id.in_(problem_ids))
         if is_student:

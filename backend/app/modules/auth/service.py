@@ -3,7 +3,7 @@ import uuid
 from sqlalchemy import update
 from sqlmodel import Session, select
 
-from app.core.exceptions import AppError
+from app.core.exceptions import AccountLockedError, AppError
 from app.core.security.passwords import hash_password, verify_password
 from app.core.security.tokens import create_access_token, create_refresh_token, decode_token, TokenError
 from app.modules.auth.schemas import (
@@ -73,6 +73,10 @@ def login(session: Session, data: LoginRequest) -> tuple[LoginResponse, str]:
     if existing is None or not password_ok:
         raise InvalidCredentialsError("Email hoặc mật khẩu không đúng")
 
+    # Chỉ báo khoá sau khi mật khẩu đúng, tránh lộ trạng thái tài khoản cho người lạ.
+    if not existing.is_active:
+        raise AccountLockedError("Tài khoản đã bị khoá")
+
     return _build_login_response(existing)
 
 
@@ -123,6 +127,9 @@ def refresh_access_token(session: Session, refresh_token: str | None) -> str:
     user = session.get(User, user_id)
     if user is None or user.token_version != tv:
         raise SessionRevokedError("Phiên đăng nhập không còn hợp lệ")
+
+    if not user.is_active:
+        raise AccountLockedError("Tài khoản đã bị khoá")
 
     return create_access_token(user.user_id, user.role_id, user.token_version)
 

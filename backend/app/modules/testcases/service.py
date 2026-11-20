@@ -98,7 +98,7 @@ def _get_testcase(session: Session, problem_id: int, testcase_id: int) -> Testca
 
 def _assert_no_submissions(session: Session, problem_id: int) -> None:
     has_submission = session.exec(
-        select(Submission.submission_id).where(Submission.problem_id == problem_id)
+        select(Submission.submission_id).where(Submission.problem_id == problem_id).limit(1)
     ).first()
     if has_submission is not None:
         raise ConflictError(HAS_SUBMISSION_MESSAGE)

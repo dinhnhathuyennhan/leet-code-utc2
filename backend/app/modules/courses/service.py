@@ -3,6 +3,7 @@ import re
 from datetime import timedelta
 from uuid import UUID
 from sqlalchemy.exc import IntegrityError
+from sqlalchemy.orm import selectinload
 from sqlmodel import Session, delete, func, or_, select
 
 from app.core.exceptions import (
@@ -251,7 +252,7 @@ def get_courses(
         - ``term``: LIKE %%term%% trên cột ``Course.term``.
         - ``search``: LIKE %%search%% trên ``course_id`` HOẶC ``course_name``.
     """
-    statement = select(Course)
+    statement = select(Course).options(selectinload(Course.creator))
 
     if current_user.role_id == Role.ADMIN:
         pass
@@ -354,6 +355,7 @@ def get_student_courses(
 
     statement = (
         select(Course)
+        .options(selectinload(Course.creator))
         .join(Enrollment, Enrollment.course_id == Course.course_id)
         .where(Enrollment.student_id == student_uuid)
         .distinct()
@@ -410,6 +412,7 @@ def get_student_dashboard(
 
     course_statement = (
         select(Course)
+        .options(selectinload(Course.creator))
         .join(Enrollment, Enrollment.course_id == Course.course_id)
         .where(Enrollment.student_id == student_uuid)
         .distinct()
@@ -525,6 +528,6 @@ def _count_due_this_week(session: Session, student_uuid: UUID, current_user: Use
             Submission.student_id == student_uuid,
             Submission.status == "accepted",
             Submission.problem_id.in_([p.problem_id for p in problems]),
-        )
+        ).distinct()
     ).all())
     return sum(1 for p in problems if p.problem_id not in solved)

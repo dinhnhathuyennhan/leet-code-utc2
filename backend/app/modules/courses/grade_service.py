@@ -1,27 +1,11 @@
 from uuid import UUID
+
+from sqlalchemy import Row, case
 from sqlmodel import Session, func, select
 
 from app.models import Problem, Submission
 
 MAX_SCORE_PER_PROBLEM = 10
-
-
-def best_passed_counts(
-    session: Session, problem_ids: list[int], student_ids: list[UUID] | None = None
-) -> dict[tuple[UUID, int], int]:
-    """1 truy vấn: passed_count cao nhất của mỗi (sinh viên, bài)."""
-    if not problem_ids:
-        return {}
-    stmt = (
-        select(Submission.student_id, Submission.problem_id, func.max(Submission.passed_count))
-        .where(Submission.problem_id.in_(problem_ids))
-        .group_by(Submission.student_id, Submission.problem_id)
-    )
-    if student_ids is not None:
-        if not student_ids:
-            return {}
-        stmt = stmt.where(Submission.student_id.in_(student_ids))
-    return {(sid, pid): cnt for sid, pid, cnt in session.exec(stmt).all()}
 
 
 def problem_score(problem: Problem, passed: int | None) -> float | None:
@@ -32,22 +16,52 @@ def problem_score(problem: Problem, passed: int | None) -> float | None:
 
 def best_grade_scores(
     session: Session, problem_ids: list[int], student_ids: list[UUID] | None = None
-) -> dict[tuple[UUID, int], Submission]:
+) -> dict[tuple[UUID, int], Row]:
+    """1 truy vấn: bài nộp được chấm điểm của mỗi (sinh viên, bài), chọn bằng window function.
+
+    Ưu tiên: có điểm tay > passed_count cao hơn > nộp muộn hơn > submission_id lớn hơn.
+    Chỉ lấy các cột cần cho bảng điểm (không kéo submitted_code, testcase_results...).
+    """
     if not problem_ids:
         return {}
-    statement = select(Submission).where(Submission.problem_id.in_(problem_ids))
+    if student_ids is not None and not student_ids:
+        return {}
+    has_manual_score = case((Submission.manual_score.is_(None), 0), else_=1)
+    ranked = select(
+        Submission.submission_id,
+        Submission.student_id,
+        Submission.problem_id,
+        Submission.passed_count,
+        Submission.manual_score,
+        Submission.feedback,
+        Submission.status,
+        Submission.submitted_datetime,
+        func.row_number()
+        .over(
+            partition_by=(Submission.student_id, Submission.problem_id),
+            order_by=(
+                has_manual_score.desc(),
+                Submission.passed_count.desc(),
+                Submission.submitted_datetime.desc(),
+                Submission.submission_id.desc(),
+            ),
+        )
+        .label("rn"),
+    ).where(Submission.problem_id.in_(problem_ids))
     if student_ids is not None:
-        statement = statement.where(Submission.student_id.in_(student_ids))
-    submissions = list(session.exec(statement).all())
-    selected: dict[tuple[UUID, int], Submission] = {}
-    for submission in submissions:
-        key = (submission.student_id, submission.problem_id)
-        current = selected.get(key)
-        candidate_key = (submission.manual_score is not None, submission.passed_count, submission.submitted_datetime, submission.submission_id or 0)
-        current_key = None if current is None else (current.manual_score is not None, current.passed_count, current.submitted_datetime, current.submission_id or 0)
-        if current_key is None or candidate_key > current_key:
-            selected[key] = submission
-    return selected
+        ranked = ranked.where(Submission.student_id.in_(student_ids))
+    subquery = ranked.subquery()
+    statement = select(
+        subquery.c.submission_id,
+        subquery.c.student_id,
+        subquery.c.problem_id,
+        subquery.c.passed_count,
+        subquery.c.manual_score,
+        subquery.c.feedback,
+        subquery.c.status,
+        subquery.c.submitted_datetime,
+    ).where(subquery.c.rn == 1)
+    return {(row.student_id, row.problem_id): row for row in session.exec(statement).all()}
 
 
 def participants_by_lesson(session: Session, lesson_ids: list[int]) -> dict[int, int]:

@@ -172,6 +172,8 @@ def get_lesson_detail(session: Session, course_id: str, lesson_id: int, current_
 
     testcases_by_problem: dict[int, list[Testcase]] = {pid: [] for pid in problem_ids}
     submitted_by_problem: dict[int, int] = {}
+    submitted_student_ids: set = set()
+    best: dict[tuple, int] = {}
     if problem_ids:
         testcase_query = select(Testcase).where(Testcase.problem_id.in_(problem_ids))
         if is_student:
@@ -181,29 +183,25 @@ def get_lesson_detail(session: Session, course_id: str, lesson_id: int, current_
         ).all():
             testcases_by_problem[tc.problem_id].append(tc)
         if not is_student and enrolled_student_ids:
-            submitted_by_problem = dict(
-                session.exec(
-                    select(Submission.problem_id, func.count())
-                    .where(
-                        Submission.problem_id.in_(problem_ids),
-                        Submission.student_id.in_(enrolled_student_ids),
-                    )
-                    .group_by(Submission.problem_id)
-                ).all()
-            )
-            submitted_students = session.exec(
-                select(func.count(func.distinct(Submission.student_id)))
+            # 1 truy vấn cho cả số lượt nộp, số sinh viên đã nộp và passed_count cao nhất
+            for student_id, problem_id, attempts, max_passed in session.exec(
+                select(
+                    Submission.student_id,
+                    Submission.problem_id,
+                    func.count(),
+                    func.max(Submission.passed_count),
+                )
                 .where(
                     Submission.problem_id.in_(problem_ids),
                     Submission.student_id.in_(enrolled_student_ids),
                 )
-            ).one()
+                .group_by(Submission.student_id, Submission.problem_id)
+            ).all():
+                submitted_by_problem[problem_id] = submitted_by_problem.get(problem_id, 0) + attempts
+                submitted_student_ids.add(student_id)
+                best[(student_id, problem_id)] = max_passed
+            submitted_students = len(submitted_student_ids)
 
-    best = (
-        grade_service.best_passed_counts(session, problem_ids, enrolled_student_ids)
-        if not is_student
-        else {}
-    )
     scores = [s for (_sid, pid), cnt in best.items()
               if (s := grade_service.problem_score(problem_by_id[pid], cnt)) is not None]
     avg_score = round(sum(scores) / len(scores), 1) if scores else 0

@@ -1,3 +1,4 @@
+from sqlalchemy.orm import load_only
 from sqlmodel import Session, select
 
 from app.core.utils.datetime_utils import now_utc, vn_day_end, vn_day_start, as_utc
@@ -15,15 +16,6 @@ def lesson_status(lesson: Lesson) -> str:
     if now > end:
         return "closed"
     return "open"
-
-
-def _creator_name(course: Course) -> str | None:
-    """Tên người tạo lớp (UUID `created_by` không nên hiển thị cho người dùng)."""
-    try:
-        creator = course.creator
-    except Exception:  # course đã tách khỏi session
-        return None
-    return creator.full_name if creator else None
 
 
 def build_course_response(
@@ -47,7 +39,13 @@ def build_course_response(
     ).all()
     lesson_ids = [lesson.lesson_id for lesson in lessons]
     problems = session.exec(
-        select(Problem).where(Problem.lesson_id.in_(lesson_ids)).order_by(Problem.problem_id)
+        select(Problem)
+        .options(load_only(
+            Problem.problem_id, Problem.lesson_id, Problem.title, Problem.report, Problem.level,
+            Problem.start_datetime, Problem.end_datetime, Problem.total_number_testcase,
+            raiseload=True,
+        ))
+        .where(Problem.lesson_id.in_(lesson_ids)).order_by(Problem.problem_id)
     ).all() if lesson_ids else []
     problems_by_lesson: dict[int, list[Problem]] = {lid: [] for lid in lesson_ids}
     for problem in problems:
@@ -60,7 +58,8 @@ def build_course_response(
             for lesson_id, lesson_problems in problems_by_lesson.items()
         }
 
-    participants = grade_service.participants_by_lesson(session, lesson_ids)
+    # Sinh viên không thấy participant_count nên khỏi truy vấn
+    participants = {} if is_student_view else grade_service.participants_by_lesson(session, lesson_ids)
 
     lesson_responses = []
     for lesson in lessons:

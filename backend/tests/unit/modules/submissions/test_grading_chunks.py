@@ -104,6 +104,23 @@ def test_resumes_with_saved_tokens_per_chunk(monkeypatch, problem):
     assert seen_tokens == [tokens[:10], None]
 
 
+def test_reused_chunk_still_renews_the_grading_lease(monkeypatch, problem):
+    """Chấm tiếp bằng token cũ không gửi lô mới, nhưng vẫn phải gọi on_tokens để gia hạn lease."""
+
+    def fake(problem, data, testcases, timeout, tokens=None, on_tokens=None):
+        return [(SimpleNamespace(time=None), "accepted", None) for _ in testcases]
+
+    monkeypatch.setattr(judge_service, "_run_judge", fake)
+    tokens = [f"old{i}" for i in range(15)]
+    renewals: list[list[str]] = []
+
+    judge_service._grade_in_chunks(
+        problem, CodeRequest(language="python", code="x"), _testcases(15), tokens, renewals.append
+    )
+
+    assert renewals == [tokens, tokens]  # một lần trước mỗi lô dùng lại token
+
+
 def test_chunk_timeout_covers_every_test_hitting_wall_time(problem):
     timeout = judge_service._chunk_timeout(problem, "python", 50)
     _, wall = judge_service.compute_limits(1, "python")

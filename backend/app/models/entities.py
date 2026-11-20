@@ -159,6 +159,8 @@ class Submission(SQLModel, table=True):
     # Kết quả từng testcase: [{"testcase_id", "status", "time"}]; NULL với bài chấm trước
     # khi có cột này (khi đó chỉ biết tổng passed_count).
     testcase_results: list[dict] | None = Field(default=None, sa_type=JSON)
+    # Lease của worker đang chấm bài (status processing); NULL khi không ai giữ quyền chấm.
+    grading_claimed_at: datetime | None = Field(default=None, sa_type=UTCDateTime)
 
     problem: Problem | None = Relationship(back_populates="submissions")
     student: User | None = Relationship(back_populates="submissions")

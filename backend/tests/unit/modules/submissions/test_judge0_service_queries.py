@@ -4,33 +4,40 @@ import pytest
 from sqlmodel import Session
 
 from app.core.exceptions import ConflictError
+from app.core.utils.datetime_utils import as_utc, now_utc
 from app.models.entities import Submission, User
 from app.modules.submissions.judge0 import service as judge_service
+from tests.support.fixtures.builders import make_submission
 
 pytest_plugins = ("tests.support.fixtures.submission_fixtures",)
 
 
 class TestSaveTokens:
-    def test_tokens_are_persisted_as_a_list(
-        self, engine, session: Session, monkeypatch, pending_error_submission: Submission
+    def test_tokens_are_persisted_as_a_list_and_lease_renewed(
+        self, engine, session: Session, monkeypatch, submission_problem, submission_student
     ):
+        submission = make_submission(session, submission_problem, submission_student, status="pending")
         session.commit()
         monkeypatch.setattr(judge_service, "engine", engine)
+        claim = judge_service._claim_submission(submission.submission_id)
+        first_claim = claim.claimed_at
 
-        judge_service._save_tokens(pending_error_submission.submission_id, ["t1", "t2"])
+        claim.save_tokens(["t1", "t2"])
 
         session.expire_all()
-        assert session.get(Submission, pending_error_submission.submission_id).judge_tokens == [
-            "t1", "t2",
-        ]
+        row = session.get(Submission, submission.submission_id)
+        assert row.judge_tokens == ["t1", "t2"]
+        assert claim.claimed_at >= first_claim
+        assert as_utc(row.grading_claimed_at) == claim.claimed_at
 
     def test_unknown_submission_raises_submission_deleted(
         self, engine, session: Session, monkeypatch
     ):
         monkeypatch.setattr(judge_service, "engine", engine)
+        claim = judge_service._GradingClaim(999999, now_utc())
 
         with pytest.raises(judge_service._SubmissionDeleted):
-            judge_service._save_tokens(999999, ["t1"])
+            claim.save_tokens(["t1"])
 
         assert session.get(Submission, 999999) is None
 
@@ -51,6 +58,7 @@ class TestRegrade:
         submission.compile_output = "x"
         submission.judge_tokens = ["t"]
         submission.testcase_results = [{"testcase_id": 1, "status": "accepted", "time": 0.1}]
+        submission.grading_claimed_at = now_utc()
         session.add(submission)
         session.commit()
 
@@ -59,6 +67,7 @@ class TestRegrade:
         assert result.status == "pending"
         assert (result.passed_count, result.compile_output) == (0, None)
         assert (result.judge_tokens, result.testcase_results) == (None, None)
+        assert result.grading_claimed_at is None
         assert queued == [submission.submission_id]
 
     def test_non_internal_error_conflicts(

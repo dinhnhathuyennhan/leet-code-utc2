@@ -57,7 +57,7 @@ def test_result_is_dropped_when_submission_deleted_mid_grading(
     session.expire_all()
     assert session.get(Submission, submission_id) is None
     assert enqueue_calls == []
-    assert any("đã bị xoá" in r.getMessage() for r in caplog.records)
+    assert any("bị xoá" in r.getMessage() for r in caplog.records)
 
 
 def test_deleted_submission_is_not_retried_after_judge0_error(
@@ -104,30 +104,11 @@ def _delete_on_nth_commit(monkeypatch, engine, submission_id: int, nth: int):
     monkeypatch.setattr(judge_service, "Session", RacingSession)
 
 
-def test_stale_row_on_result_commit_is_tolerated(
+def test_row_deleted_right_after_claim_is_tolerated(
     engine, session, enqueue_calls, pending_submission, monkeypatch, caplog
 ):
     submission_id = pending_submission.submission_id
-    # commit 1 = chuyển processing, commit 2 = lưu kết quả cuối
-    _delete_on_nth_commit(monkeypatch, engine, submission_id, 2)
-    monkeypatch.setattr(judge_service, "_grade_in_chunks", lambda *a, **k: [(None, "accepted", None)])
-    monkeypatch.setattr(judge_service, "_testcase_results", lambda *a, **k: [])
-    monkeypatch.setattr(judge_service, "_compile_output_of", lambda *a, **k: None)
-
-    with caplog.at_level(logging.INFO, logger=judge_service.logger.name):
-        judge_service.grade_submission(submission_id)
-
-    session.expire_all()
-    assert session.get(Submission, submission_id) is None
-    assert enqueue_calls == []
-    assert any("bị xoá trong lúc lưu kết quả" in r.getMessage() for r in caplog.records)
-    assert not any(r.levelno >= logging.ERROR for r in caplog.records)
-
-
-def test_stale_row_on_processing_commit_is_tolerated(
-    engine, session, enqueue_calls, pending_submission, monkeypatch, caplog
-):
-    submission_id = pending_submission.submission_id
+    # commit 1 = nhận quyền chấm; hàng bị xoá trước khi worker kịp đọc bài nộp
     _delete_on_nth_commit(monkeypatch, engine, submission_id, 1)
 
     def must_not_run(*args, **kwargs):
@@ -166,5 +147,5 @@ def test_stale_row_on_token_save_stops_grading_without_retry(
     assert reached == []
     assert session.get(Submission, submission_id) is None
     assert enqueue_calls == []
-    assert any("bị xoá trong lúc lưu token" in r.getMessage() for r in caplog.records)
+    assert any("trong lúc lưu token" in r.getMessage() for r in caplog.records)
     assert not any(r.levelno >= logging.ERROR for r in caplog.records)

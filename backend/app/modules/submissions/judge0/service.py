@@ -3,11 +3,10 @@ import logging
 import threading
 from collections.abc import Callable
 from contextlib import contextmanager
-from datetime import timedelta
+from datetime import datetime, timedelta
 from typing import Any
 
-from sqlalchemy import update
-from sqlalchemy.orm.exc import StaleDataError
+from sqlalchemy import and_, or_, update
 from sqlmodel import Session, func, select
 
 from app.core import config
@@ -55,6 +54,9 @@ GRADE_RETRY_DELAY_SECONDS = config.GRADE_RETRY_DELAY_SECONDS
 # Bài active quá hạn này bị coi là hỏng: không còn chặn sinh viên nộp lại, và thôi chấm thử lại
 PENDING_TTL = timedelta(minutes=config.PENDING_TTL_MINUTES)
 _ACTIVE_STATUSES = ("pending", "processing")
+# Thời hạn giữ quyền chấm một bài: worker gia hạn mỗi khi bắt đầu một lô test. Quá hạn mà
+# chưa gia hạn thì coi worker đã chết (backend bị dừng giữa chừng) và worker khác được nhận.
+GRADING_LEASE = PENDING_TTL
 
 
 class SubmissionClosedError(ForbiddenError):
@@ -310,22 +312,105 @@ def submit(
 
 
 class _SubmissionDeleted(Exception):
-    """Bài nộp bị xoá (admin xoá khoá học) trong lúc đang chấm; dừng chấm, không retry."""
+    """Bài nộp bị xoá (admin xoá khoá học) hoặc đã bị worker khác nhận chấm; dừng chấm, không retry."""
 
 
-def _save_tokens(submission_id: int, tokens: list[str]) -> None:
+class _GradingClaim:
+    """Quyền chấm một bài nộp, giữ bằng cột ``grading_claimed_at`` (lease).
+
+    Mọi lần ghi của worker đều kèm điều kiện ``grading_claimed_at`` còn đúng giá trị
+    worker đã ghi, nên worker đã mất quyền (lease hết hạn, worker khác nhận) không ghi
+    đè được kết quả của worker mới.
+    """
+
+    def __init__(self, submission_id: int, claimed_at: datetime):
+        self.submission_id = submission_id
+        self.claimed_at = claimed_at
+
+    def _owned(self):
+        return and_(
+            Submission.submission_id == self.submission_id,
+            Submission.grading_claimed_at == self.claimed_at,
+        )
+
+    def save_tokens(self, tokens: list[str]) -> None:
+        """Lưu token Judge0 và gia hạn lease; raise ``_SubmissionDeleted`` nếu đã mất quyền chấm."""
+        renewed_at = now_utc()
+        with Session(engine) as session:
+            result = session.execute(
+                update(Submission)
+                .where(self._owned())
+                .values(judge_tokens=tokens, grading_claimed_at=renewed_at)
+            )
+            session.commit()
+        if result.rowcount == 0:
+            logger.info(
+                "Bài nộp %s đã bị xoá hoặc đã được worker khác nhận chấm trong lúc lưu token chấm,"
+                " bỏ qua kết quả",
+                self.submission_id,
+            )
+            raise _SubmissionDeleted
+        self.claimed_at = renewed_at
+
+    def finish(self, **values: Any) -> bool:
+        """Ghi kết quả và trả lại quyền chấm; ``False`` nếu bài đã bị xoá hoặc đã mất quyền."""
+        with Session(engine) as session:
+            result = session.execute(
+                update(Submission)
+                .where(self._owned())
+                .values(**values, grading_claimed_at=None)
+            )
+            session.commit()
+        return result.rowcount == 1
+
+
+def _claim_submission(submission_id: int) -> _GradingClaim | None:
+    """Nhận quyền chấm bằng một UPDATE có điều kiện (an toàn khi nhiều worker/backend cùng chạy).
+
+    Nhận được khi bài đang ``pending``, hoặc ``processing`` mà lease đã hết hạn (worker cũ
+    đã chết). Nếu bài đang được worker khác chấm thì hẹn kiểm tra lại lúc lease hết hạn,
+    để bài không bị bỏ dở nếu worker đó chết trước khi chấm xong.
+    """
+    claimed_at = now_utc()
     with Session(engine) as session:
         result = session.execute(
             update(Submission)
-            .where(Submission.submission_id == submission_id)
-            .values(judge_tokens=tokens)
+            .where(
+                Submission.submission_id == submission_id,
+                or_(
+                    Submission.status == "pending",
+                    and_(
+                        Submission.status == "processing",
+                        or_(
+                            Submission.grading_claimed_at.is_(None),
+                            Submission.grading_claimed_at <= claimed_at - GRADING_LEASE,
+                        ),
+                    ),
+                ),
+            )
+            .values(status="processing", grading_claimed_at=claimed_at)
         )
         session.commit()
-        if result.rowcount == 0:
-            logger.info(
-                "Bài nộp %s đã bị xoá trong lúc lưu token chấm, bỏ qua kết quả", submission_id
+        if result.rowcount == 1:
+            return _GradingClaim(submission_id, claimed_at)
+        current = session.exec(
+            select(Submission.status, Submission.grading_claimed_at).where(
+                Submission.submission_id == submission_id
             )
-            raise _SubmissionDeleted
+        ).first()
+    if current is None:
+        logger.info("Bài nộp %s đã bị xoá trước khi bắt đầu chấm, bỏ qua", submission_id)
+    elif current.status == "processing" and current.grading_claimed_at is not None:
+        expires_in = max(
+            (as_utc(current.grading_claimed_at) + GRADING_LEASE - now_utc()).total_seconds(), 0
+        )
+        logger.info(
+            "Bài nộp %s đang được worker khác chấm, kiểm tra lại sau %.0fs",
+            submission_id,
+            expires_in,
+        )
+        grading_queue.enqueue(submission_id, expires_in + 1)
+    return None
 
 
 SKIPPED_STATUS = "skipped"
@@ -361,12 +446,15 @@ def _grade_in_chunks(
             saved[start:] = new_tokens
             on_tokens(list(saved))
 
+        reuse = len(chunk_tokens) == len(chunk)
+        if reuse:
+            on_tokens(list(saved))  # chấm tiếp bằng token cũ: vẫn gia hạn quyền chấm như lô mới
         judged += _run_judge(
             problem,
             data,
             chunk,
             _chunk_timeout(problem, data.language, len(chunk)),
-            chunk_tokens if len(chunk_tokens) == len(chunk) else None,
+            chunk_tokens if reuse else None,
             remember,
         )
         statuses = [status for _, status, _ in judged]
@@ -396,22 +484,17 @@ def _testcase_results(
 
 def grade_submission(submission_id: int) -> None:
     """Chạy trong worker nền: mở Session riêng và không giữ kết nối DB trong lúc chờ Judge0."""
+    claim = _claim_submission(submission_id)
+    if claim is None:
+        return
+
     with Session(engine) as session:
         submission = session.get(Submission, submission_id)
-        if submission is None or submission.status not in _ACTIVE_STATUSES:
-            return
-        submission.status = "processing"
-        session.add(submission)
-        try:
-            session.commit()
-        except StaleDataError:
-            session.rollback()
+        if submission is None:
             logger.info(
                 "Bài nộp %s đã bị xoá trước khi bắt đầu chấm, bỏ qua kết quả", submission_id
             )
             return
-        session.refresh(submission)
-
         problem = session.get(Problem, submission.problem_id)
         testcases = list(
             session.exec(
@@ -423,52 +506,43 @@ def grade_submission(submission_id: int) -> None:
         data = CodeRequest(language=submission.language, code=submission.submitted_code)
         tokens = submission.judge_tokens
         submitted_at = as_utc(submission.submitted_datetime)
-        session.close()
 
-        retry = False
-        passed_count = 0
-        compile_output = None
-        results = None
-        try:
-            judged = _grade_in_chunks(
-                problem,
-                data,
-                testcases,
-                tokens,
-                lambda new_tokens: _save_tokens(submission_id, new_tokens),
-            )
-            statuses = [status for _, status, _ in judged]
-            status = _overall_status(statuses)
-            passed_count = statuses.count("accepted")
-            compile_output = _compile_output_of(judged)
-            results = _testcase_results(problem, data.language, testcases, judged)
-        except _SubmissionDeleted:
-            return
-        except Judge0Error:
-            logger.warning("Judge0 không khả dụng khi chấm, submission_id=%s", submission_id)
-            if now_utc() - submitted_at > PENDING_TTL:
-                status = "internal_error"
-            else:
-                status, retry = "pending", True
-        except Exception:
-            logger.exception("Chấm bài thất bại, submission_id=%s", submission_id)
+    retry = False
+    passed_count = 0
+    compile_output = None
+    results = None
+    try:
+        judged = _grade_in_chunks(problem, data, testcases, tokens, claim.save_tokens)
+        statuses = [status for _, status, _ in judged]
+        status = _overall_status(statuses)
+        passed_count = statuses.count("accepted")
+        compile_output = _compile_output_of(judged)
+        results = _testcase_results(problem, data.language, testcases, judged)
+    except _SubmissionDeleted:
+        return
+    except Judge0Error:
+        logger.warning("Judge0 không khả dụng khi chấm, submission_id=%s", submission_id)
+        if now_utc() - submitted_at > PENDING_TTL:
             status = "internal_error"
+        else:
+            status, retry = "pending", True
+    except Exception:
+        logger.exception("Chấm bài thất bại, submission_id=%s", submission_id)
+        status = "internal_error"
 
-        submission = session.get(Submission, submission_id)
-        if submission is None:
-            logger.info("Bài nộp %s đã bị xoá trong lúc chấm, bỏ qua kết quả", submission_id)
-            return
-        submission.status = status
-        submission.passed_count = passed_count
-        submission.compile_output = compile_output
-        submission.testcase_results = results
-        session.add(submission)
-        try:
-            session.commit()
-        except StaleDataError:
-            session.rollback()
-            logger.info("Bài nộp %s bị xoá trong lúc lưu kết quả chấm, bỏ qua", submission_id)
-            return
+    saved = claim.finish(
+        status=status,
+        passed_count=passed_count,
+        compile_output=compile_output,
+        testcase_results=results,
+    )
+    if not saved:
+        logger.info(
+            "Bài nộp %s bị xoá hoặc đã được worker khác nhận chấm trong lúc lưu kết quả chấm,"
+            " bỏ qua",
+            submission_id,
+        )
+        return
 
     if retry:
         grading_queue.enqueue(submission_id, GRADE_RETRY_DELAY_SECONDS)
@@ -483,6 +557,7 @@ def regrade(session: Session, submission_id: int, current_user: User) -> Submiss
     submission.compile_output = None
     submission.judge_tokens = None
     submission.testcase_results = None
+    submission.grading_claimed_at = None
     session.add(submission)
     session.commit()
     session.refresh(submission)

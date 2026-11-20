@@ -380,6 +380,10 @@ def update_user(
         session.commit()
     except IntegrityError:
         session.rollback()
+        class_id = changes.get("class_id")
+        if class_id is not None and session.get(Class, class_id) is None:
+            # Lớp bị xoá/đổi tên giữa bước kiểm tra tồn tại và commit (vi phạm FK)
+            raise NotFoundError(f"Không tìm thấy lớp học có ID: {class_id}") from None
         raise ConflictError("Email hoặc mã sinh viên đã được sử dụng") from None
     session.refresh(target)
     return target

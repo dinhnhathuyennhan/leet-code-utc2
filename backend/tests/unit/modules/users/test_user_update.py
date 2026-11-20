@@ -17,6 +17,8 @@ from app.modules.users.service import (
 )
 from tests.support.fixtures.builders import make_course, make_enrollment
 
+pytest_plugins = ("tests.support.fixtures.db_fixtures",)
+
 OLD_CODE = "6851071001"
 
 
@@ -282,3 +284,27 @@ def test_update_permission_matrix(session, admin, teacher, student):
 def test_update_unknown_user_not_found(session, admin, target_id):
     with pytest.raises(UserNotFoundError):
         update_user(session, admin, target_id, UpdateUserRequest(full_name="X"))
+
+
+def test_update_class_vanishing_before_commit_reports_not_found(fk_session, monkeypatch):
+    """Lớp bị xoá/đổi tên sau bước kiểm tra tồn tại: lỗi FK phải báo 404 lớp, không phải trùng email/MSSV."""
+    admin = _user(fk_session, Role.ADMIN, "admin")
+    student = _user(fk_session, Role.STUDENT, "sv", student_code=OLD_CODE)
+    student_id = student.user_id
+    real_get = fk_session.get
+    calls = {"class": 0}
+
+    def get_with_stale_precheck(entity, ident, *args, **kwargs):
+        if entity is Class:
+            calls["class"] += 1
+            if calls["class"] == 1:  # bước kiểm tra tồn tại thấy lớp, rồi lớp biến mất trước commit
+                return Class(class_id=ident, type="CQ", course_number=67, department="CNTT")
+        return real_get(entity, ident, *args, **kwargs)
+
+    monkeypatch.setattr(fk_session, "get", get_with_stale_precheck)
+
+    with pytest.raises(NotFoundError, match="Không tìm thấy lớp học có ID: CQ.67.CNTT"):
+        update_user(fk_session, admin, student_id, UpdateUserRequest(class_id="CQ.67.CNTT"))
+
+    fk_session.expire_all()
+    assert real_get(User, student_id).class_id is None

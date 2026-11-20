@@ -54,7 +54,7 @@ async def request_validation_exception_handler(request: Request, exc: RequestVal
 async def session_ended_handler(request: Request, exc: AppError) -> JSONResponse:
     body = ErrorResponse(error_code=exc.error_code, message=exc.message)
     response = JSONResponse(status_code=exc.status_code, content=body.model_dump())
-    response.delete_cookie(key="refresh_token", path="/auth")
+    response.delete_cookie(key="refresh_token", path="/auth", secure=True, samesite="none")
     return response
 
 def register_exception_handlers(app: FastAPI) -> None:

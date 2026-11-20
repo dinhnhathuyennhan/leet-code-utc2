@@ -11,6 +11,8 @@ from app.api.auth import (
     _set_refresh_token_cookie,
 )
 
+pytest_plugins = ("tests.support.fixtures.api_fixtures",)
+
 
 def _set_cookie_header(response: Response) -> str:
     return response.headers["set-cookie"].lower()
@@ -35,6 +37,19 @@ def test_clear_refresh_cookie_matches_set_attributes():
     header = _set_cookie_header(response)
 
     assert header.startswith("refresh_token=")
+    assert "max-age=0" in header
+    assert "secure" in header
+    assert "samesite=none" in header
+    assert "path=/auth" in header
+
+
+def test_session_ended_response_clears_cookie_cross_site(client):
+    response = client.post("/auth/refresh-access-token")
+
+    assert response.status_code == 401
+    assert response.json()["error_code"] == "SESSION_EXPIRED"
+    header = response.headers["set-cookie"].lower()
+    assert "refresh_token=" in header
     assert "max-age=0" in header
     assert "secure" in header
     assert "samesite=none" in header

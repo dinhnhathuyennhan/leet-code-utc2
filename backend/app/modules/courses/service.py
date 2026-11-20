@@ -1,7 +1,8 @@
 import re
 from datetime import timedelta
 from uuid import UUID
-from sqlmodel import Session, func, or_, select
+from sqlalchemy.exc import IntegrityError
+from sqlmodel import Session, delete, func, or_, select
 
 from app.core.exceptions import (
     ConflictError,
@@ -125,13 +126,37 @@ def update_course(
     return build_course_response(course)
 
 
-def delete_course(course_id: str, session: Session, current_user: User) -> None:
+class CourseHasSubmissionsError(ConflictError):
+    """Lớp học đã có bài nộp của sinh viên nên không xoá thường được (409)."""
+
+    error_code = "COURSE_HAS_SUBMISSIONS"
+
+
+def _count_submissions(session: Session, problem_ids: list[int]) -> int:
+    if not problem_ids:
+        return 0
+    return session.exec(
+        select(func.count()).select_from(Submission).where(Submission.problem_id.in_(problem_ids))
+    ).one()
+
+
+def delete_course(
+    course_id: str, session: Session, current_user: User, force: bool = False
+) -> None:
     """Xoá lớp học phần cùng buổi học, bài tập (bản sao trong lớp), testcase và ghi danh.
 
     - Quyền: Admin mọi lớp, hoặc Teacher là chủ lớp.
-    - Lớp đã có bài nộp thì KHÔNG xoá (giữ lịch sử chấm của sinh viên).
-    - Đề nguồn trong ngân hàng (problem.lesson_id = NULL) không bị ảnh hưởng.
+    - Lớp đã có bài nộp: mặc định KHÔNG xoá (giữ lịch sử chấm của sinh viên),
+      raise `CourseHasSubmissionsError` kèm số bài nộp.
+    - `force=True` (chỉ Admin): xoá vĩnh viễn cả bài nộp của lớp đó. Teacher
+      hay role khác dùng `force` đều bị `ForbiddenError`, kiểm tra trước mọi truy vấn.
+    - Nếu có bài nộp mới chen vào sau lúc kiểm tra (đường không force), FK chặn
+      xoá -> rollback và báo `CourseHasSubmissionsError` để thử lại.
+    - Đề nguồn trong ngân hàng (problem.lesson_id = NULL) và tài khoản sinh
+      viên không bị ảnh hưởng.
     """
+    if force and current_user.role_id != Role.ADMIN:
+        raise ForbiddenError("Chỉ Admin mới được xoá lớp học đã có bài nộp")
     course = get_manageable_course(
         course_id, session, current_user, "Bạn không có quyền xoá lớp học này"
     )
@@ -141,25 +166,34 @@ def delete_course(course_id: str, session: Session, current_user: User) -> None:
         if lesson_ids
         else []
     )
-    if problem_ids and session.exec(
-        select(Submission.submission_id).where(Submission.problem_id.in_(problem_ids))
-    ).first():
-        raise ConflictError("Không thể xoá lớp học đã có bài nộp của sinh viên")
+    submission_count = _count_submissions(session, problem_ids)
+    if submission_count and not force:
+        raise CourseHasSubmissionsError(
+            f"Không thể xoá lớp học đã có bài nộp của sinh viên ({submission_count} bài nộp)"
+        )
 
-    for model, column, ids in (
-        (Testcase, Testcase.problem_id, problem_ids),
-        (Problem, Problem.problem_id, problem_ids),
-        (Lesson, Lesson.lesson_id, lesson_ids),
-    ):
-        if ids:
-            for row in session.exec(select(model).where(column.in_(ids))).all():
-                session.delete(row)
-            session.flush()
-    for enrollment in session.exec(select(Enrollment).where(Enrollment.course_id == course_id)).all():
-        session.delete(enrollment)
-    session.flush()
-    session.delete(course)
-    session.commit()
+    try:
+        if force and problem_ids:
+            session.exec(delete(Submission).where(Submission.problem_id.in_(problem_ids)))
+        for model, column, ids in (
+            (Testcase, Testcase.problem_id, problem_ids),
+            (Problem, Problem.problem_id, problem_ids),
+            (Lesson, Lesson.lesson_id, lesson_ids),
+        ):
+            if ids:
+                for row in session.exec(select(model).where(column.in_(ids))).all():
+                    session.delete(row)
+                session.flush()
+        for enrollment in session.exec(select(Enrollment).where(Enrollment.course_id == course_id)).all():
+            session.delete(enrollment)
+        session.flush()
+        session.delete(course)
+        session.commit()
+    except IntegrityError as exc:
+        session.rollback()
+        raise CourseHasSubmissionsError(
+            "Lớp học vừa có bài nộp mới của sinh viên, vui lòng thử lại"
+        ) from exc
 
 
 def _parse_term(term: str) -> tuple[int, str]:

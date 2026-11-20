@@ -119,10 +119,16 @@ def update_course_route(
 @router.delete("/courses/{course_id}", status_code=status.HTTP_204_NO_CONTENT)
 def delete_course_route(
     course_id: str,
+    force: bool = Query(
+        default=False,
+        description="Chỉ Admin: xoá vĩnh viễn cả bài nộp của sinh viên trong lớp.",
+    ),
     session: Session = Depends(get_session),
     current_user: User = Depends(require_role(Role.ADMIN, Role.TEACHER)),
 ) -> None:
-    _delete_course(course_id=course_id, session=session, current_user=current_user)
+    _delete_course(
+        course_id=course_id, session=session, current_user=current_user, force=force
+    )
 
 
 # ─── Lỗi 7: Lấy danh sách lớp của 1 sinh viên ──────────────────────────────

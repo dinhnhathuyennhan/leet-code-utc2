@@ -297,6 +297,43 @@ def test_patch_admin_self_returns_200(client, admin):
     assert "hashed_password" not in body
 
 
+def test_patch_admin_self_resubmitting_own_email_is_not_conflict(client, session, admin):
+    admin.email = "quantri@st.utc2.edu.vn"
+    session.add(admin)
+    session.commit()
+    _login_as(admin)
+
+    response = client.patch(
+        f"/users/{admin.user_id}",
+        json={"full_name": "Quản trị viên", "email": "quantri@st.utc2.edu.vn"},
+    )
+
+    assert response.status_code == 200
+    assert response.json()["full_name"] == "Quản trị viên"
+
+
+def test_patch_admin_self_duplicate_email_returns_409(client, session, admin):
+    taken = _create_user(session, Role.TEACHER, "gv2")
+    taken.email = "gv2@st.utc2.edu.vn"
+    session.add(taken)
+    session.commit()
+    _login_as(admin)
+
+    response = client.patch(f"/users/{admin.user_id}", json={"email": "gv2@st.utc2.edu.vn"})
+
+    assert response.status_code == 409
+    assert response.json() == {"error_code": "CONFLICT", "message": "Email đã được đăng ký"}
+
+
+def test_patch_admin_self_student_code_returns_422_field_not_editable(client, admin):
+    _login_as(admin)
+
+    response = client.patch(f"/users/{admin.user_id}", json={"student_code": "6851071009"})
+
+    assert response.status_code == 422
+    assert response.json()["error_code"] == "FIELD_NOT_EDITABLE"
+
+
 def test_patch_admin_other_admin_returns_403(client, session, admin):
     other_admin = _create_user(session, Role.ADMIN, "admin2")
     _login_as(admin)

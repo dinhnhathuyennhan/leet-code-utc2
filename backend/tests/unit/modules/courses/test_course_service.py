@@ -25,7 +25,7 @@ from app.modules.courses.view import build_course_response
 from app.models import Course
 
 from tests.support.fixtures.user_fixtures import make_user, vn
-from tests.support.fixtures.builders import make_enrollment, make_lesson, make_problem
+from tests.support.fixtures.builders import make_enrollment, make_lesson, make_problem, make_submission
 from tests.support.fixtures.enrollment_fixtures import enroll_directly
 from tests.support.fixtures.course_fixtures import make_course
 
@@ -613,6 +613,108 @@ class TestStudentDashboardCounters:
         assert result.completed_problems == 1
         assert result.total_problems == 1
 
+
+
+class TestStudentDashboardAverageScore:
+    """`average_score` (thang 10): điểm tốt nhất mỗi bài như bảng điểm, trung bình trên các bài
+    đã nộp, cùng phạm vi khoá học với `total_problems`."""
+
+    def _problem(self, session, lesson, title, total=4):
+        return make_problem(session, lesson, title=title, total_number_testcase=total)
+
+    def _submit(self, session, problem, student, passed, manual=None):
+        submission = make_submission(session, problem, student, passed_count=passed)
+        submission.manual_score = manual
+        session.add(submission)
+        return submission
+
+    def test_uses_best_attempt_per_problem_not_every_attempt(self, session, course, student):
+        problem = self._problem(session, make_lesson(session, course), "Bài 1")
+        enroll_directly(session, course, student)
+        for passed in (0, 0, 4):
+            self._submit(session, problem, student, passed)
+        session.commit()
+
+        result = get_student_dashboard(session, student.user_id, student)
+
+        assert result.average_score == 10.0
+
+    def test_averages_problems_on_ten_point_scale(self, session, course, student):
+        lesson = make_lesson(session, course)
+        full = self._problem(session, lesson, "Bài 1", total=4)
+        half = self._problem(session, lesson, "Bài 2", total=2)
+        self._problem(session, lesson, "Chưa nộp")  # bài chưa nộp không kéo trung bình xuống
+        enroll_directly(session, course, student)
+        self._submit(session, full, student, 4)
+        self._submit(session, half, student, 1)
+        session.commit()
+
+        result = get_student_dashboard(session, student.user_id, student)
+
+        assert result.average_score == 7.5
+        assert result.total_problems == 3
+
+    def test_manual_score_has_priority_like_the_gradebook(self, session, course, student):
+        problem = self._problem(session, make_lesson(session, course), "Bài 1")
+        enroll_directly(session, course, student)
+        self._submit(session, problem, student, 4)
+        self._submit(session, problem, student, 1, manual=2.5)
+        session.commit()
+
+        result = get_student_dashboard(session, student.user_id, student)
+
+        assert result.average_score == 2.5
+
+    def test_manual_score_counts_on_problem_without_testcases(self, session, course, student):
+        problem = self._problem(session, make_lesson(session, course), "Tự luận", total=0)
+        enroll_directly(session, course, student)
+        self._submit(session, problem, student, 0, manual=6.0)
+        session.commit()
+
+        assert get_student_dashboard(session, student.user_id, student).average_score == 6.0
+
+    def test_none_without_scored_submission(self, session, course, student):
+        lesson = make_lesson(session, course)
+        self._problem(session, lesson, "Chưa nộp")
+        no_tests = self._problem(session, lesson, "Không testcase", total=0)
+        enroll_directly(session, course, student)
+        self._submit(session, no_tests, student, 0)
+        session.commit()
+
+        assert get_student_dashboard(session, student.user_id, student).average_score is None
+
+    def test_ignores_courses_student_is_not_enrolled_in(
+        self, session, course, student, other_teacher
+    ):
+        enrolled = self._problem(session, make_lesson(session, course), "Trong lớp")
+        enroll_directly(session, course, student)
+        other_course = make_course(session, "CS999", other_teacher)
+        outside = self._problem(session, make_lesson(session, other_course, lesson_number=2), "Ngoài lớp")
+        self._submit(session, enrolled, student, 2)
+        self._submit(session, outside, student, 4)
+        session.commit()
+
+        assert get_student_dashboard(session, student.user_id, student).average_score == 5.0
+
+    def test_teacher_only_sees_scores_of_own_courses(
+        self, session, course, owner_teacher, other_teacher, admin, student
+    ):
+        own = self._problem(session, make_lesson(session, course), "Lớp mình")
+        other_course = make_course(session, "CS999", other_teacher)
+        other = self._problem(session, make_lesson(session, other_course, lesson_number=2), "Lớp khác")
+        enroll_directly(session, course, student)
+        enroll_directly(session, other_course, student)
+        self._submit(session, own, student, 1)  # 2.5
+        self._submit(session, other, student, 4)  # 10
+        session.commit()
+
+        teacher_view = get_student_dashboard(session, student.user_id, owner_teacher)
+        admin_view = get_student_dashboard(session, student.user_id, admin)
+        student_view = get_student_dashboard(session, student.user_id, student)
+
+        assert teacher_view.average_score == 2.5
+        assert teacher_view.total_problems == 1
+        assert admin_view.average_score == student_view.average_score == 6.25
 
 
 class TestStudentDashboardDueThisWeek:

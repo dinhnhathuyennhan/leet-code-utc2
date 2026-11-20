@@ -3,7 +3,7 @@ import re
 from datetime import timedelta
 from uuid import UUID
 from sqlalchemy.exc import IntegrityError
-from sqlalchemy.orm import selectinload
+from sqlalchemy.orm import load_only, selectinload
 from sqlmodel import Session, delete, func, or_, select
 
 from app.core.exceptions import (
@@ -26,6 +26,7 @@ from app.modules.courses.access import (
     get_manageable_course,
     get_viewable_course,
 )
+from app.modules.courses import grade_service
 from app.modules.courses.view import build_course_response
 from app.models import (
     Course,
@@ -474,23 +475,7 @@ def get_student_dashboard(
         )
     completed_problems = session.exec(completed_statement).one() or 0
 
-    average_statement = (
-        select(
-            func.sum(Submission.passed_count),
-            func.count(Submission.submission_id),
-        )
-        .join(Problem, Problem.problem_id == Submission.problem_id)
-        .where(
-            Submission.student_id == student_uuid,
-            Problem.total_number_testcase > 0,
-        )
-    )
-    passed_sum, total_subs = session.exec(average_statement).one()
-    if not total_subs:
-        average_score: float | None = None
-    else:
-        ratio = (passed_sum or 0) / float(total_subs)
-        average_score = round(ratio, 2)
+    average_score = _student_average_score(session, student_uuid, current_user)
 
     return StudentDashboardResponse(
         total_classes=total_classes,
@@ -500,6 +485,36 @@ def get_student_dashboard(
         due_this_week=_count_due_this_week(session, student_uuid, current_user),
         courses=course_responses,
     )
+
+
+def _student_average_score(
+    session: Session, student_uuid: UUID, current_user: User
+) -> float | None:
+    """Điểm trung bình (thang 10) trên các bài sinh viên đã nộp, cùng phạm vi khoá học với
+    ``total_problems`` (khoá đang ghi danh; giáo viên chỉ thấy khoá mình tạo).
+
+    Mỗi bài lấy bài nộp được chấm điểm như bảng điểm (``grade_service.best_grade_scores``):
+    điểm tay ưu tiên, sau đó passed_count cao nhất. ``None`` khi chưa có bài nào có điểm.
+    """
+    problem_statement = (
+        select(Problem)
+        .options(load_only(Problem.problem_id, Problem.total_number_testcase, raiseload=True))
+        .join(Lesson, Lesson.lesson_id == Problem.lesson_id)
+        .join(Course, Course.course_id == Lesson.course_id)
+        .join(Enrollment, Enrollment.course_id == Course.course_id)
+        .where(Enrollment.student_id == student_uuid)
+        .distinct()
+    )
+    if current_user.role_id == Role.TEACHER:
+        problem_statement = problem_statement.where(Course.created_by == current_user.user_id)
+    problems = {problem.problem_id: problem for problem in session.exec(problem_statement).all()}
+    best = grade_service.best_grade_scores(session, list(problems), [student_uuid])
+    scores = [
+        score
+        for (_student_id, problem_id), row in best.items()
+        if (score := grade_service.graded_score(problems[problem_id], row)) is not None
+    ]
+    return round(sum(scores) / len(scores), 2) if scores else None
 
 
 def _count_due_this_week(session: Session, student_uuid: UUID, current_user: User) -> int:

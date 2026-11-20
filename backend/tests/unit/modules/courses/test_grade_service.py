@@ -8,10 +8,11 @@ from sqlmodel import Session
 
 from app.core.dependencies import Role
 from app.core.utils.datetime_utils import VN_TZ
-from app.models.entities import Problem, Submission, User
+from app.models.entities import Lesson, Problem, Submission, User
 from app.modules.courses import grade_service
 from tests.support.fixtures.builders import (
     make_course,
+    make_enrollment,
     make_lesson,
     make_problem,
     make_submission,
@@ -220,3 +221,50 @@ class TestGradedScore:
     def test_problem_without_testcases(self):
         assert grade_service.graded_score(self._problem(0), self._row(0)) is None
         assert grade_service.graded_score(self._problem(0), self._row(0, manual=6.0)) == 6.0
+
+
+class TestParticipantsByLesson:
+    def test_counts_only_students_enrolled_in_the_lesson_course(
+        self, session, teacher, problems, student_a, student_b
+    ):
+        p1, p2 = problems
+        lesson_id = p1.lesson_id
+        course = session.get(Lesson, lesson_id).course
+        make_enrollment(session, course, student_a)
+        outsider_elsewhere = make_user(session, "6451000003", Role.STUDENT)
+        make_enrollment(session, make_course(session, teacher, "CS202"), outsider_elsewhere)
+        _submit(session, p1, student_a)
+        _submit(session, p2, student_a)  # cùng sinh viên, bài khác: vẫn đếm 1
+        _submit(session, p1, student_b)  # không ghi danh khoá nào
+        _submit(session, p1, outsider_elsewhere)  # ghi danh khoá khác
+        session.commit()
+
+        assert grade_service.participants_by_lesson(session, [lesson_id]) == {lesson_id: 1}
+
+    def test_lesson_without_enrolled_submitters_is_absent(self, session, problems, student_b):
+        p1, _ = problems
+        _submit(session, p1, student_b)
+        session.commit()
+
+        assert grade_service.participants_by_lesson(session, [p1.lesson_id]) == {}
+
+    def test_counts_per_lesson(self, session, teacher, problems, student_a, student_b):
+        p1, _ = problems
+        course = session.get(Lesson, p1.lesson_id).course
+        other_lesson = make_lesson(session, course, lesson_name="Lesson 2", lesson_number=2)
+        p3 = make_problem(session, other_lesson, title="P3")
+        make_enrollment(session, course, student_a)
+        make_enrollment(session, course, student_b)
+        _submit(session, p1, student_a)
+        _submit(session, p1, student_b)
+        _submit(session, p3, student_b)
+        session.commit()
+
+        assert grade_service.participants_by_lesson(
+            session, [p1.lesson_id, other_lesson.lesson_id]
+        ) == {p1.lesson_id: 2, other_lesson.lesson_id: 1}
+
+    def test_empty_lesson_ids_returns_empty_without_query(self, engine, session):
+        with count_queries(engine) as queries:
+            assert grade_service.participants_by_lesson(session, []) == {}
+        assert queries.count == 0

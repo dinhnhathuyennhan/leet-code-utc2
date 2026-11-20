@@ -1,9 +1,9 @@
 from uuid import UUID
 
-from sqlalchemy import Row, case
+from sqlalchemy import Row, and_, case
 from sqlmodel import Session, func, select
 
-from app.models import Problem, Submission
+from app.models import Enrollment, Lesson, Problem, Submission
 
 MAX_SCORE_PER_PROBLEM = 10
 
@@ -78,12 +78,21 @@ def best_grade_scores(
 
 
 def participants_by_lesson(session: Session, lesson_ids: list[int]) -> dict[int, int]:
+    """Số sinh viên đang ghi danh trong khoá đã nộp ít nhất một bài của mỗi buổi học."""
     if not lesson_ids:
         return {}
     rows = session.exec(
         select(Problem.lesson_id, func.count(func.distinct(Submission.student_id)))
         .select_from(Problem)
         .join(Submission, Submission.problem_id == Problem.problem_id)
+        .join(Lesson, Lesson.lesson_id == Problem.lesson_id)
+        .join(
+            Enrollment,
+            and_(
+                Enrollment.course_id == Lesson.course_id,
+                Enrollment.student_id == Submission.student_id,
+            ),
+        )
         .where(Problem.lesson_id.in_(lesson_ids))
         .group_by(Problem.lesson_id)
     ).all()

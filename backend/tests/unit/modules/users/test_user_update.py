@@ -303,7 +303,7 @@ def test_update_class_vanishing_before_commit_reports_not_found(fk_session, monk
 
     monkeypatch.setattr(fk_session, "get", get_with_stale_precheck)
 
-    with pytest.raises(NotFoundError, match="Không tìm thấy lớp học có ID: CQ.67.CNTT"):
+    with pytest.raises(NotFoundError, match=r"Không tìm thấy lớp học có ID: CQ\.67\.CNTT"):
         update_user(fk_session, admin, student_id, UpdateUserRequest(class_id="CQ.67.CNTT"))
 
     fk_session.expire_all()

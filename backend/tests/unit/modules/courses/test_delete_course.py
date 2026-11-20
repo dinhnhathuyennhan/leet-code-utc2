@@ -223,9 +223,11 @@ def test_submission_arriving_during_force_delete_blocks_it(fk_session: Session, 
 
     monkeypatch.setattr(session, "exec", exec_then_race)
 
-    with caplog.at_level(logging.INFO, logger=course_service.logger.name):
-        with pytest.raises(CourseHasSubmissionsError, match="vừa có bài nộp mới"):
-            delete_course("DELC1", session, admin, force=True)
+    with (
+        caplog.at_level(logging.INFO, logger=course_service.logger.name),
+        pytest.raises(CourseHasSubmissionsError, match="vừa có bài nộp mới"),
+    ):
+        delete_course("DELC1", session, admin, force=True)
 
     session.expire_all()
     assert session.get(Course, "DELC1") is not None

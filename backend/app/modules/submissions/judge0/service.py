@@ -315,12 +315,17 @@ class _SubmissionDeleted(Exception):
 
 def _save_tokens(submission_id: int, tokens: list[str]) -> None:
     with Session(engine) as session:
-        session.execute(
+        result = session.execute(
             update(Submission)
             .where(Submission.submission_id == submission_id)
             .values(judge_tokens=tokens)
         )
         session.commit()
+        if result.rowcount == 0:
+            logger.info(
+                "Bài nộp %s đã bị xoá trong lúc lưu token chấm, bỏ qua kết quả", submission_id
+            )
+            raise _SubmissionDeleted
 
 
 SKIPPED_STATUS = "skipped"

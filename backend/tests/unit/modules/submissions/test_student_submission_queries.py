@@ -229,10 +229,13 @@ class TestSaveTokens:
             "t1", "t2",
         ]
 
-    def test_unknown_submission_is_ignored(self, engine, session: Session, monkeypatch):
+    def test_unknown_submission_raises_submission_deleted(
+        self, engine, session: Session, monkeypatch
+    ):
         monkeypatch.setattr(judge_service, "engine", engine)
 
-        judge_service._save_tokens(999999, ["t1"])  # không raise
+        with pytest.raises(judge_service._SubmissionDeleted):
+            judge_service._save_tokens(999999, ["t1"])
 
         assert session.get(Submission, 999999) is None
 

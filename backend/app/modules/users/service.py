@@ -1,5 +1,6 @@
 import uuid
 
+from sqlalchemy import update
 from sqlmodel import Session, select, func
 
 from app.core.exceptions import AppError, ConflictError, NotFoundError, InvalidFormatError, ForbiddenError
@@ -258,3 +259,39 @@ def reset_password(
     session.commit()
     session.refresh(target)
     return str(target.user_id), temporary_password
+
+
+def _set_active_status(
+    session: Session, current_user: User, target_user_id: str | uuid.UUID, *, active: bool
+) -> User:
+    target = _get_user_or_404(session, target_user_id)
+    _ensure_can_manage_account(session, current_user, target)
+
+    if target.is_active != active:
+        values: dict = {"is_active": active}
+        if not active:
+            # Khoá: vô hiệu hoá token cũ. UPDATE nguyên tử để không mất lượt tăng
+            # token_version của thao tác đồng thời khác (vd: đổi mật khẩu).
+            values["token_version"] = User.token_version + 1
+        session.exec(
+            update(User)
+            .where(User.user_id == target.user_id, User.is_active.is_(not active))
+            .values(**values)
+        )
+        session.commit()
+        session.refresh(target)
+    return target
+
+
+def lock_user(
+    session: Session, current_user: User, target_user_id: str | uuid.UUID
+) -> User:
+    """Khoá tài khoản và tăng token_version. Idempotent: đã khoá thì giữ nguyên."""
+    return _set_active_status(session, current_user, target_user_id, active=False)
+
+
+def unlock_user(
+    session: Session, current_user: User, target_user_id: str | uuid.UUID
+) -> User:
+    """Mở khoá tài khoản (không đổi token_version). Idempotent."""
+    return _set_active_status(session, current_user, target_user_id, active=True)

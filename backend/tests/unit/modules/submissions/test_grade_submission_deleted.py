@@ -87,3 +87,38 @@ def test_returns_early_when_submission_already_gone(engine, enqueue_calls, monke
     judge_service.grade_submission(12345)
 
     assert enqueue_calls == []
+
+
+def _delete_on_nth_commit(monkeypatch, engine, submission_id: int, nth: int):
+    """Session xoá hàng bài nộp ngay trước lần commit thứ ``nth``, mô phỏng admin xoá giữa get và commit."""
+    real_session = judge_service.Session
+    counter = {"n": 0}
+
+    class RacingSession(real_session):
+        def commit(self):
+            counter["n"] += 1
+            if counter["n"] == nth:
+                _delete_row(engine, submission_id)
+            super().commit()
+
+    monkeypatch.setattr(judge_service, "Session", RacingSession)
+
+
+def test_stale_row_on_result_commit_is_tolerated(
+    engine, session, enqueue_calls, pending_submission, monkeypatch, caplog
+):
+    submission_id = pending_submission.submission_id
+    # commit 1 = chuyển processing, commit 2 = lưu kết quả cuối
+    _delete_on_nth_commit(monkeypatch, engine, submission_id, 2)
+    monkeypatch.setattr(judge_service, "_grade_in_chunks", lambda *a, **k: [(None, "accepted", None)])
+    monkeypatch.setattr(judge_service, "_testcase_results", lambda *a, **k: [])
+    monkeypatch.setattr(judge_service, "_compile_output_of", lambda *a, **k: None)
+
+    with caplog.at_level(logging.INFO, logger=judge_service.logger.name):
+        judge_service.grade_submission(submission_id)
+
+    session.expire_all()
+    assert session.get(Submission, submission_id) is None
+    assert enqueue_calls == []
+    assert any("bị xoá trong lúc lưu kết quả" in r.getMessage() for r in caplog.records)
+    assert not any(r.levelno >= logging.ERROR for r in caplog.records)

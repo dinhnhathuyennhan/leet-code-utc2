@@ -6,11 +6,15 @@ from sqlmodel import Session, select, func
 from app.core.exceptions import AppError, ConflictError, NotFoundError, InvalidFormatError, ForbiddenError
 from app.core.security.passwords import hash_password
 from app.core.dependencies import Role
+from sqlalchemy.exc import IntegrityError
+
 from app.modules.users.schemas import (
     CreateStudentRequest,
     CreateTeacherRequest,
+    UpdateUserRequest,
     UserResponse,
     UserListResponse,
+    student_email,
 )
 from app.models import Class, Course, Enrollment, User
 
@@ -28,6 +32,11 @@ class NotAllowedToResetError(AppError):
 class NotAllowedToManageAccountError(AppError):
     status_code = 403
     error_code = "NOT_ALLOWED_TO_MANAGE_ACCOUNT"
+
+
+class FieldNotEditableError(AppError):
+    status_code = 422
+    error_code = "FIELD_NOT_EDITABLE"
 
 
 MANAGE_ACCOUNT_FORBIDDEN = "Bạn không có quyền quản lý tài khoản này"
@@ -295,3 +304,82 @@ def unlock_user(
 ) -> User:
     """Mở khoá tài khoản (không đổi token_version). Idempotent."""
     return _set_active_status(session, current_user, target_user_id, active=True)
+
+
+_EDITABLE_FIELDS = {
+    Role.TEACHER: {"full_name", "email"},
+    Role.STUDENT: {"full_name", "student_code", "class_id"},
+}
+
+
+def _other_user_with(session: Session, target: User, *conditions) -> User | None:
+    return session.exec(
+        select(User).where(User.user_id != target.user_id, *conditions)
+    ).first()
+
+
+def update_user(
+    session: Session,
+    current_user: User,
+    target_user_id: str | uuid.UUID,
+    data: UpdateUserRequest,
+) -> User:
+    """Sửa thông tin tài khoản. Quyền như lock/unlock; field cho phép theo vai trò đích.
+
+    Toàn bộ thay đổi được kiểm tra trước khi gán, nên lỗi không để lại thay đổi dở dang.
+    """
+    target = _get_user_or_404(session, target_user_id)
+    _ensure_can_manage_account(session, current_user, target)
+
+    changes = {
+        key: value
+        for key, value in data.model_dump(exclude_unset=True).items()
+        if value is not None
+    }
+
+    if target.role_id == Role.STUDENT and "email" in changes:
+        raise FieldNotEditableError(
+            "Email sinh viên được tạo tự động theo MSSV, không thể sửa trực tiếp"
+        )
+    if target.role_id == Role.TEACHER and ({"student_code", "class_id"} & changes.keys()):
+        raise FieldNotEditableError(
+            "Chỉ tài khoản sinh viên mới có mã sinh viên và lớp hành chính"
+        )
+    if not changes.keys() <= _EDITABLE_FIELDS.get(target.role_id, set()):
+        raise NotAllowedToManageAccountError(MANAGE_ACCOUNT_FORBIDDEN)
+
+    new_code = changes.get("student_code")
+    if new_code is not None and new_code != target.student_code:
+        if _other_user_with(session, target, User.student_code == new_code):
+            raise ConflictError("Mã sinh viên đã được sử dụng")
+        derived_email = student_email(new_code)
+        if _other_user_with(session, target, User.email == derived_email):
+            raise ConflictError(f"Email {derived_email} đã được đăng ký")
+        changes["email"] = derived_email
+    else:
+        changes.pop("student_code", None)
+
+    if (
+        target.role_id == Role.TEACHER
+        and "email" in changes
+        and _other_user_with(session, target, User.email == changes["email"])
+    ):
+        raise ConflictError("Email đã được đăng ký")
+
+    if "class_id" in changes and session.get(Class, changes["class_id"]) is None:
+        raise NotFoundError(f"Không tìm thấy lớp học có ID: {changes['class_id']}")
+
+    changes = {k: v for k, v in changes.items() if getattr(target, k) != v}
+    if not changes:
+        return target
+
+    for key, value in changes.items():
+        setattr(target, key, value)
+    session.add(target)
+    try:
+        session.commit()
+    except IntegrityError:
+        session.rollback()
+        raise ConflictError("Email hoặc mã sinh viên đã được sử dụng") from None
+    session.refresh(target)
+    return target

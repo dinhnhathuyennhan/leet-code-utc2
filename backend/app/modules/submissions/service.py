@@ -1,4 +1,5 @@
-from sqlmodel import Session, select
+from sqlalchemy.orm import load_only
+from sqlmodel import Session, func, select
 
 from app.core.exceptions import InvalidFormatError, NotFoundError
 from app.core.dependencies import Role
@@ -21,31 +22,38 @@ _ALLOWED_UPDATE_STATUSES = {"pending", "accepted", "wrong_answer", "compile_erro
 _JUDGE_KIND_FILTERS = {"pending", "wrong_answer", "compile_error", "accepted"}
 
 
-def _teacher_course_ids(session: Session, current_user: User) -> set[str] | None:
-    if current_user.role_id == Role.ADMIN:
-        return None
-    return set(
-        session.exec(
-            select(Course.course_id).where(Course.created_by == current_user.user_id)
-        ).all()
-    )
-
-
-def _submission_rows(session: Session, current_user: User) -> list[tuple[Submission, Problem, Lesson, Course, User]]:
-    statement = (
-        select(Submission, Problem, Lesson, Course, User)
+def _submission_query(*entities):
+    return (
+        select(*entities)
+        .select_from(Submission)
         .join(Problem, Submission.problem_id == Problem.problem_id)
         .join(Lesson, Problem.lesson_id == Lesson.lesson_id)
         .join(Course, Lesson.course_id == Course.course_id)
         .join(User, Submission.student_id == User.user_id)
-        .order_by(Submission.submitted_datetime.desc(), Submission.submission_id.desc())
     )
-    course_ids = _teacher_course_ids(session, current_user)
-    if course_ids is not None:
-        if not course_ids:
-            return []
-        statement = statement.where(Course.course_id.in_(course_ids))
-    return list(session.exec(statement).all())
+
+
+def _scope_to_viewer(statement, current_user: User):
+    """Chỉ ADMIN thấy hết; vai trò khác bị giới hạn trong các khoá do chính mình tạo."""
+    if current_user.role_id == Role.ADMIN:
+        return statement
+    return statement.where(Course.created_by == current_user.user_id)
+
+
+def _get_visible_submission(
+    session: Session, submission_id: int, current_user: User
+) -> tuple[Submission, Problem, Lesson, Course, User]:
+    """Một bài nộp (đủ cột) mà người gọi được phép thấy, hoặc NotFoundError."""
+    statement = _scope_to_viewer(
+        _submission_query(Submission, Problem, Lesson, Course, User).where(
+            Submission.submission_id == submission_id
+        ),
+        current_user,
+    )
+    row = session.exec(statement).first()
+    if row is None:
+        raise NotFoundError("Không tìm thấy bài nộp")
+    return tuple(row)
 
 
 def _judge_kind(status: str) -> str:
@@ -96,15 +104,46 @@ def list_pending_submissions(
     problem_id: int | None = None,
     include_graded: bool = False,
 ) -> PendingSubmissionListResponse:
-    rows = _submission_rows(session, current_user)
     visible_statuses = _VISIBLE_STATUSES | {"accepted"} if include_graded else _VISIBLE_STATUSES
-    rows = [row for row in rows if row[0].status.lower() in visible_statuses]
+    statement = (
+        _submission_query(Submission, Problem, Lesson, Course, User)
+        .options(
+            load_only(
+                Submission.submission_id,
+                Submission.status,
+                Submission.manual_score,
+                Submission.passed_count,
+                Submission.compile_output,
+                Submission.submitted_datetime,
+                raiseload=True,
+            ),
+            load_only(
+                Problem.problem_id,
+                Problem.title,
+                Problem.report,
+                Problem.total_number_testcase,
+                raiseload=True,
+            ),
+            load_only(
+                Lesson.lesson_id,
+                Lesson.lesson_number,
+                Lesson.lesson_name,
+                Lesson.course_id,
+                raiseload=True,
+            ),
+            load_only(Course.course_id, Course.course_name, raiseload=True),
+            load_only(User.full_name, User.student_code, raiseload=True),
+        )
+        .where(func.lower(Submission.status).in_(visible_statuses))
+        .order_by(Submission.submitted_datetime.desc(), Submission.submission_id.desc())
+    )
     if course_id:
-        rows = [row for row in rows if row[3].course_id == course_id]
+        statement = statement.where(Course.course_id == course_id)
     if lesson_id is not None:
-        rows = [row for row in rows if row[2].lesson_id == lesson_id]
+        statement = statement.where(Lesson.lesson_id == lesson_id)
     if problem_id is not None:
-        rows = [row for row in rows if row[1].problem_id == problem_id]
+        statement = statement.where(Problem.problem_id == problem_id)
+    rows = list(session.exec(_scope_to_viewer(statement, current_user)).all())
 
     if search:
         query = search.strip().lower()
@@ -171,11 +210,9 @@ def list_pending_submissions(
 def get_submission_detail(
     session: Session, submission_id: int, current_user: User
 ) -> SubmissionDetailResponse:
-    rows = [row for row in _submission_rows(session, current_user) if row[0].submission_id == submission_id]
-    if not rows:
-        raise NotFoundError("Không tìm thấy bài nộp")
-
-    submission, problem, lesson, course, student = rows[0]
+    submission, problem, lesson, course, student = _get_visible_submission(
+        session, submission_id, current_user
+    )
     testcases = session.exec(
         select(Testcase)
         .where(Testcase.problem_id == problem.problem_id)
@@ -226,13 +263,10 @@ def update_submission(
     data: SubmissionUpdateRequest,
     current_user: User,
 ) -> SubmissionDetailResponse:
-    rows = [row for row in _submission_rows(session, current_user) if row[0].submission_id == submission_id]
-    if not rows:
-        raise NotFoundError("Không tìm thấy bài nộp")
+    submission = _get_visible_submission(session, submission_id, current_user)[0]
     if data.status is not None and data.status not in _ALLOWED_UPDATE_STATUSES:
         raise InvalidFormatError("Trạng thái bài nộp không hợp lệ")
 
-    submission = rows[0][0]
     if data.feedback is not None:
         submission.feedback = data.feedback.strip() or None
     if data.status is not None:

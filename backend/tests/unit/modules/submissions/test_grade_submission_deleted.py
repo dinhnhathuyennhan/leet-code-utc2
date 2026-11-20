@@ -145,18 +145,19 @@ def test_stale_row_on_processing_commit_is_tolerated(
     assert not any(r.levelno >= logging.ERROR for r in caplog.records)
 
 
-def test_stale_row_on_token_save_stops_grading_without_retry(
+def test_token_save_for_deleted_submission_is_a_noop_and_result_is_dropped(
     engine, session, enqueue_calls, pending_submission, monkeypatch, caplog
 ):
     submission_id = pending_submission.submission_id
-    # commit 1 = processing; commit 2 = _save_tokens
-    _delete_on_nth_commit(monkeypatch, engine, submission_id, 2)
 
     def grade_saving_tokens(problem, data, testcases, tokens, save):
-        save(["tok"])
-        raise AssertionError("phải dừng chấm sau khi bài nộp bị xoá")
+        _delete_row(engine, submission_id)
+        save(["tok"])  # UPDATE trúng 0 dòng: không lỗi, không tạo lại dòng
+        return [(None, "accepted", None)]
 
     monkeypatch.setattr(judge_service, "_grade_in_chunks", grade_saving_tokens)
+    monkeypatch.setattr(judge_service, "_testcase_results", lambda *a, **k: [])
+    monkeypatch.setattr(judge_service, "_compile_output_of", lambda *a, **k: None)
 
     with caplog.at_level(logging.INFO, logger=judge_service.logger.name):
         judge_service.grade_submission(submission_id)
@@ -164,5 +165,5 @@ def test_stale_row_on_token_save_stops_grading_without_retry(
     session.expire_all()
     assert session.get(Submission, submission_id) is None
     assert enqueue_calls == []
-    assert any("bị xoá trong lúc lưu token" in r.getMessage() for r in caplog.records)
+    assert any("đã bị xoá trong lúc chấm" in r.getMessage() for r in caplog.records)
     assert not any(r.levelno >= logging.ERROR for r in caplog.records)

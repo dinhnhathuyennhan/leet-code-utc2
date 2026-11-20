@@ -6,6 +6,7 @@ from contextlib import contextmanager
 from datetime import timedelta
 from typing import Any
 
+from sqlalchemy import update
 from sqlalchemy.orm.exc import StaleDataError
 from sqlmodel import Session, func, select
 
@@ -43,7 +44,7 @@ from app.modules.submissions.judge0.schemas import (
     RunResponse,
     SubmissionResultResponse,
 )
-from app.modules.submissions.service import get_submission_detail
+from app.modules.submissions.service import _get_visible_submission
 from app.modules.testcases.testcase_format import decode_testcase_value
 
 logger = logging.getLogger(__name__)
@@ -314,18 +315,12 @@ class _SubmissionDeleted(Exception):
 
 def _save_tokens(submission_id: int, tokens: list[str]) -> None:
     with Session(engine) as session:
-        submission = session.get(Submission, submission_id)
-        if submission is not None:
-            submission.judge_tokens = tokens
-            session.add(submission)
-            try:
-                session.commit()
-            except StaleDataError:
-                session.rollback()
-                logger.info(
-                    "Bài nộp %s đã bị xoá trong lúc lưu token chấm, bỏ qua kết quả", submission_id
-                )
-                raise _SubmissionDeleted from None
+        session.execute(
+            update(Submission)
+            .where(Submission.submission_id == submission_id)
+            .values(judge_tokens=tokens)
+        )
+        session.commit()
 
 
 SKIPPED_STATUS = "skipped"
@@ -475,8 +470,7 @@ def grade_submission(submission_id: int) -> None:
 
 
 def regrade(session: Session, submission_id: int, current_user: User) -> Submission:
-    get_submission_detail(session, submission_id, current_user)  # raise nếu không đủ quyền xem bài nộp
-    submission = session.get(Submission, submission_id)
+    submission = _get_visible_submission(session, submission_id, current_user)[0]  # raise nếu không đủ quyền xem
     if submission.status != "internal_error":
         raise ConflictError("Chỉ chấm lại được bài bị lỗi hệ thống chấm")
     submission.status = "pending"
@@ -492,7 +486,16 @@ def regrade(session: Session, submission_id: int, current_user: User) -> Submiss
 
 
 def get_result(session: Session, submission_id: int, current_user: User) -> SubmissionResultResponse:
-    submission = session.get(Submission, submission_id)
+    submission = session.exec(
+        select(
+            Submission.submission_id,
+            Submission.student_id,
+            Submission.problem_id,
+            Submission.status,
+            Submission.passed_count,
+            Submission.compile_output,
+        ).where(Submission.submission_id == submission_id)
+    ).first()
     if submission is None or submission.student_id != current_user.user_id:
         raise NotFoundError("Không tìm thấy bài nộp")
     total = session.exec(

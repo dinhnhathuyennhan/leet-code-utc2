@@ -1,3 +1,4 @@
+from sqlalchemy import update
 from sqlalchemy.orm import load_only
 from sqlmodel import Session, func, select
 
@@ -13,11 +14,14 @@ from app.modules.submissions.schemas import (
     SubmissionUpdateRequest,
 )
 from app.models import Course, Lesson, Problem, Submission, Testcase, User
+from app.modules.submissions.judge0 import grading_queue
 
 
 _NEW_STATUSES = {"processing", "time_limit_exceeded", "runtime_error", "internal_error"}
 _VISIBLE_STATUSES = {"pending", "wrong_answer", "compile_error"} | _NEW_STATUSES
 _ALLOWED_UPDATE_STATUSES = {"pending", "accepted", "wrong_answer", "compile_error"} | _NEW_STATUSES
+# Giáo viên đặt về trạng thái chờ chấm thì bài phải được máy chấm lại.
+_REQUEUE_STATUSES = {"pending", "processing"}
 # Các giá trị `filter` lọc theo nhóm judge_kind mà frontend hiển thị thành chip.
 _JUDGE_KIND_FILTERS = {"pending", "wrong_answer", "compile_error", "accepted"}
 
@@ -269,11 +273,32 @@ def update_submission(
 
     if data.feedback is not None:
         submission.feedback = data.feedback.strip() or None
-    if data.status is not None:
-        submission.status = data.status
     # An explicit null clears the override; an omitted field leaves it unchanged.
     if "manual_score" in data.model_fields_set:
         submission.manual_score = data.manual_score
     session.add(submission)
+    if data.status is not None:
+        # Ghi status kèm thu hồi quyền chấm của worker đang chấm dở (nếu có): mọi lần
+        # ghi của worker đều kèm điều kiện grading_claimed_at, nên kết quả máy chấm
+        # không còn ghi đè trạng thái giáo viên vừa sửa. Dùng UPDATE tường minh thay vì
+        # gán thuộc tính, vì ORM bỏ qua phép gán trùng với bản đã đọc (vd lease còn NULL
+        # lúc đọc nhưng worker vừa nhận bài, hay status trùng giá trị cũ nhưng worker
+        # vừa ghi kết quả khác).
+        values: dict = {"status": data.status, "grading_claimed_at": None}
+        if data.status in _REQUEUE_STATUSES:
+            # Chấm lại từ đầu như regrade: bỏ token Judge0 và kết quả cũ, nếu không
+            # worker mới sẽ poll lại token cũ (chạy với testcase cũ) thay vì nộp mới.
+            values.update(
+                judge_tokens=None, testcase_results=None, passed_count=0, compile_output=None
+            )
+        session.exec(
+            update(Submission)
+            .where(Submission.submission_id == submission.submission_id)
+            .values(**values)
+        )
     session.commit()
+    if data.status in _REQUEUE_STATUSES:
+        # Lease đã bị thu hồi nên phải đưa bài vào hàng đợi lại, nếu không bài sẽ nằm
+        # ở pending/processing tới lần khởi động lại backend.
+        grading_queue.enqueue(submission.submission_id)
     return get_submission_detail(session, submission_id, current_user)

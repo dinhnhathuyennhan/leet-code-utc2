@@ -41,6 +41,8 @@ class FieldNotEditableError(AppError):
 
 MANAGE_ACCOUNT_FORBIDDEN = "Bạn không có quyền quản lý tài khoản này"
 RESET_FORBIDDEN = "Bạn không có quyền đặt lại mật khẩu cho tài khoản này"
+UNLOCK_FORBIDDEN = "Tài khoản này chỉ Quản trị viên mới được mở khoá"
+_LOCK_ATTEMPTS = 3  # số lần thử khi khoá/mở khoá đồng thời liên tục chen giữa
 
 
 def create_teacher(session: Session, data: CreateTeacherRequest) -> User:
@@ -270,40 +272,97 @@ def reset_password(
     return str(target.user_id), temporary_password
 
 
-def _set_active_status(
-    session: Session, current_user: User, target_user_id: str | uuid.UUID, *, active: bool
-) -> User:
-    target = _get_user_or_404(session, target_user_id)
-    _ensure_can_manage_account(session, current_user, target)
+def _locked_by_teacher(session: Session, target: User) -> bool:
+    """Tài khoản đang bị một Giáo viên khoá (Giáo viên được phép mở khoá).
 
-    if target.is_active != active:
-        values: dict = {"is_active": active}
-        if not active:
-            # Khoá: vô hiệu hoá token cũ. UPDATE nguyên tử để không mất lượt tăng
-            # token_version của thao tác đồng thời khác (vd: đổi mật khẩu).
-            values["token_version"] = User.token_version + 1
-        session.exec(
-            update(User)
-            .where(User.user_id == target.user_id, User.is_active.is_(not active))
-            .values(**values)
-        )
-        session.commit()
-        session.refresh(target)
-    return target
+    Whitelist: chỉ khi người khoá còn tồn tại và đúng role TEACHER. Khoá bởi Admin,
+    role lạ, người khoá đã bị xoá hay khoá từ trước khi có ``locked_by`` (NULL)
+    đều coi như chỉ Admin được mở khoá.
+    """
+    if target.locked_by is None:
+        return False
+    locker = session.get(User, target.locked_by)
+    return locker is not None and locker.role_id == Role.TEACHER
+
+
+def _apply_status_update(session: Session, target: User, *conditions, **values) -> int:
+    result = session.exec(
+        update(User).where(User.user_id == target.user_id, *conditions).values(**values)
+    )
+    session.commit()
+    session.refresh(target)
+    return result.rowcount
 
 
 def lock_user(
     session: Session, current_user: User, target_user_id: str | uuid.UUID
 ) -> User:
-    """Khoá tài khoản và tăng token_version. Idempotent: đã khoá thì giữ nguyên."""
-    return _set_active_status(session, current_user, target_user_id, active=False)
+    """Khoá tài khoản, ghi ``locked_by`` và tăng token_version.
+
+    Idempotent: đã khoá thì không tăng token_version lần nữa. Giáo viên khoá lại thì
+    giữ nguyên người khoá; Admin khoá lại thì ``locked_by`` chuyển sang Admin, để
+    Giáo viên không mở khoá được nữa.
+
+    Mỗi bước là UPDATE có điều kiện và quyết định theo ``rowcount`` chứ không theo
+    trạng thái đọc trước đó, nên request khoá/mở khoá chạy đồng thời (vd: GV khoá
+    ngay trước Admin, hay GV mở khoá chen giữa) không làm lệnh khoá của Admin bị bỏ
+    qua im lặng.
+    """
+    target = _get_user_or_404(session, target_user_id)
+    _ensure_can_manage_account(session, current_user, target)
+
+    for _ in range(_LOCK_ATTEMPTS):
+        # UPDATE nguyên tử để không mất lượt tăng token_version của thao tác đồng
+        # thời khác (vd: đổi mật khẩu).
+        if _apply_status_update(
+            session,
+            target,
+            User.is_active.is_(True),
+            is_active=False,
+            locked_by=current_user.user_id,
+            token_version=User.token_version + 1,
+        ):
+            return target
+        # Đang bị khoá sẵn.
+        if current_user.role_id == Role.ADMIN:
+            if _apply_status_update(
+                session, target, User.is_active.is_(False), locked_by=current_user.user_id
+            ):
+                return target
+        elif not target.is_active:
+            return target
+        # Vừa bị mở khoá đồng thời giữa hai bước: thử khoá lại.
+    raise ConflictError("Trạng thái tài khoản vừa thay đổi, vui lòng thử lại")
 
 
 def unlock_user(
     session: Session, current_user: User, target_user_id: str | uuid.UUID
 ) -> User:
-    """Mở khoá tài khoản (không đổi token_version). Idempotent."""
-    return _set_active_status(session, current_user, target_user_id, active=True)
+    """Mở khoá tài khoản (không đổi token_version). Idempotent.
+
+    Giáo viên chỉ mở khoá được tài khoản do Giáo viên khoá; tài khoản do Admin
+    khoá chỉ Admin mở được.
+    """
+    target = _get_user_or_404(session, target_user_id)
+    _ensure_can_manage_account(session, current_user, target)
+
+    if target.is_active:
+        return target
+
+    conditions = [User.is_active.is_(False)]
+    if current_user.role_id != Role.ADMIN:
+        if not _locked_by_teacher(session, target):
+            raise NotAllowedToManageAccountError(UNLOCK_FORBIDDEN)
+        # Chỉ mở khoá nếu người khoá không đổi kể từ lúc kiểm tra (vd: Admin vừa
+        # khoá lại).
+        conditions.append(User.locked_by == target.locked_by)
+
+    updated = _apply_status_update(
+        session, target, *conditions, is_active=True, locked_by=None
+    )
+    if updated == 0 and not target.is_active:
+        raise NotAllowedToManageAccountError(UNLOCK_FORBIDDEN)
+    return target
 
 
 _EDITABLE_FIELDS = {

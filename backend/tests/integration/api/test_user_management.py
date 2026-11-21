@@ -91,6 +91,26 @@ def test_teacher_locks_own_student_returns_200(client, session, teacher, student
     assert response.json()["is_active"] is False
 
 
+def test_teacher_unlock_account_locked_by_admin_returns_403(
+    client, session, admin, teacher, student
+):
+    make_enrollment(session, make_course(session, teacher, "CS_API"), student)
+    session.commit()
+    _login_as(admin)
+    assert client.post(f"/users/{student.user_id}/lock").status_code == 200
+    _login_as(teacher)
+
+    response = client.post(f"/users/{student.user_id}/unlock")
+
+    assert response.status_code == 403
+    assert response.json() == {
+        "error_code": "NOT_ALLOWED_TO_MANAGE_ACCOUNT",
+        "message": "Tài khoản này chỉ Quản trị viên mới được mở khoá",
+    }
+    session.refresh(student)
+    assert student.is_active is False
+
+
 def test_teacher_lock_student_outside_courses_returns_403_not_allowed_to_manage_account(
     client, teacher, student
 ):

@@ -11,7 +11,12 @@ from app.core.exceptions import (
     InvalidFormatError,
     NotFoundError,
 )
+from app.core.dependencies import Role
+from app.models import Class, Enrollment
+from app.modules.enrollments import service as enrollment_service
 from app.modules.enrollments.service import (
+    CONCURRENT_CLASS_ENROLLMENT,
+    add_class_to_course,
     add_student_to_course,
     delete_student_from_course,
     get_course_enrollments,
@@ -419,3 +424,65 @@ class TestEnrollmentListStatusFields:
 
         assert result[0].class_id is None
         assert result[0].is_active is None
+
+
+# ============================== CONCURRENT ENROLLMENT ==============================
+
+
+class TestConcurrentEnrollment:
+    """Hai request ghi danh cùng lúc: cả hai qua bước kiểm tra trùng, ràng buộc
+    unique (course_id, student_id) chặn request sau. Phải trả 409, không phải 500."""
+
+    def test_add_student_race_returns_conflict_instead_of_500(
+        self, session, course, owner_teacher, student, monkeypatch
+    ):
+        enroll_directly(session, course, student)
+        # Giả lập request thứ hai đã đọc trước khi request đầu commit.
+        monkeypatch.setattr(enrollment_service, "find_enrollment", lambda *_: None)
+
+        with pytest.raises(ConflictError, match="Sinh viên đã có trong lớp học"):
+            add_student_to_course(student.user_id, course.course_id, session, owner_teacher)
+
+        assert len(enrollments_of(session, course.course_id)) == 1
+        assert counter_of(session, course) == 1
+
+    def test_add_class_race_returns_conflict_and_keeps_counter(
+        self, session, course, owner_teacher, monkeypatch
+    ):
+        session.add(Class(class_id="CQ.64.CNTT", type="CQ", course_number=64, department="CNTT"))
+        students = [make_user(session, f"SV10{i}", Role.STUDENT) for i in range(2)]
+        for s in students:
+            s.class_id = "CQ.64.CNTT"
+            session.add(s)
+        session.commit()
+
+        original_add_all = session.add_all
+
+        def add_all_with_concurrent_insert(rows):
+            original_add_all(rows)
+            # Request khác vừa ghi danh students[0] sau bước đọc existing_ids.
+            session.add(Enrollment(course_id=course.course_id, student_id=students[0].user_id))
+
+        monkeypatch.setattr(session, "add_all", add_all_with_concurrent_insert)
+
+        with pytest.raises(ConflictError) as exc:
+            add_class_to_course(session, course.course_id, "CQ.64.CNTT", owner_teacher)
+
+        assert exc.value.message == CONCURRENT_CLASS_ENROLLMENT
+        assert enrollments_of(session, course.course_id) == []
+        assert counter_of(session, course) == 0
+
+    def test_add_class_skips_already_enrolled_students(self, session, course, owner_teacher):
+        session.add(Class(class_id="CQ.64.CNTT", type="CQ", course_number=64, department="CNTT"))
+        students = [make_user(session, f"SV20{i}", Role.STUDENT) for i in range(2)]
+        for s in students:
+            s.class_id = "CQ.64.CNTT"
+            session.add(s)
+        session.commit()
+        enroll_directly(session, course, students[0])
+
+        result = add_class_to_course(session, course.course_id, "CQ.64.CNTT", owner_teacher)
+
+        assert (result.added_count, result.skipped_count) == (1, 1)
+        assert len(enrollments_of(session, course.course_id)) == 2
+        assert counter_of(session, course) == 2

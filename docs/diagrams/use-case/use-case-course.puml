@@ -19,6 +19,8 @@ Admin -up-|> Teacher
 rectangle "Quản lý lớp học phần" {
   usecase "Tạo lớp học phần" as Create
   usecase "Cập nhật lớp học phần" as Update
+  usecase "Xoá lớp học phần" as Delete
+  usecase "Xoá cưỡng bức\n(kèm bài nộp)" as ForceDelete
   usecase "Xem danh sách lớp học phần" as List
   usecase "Lọc theo học kỳ" as FilterTerm
   usecase "Xem chi tiết lớp học phần" as Detail
@@ -34,6 +36,8 @@ Student --> Detail
 Student --> ListStudents
 Teacher --> Create
 Teacher --> Update
+Teacher --> Delete
+Admin --> ForceDelete
 Teacher --> List
 Teacher --> Detail
 Teacher --> Enroll
@@ -44,6 +48,8 @@ FilterTerm .> List : <<extend>>
 Detail .> List : <<extend>>
 EnrollClass .> Enroll : <<extend>>
 Update ..> CheckOwner : <<include>>
+Delete ..> CheckOwner : <<include>>
+ForceDelete .> Delete : <<extend>>
 Enroll ..> CheckOwner : <<include>>
 Unenroll ..> CheckOwner : <<include>>
 

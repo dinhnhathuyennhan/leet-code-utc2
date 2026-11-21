@@ -1,4 +1,5 @@
 from uuid import UUID
+from sqlalchemy.exc import IntegrityError
 from sqlmodel import Session, select
 
 from app.core.dependencies import Role
@@ -22,6 +23,12 @@ from app.modules.enrollments.schemas import (
 from app.modules.users.schemas import _validate_student_code
 
 
+DUPLICATE_ENROLLMENT = "Sinh viên đã có trong lớp học"
+CONCURRENT_CLASS_ENROLLMENT = (
+    "Danh sách lớp học vừa được thay đổi đồng thời, vui lòng thử lại"
+)
+
+
 def get_course_enrollments(
     session: Session, course_id: str, current_user: User
 ) -> list[GetStudentListResponse]:
@@ -33,6 +40,8 @@ def get_course_enrollments(
         .where(Enrollment.course_id == course_id)
     )
     enrollments = session.exec(statement).all()
+    # Whitelist: chỉ Admin/Teacher thấy lớp hành chính và trạng thái khoá
+    can_see_status = current_user.role_id in (Role.ADMIN, Role.TEACHER)
     return [
         GetStudentListResponse(
             enrollment_id=enrollment.enrollment_id,
@@ -40,6 +49,8 @@ def get_course_enrollments(
             student_code=student.student_code,
             full_name=student.full_name,
             email=student.email,
+            class_id=student.class_id if can_see_status else None,
+            is_active=student.is_active if can_see_status else None,
         )
         for enrollment, student in enrollments
     ]
@@ -103,12 +114,18 @@ def add_student_to_course(
     student = _find_student(session, student_id, student_code)
 
     if find_enrollment(session, course_id, student.user_id):
-        raise ConflictError("Sinh viên đã có trong lớp học")
+        raise ConflictError(DUPLICATE_ENROLLMENT)
 
     enrollment = Enrollment(course_id=course_id, student_id=student.user_id)
     course.total_number_student += 1
     session.add(enrollment)
-    session.commit()
+    try:
+        session.commit()
+    except IntegrityError:
+        # Hai request thêm cùng lúc: cả hai qua được bước kiểm tra ở trên, ràng buộc
+        # uq_enrollment_course_student chặn request sau.
+        session.rollback()
+        raise ConflictError(DUPLICATE_ENROLLMENT) from None
     session.refresh(enrollment)
 
     return AddStudentToCourseResponse(
@@ -179,7 +196,13 @@ def add_class_to_course(
     )
     course.total_number_student += len(new_ids)
     session.add(course)
-    session.commit()
+    try:
+        session.commit()
+    except IntegrityError:
+        # Có sinh viên vừa được ghi danh bởi request khác chạy đồng thời; huỷ cả lô
+        # để sĩ số không bị lệch, người dùng thử lại sẽ được bỏ qua phần đã có.
+        session.rollback()
+        raise ConflictError(CONCURRENT_CLASS_ENROLLMENT) from None
     return AddClassToCourseResponse(
         course_id=course_id,
         class_id=class_id,

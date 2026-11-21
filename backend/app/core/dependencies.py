@@ -4,7 +4,7 @@ from fastapi import Depends
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from sqlmodel import Session
 
-from app.core.exceptions import ForbiddenError, UnauthorizedError
+from app.core.exceptions import AccountLockedError, ForbiddenError, UnauthorizedError
 from app.core.security.tokens import decode_token
 from app.core.database import get_session
 from app.models import User
@@ -38,6 +38,11 @@ def get_current_user(
     user = session.get(User, user_id)
     if user is None:
         raise UnauthorizedError("Token không hợp lệ")
+
+    # Kiểm tra khoá trước token_version: khoá luôn tăng token_version, nên nếu
+    # kiểm tra version trước thì người đang đăng nhập bị khoá chỉ nhận 401 chung.
+    if not user.is_active:
+        raise AccountLockedError("Tài khoản đã bị khoá")
 
     if payload.get("tv") != user.token_version:
         raise UnauthorizedError("Phiên đăng nhập đã hết hạn")

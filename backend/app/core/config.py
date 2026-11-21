@@ -128,6 +128,9 @@ GRADING_CHUNK_EXTRA_SECONDS = _env_float("GRADING_CHUNK_EXTRA_SECONDS", 60)
 GRADE_RETRY_DELAY_SECONDS = _env_float("GRADE_RETRY_DELAY_SECONDS", 15)
 # Bài đang pending/processing quá hạn này bị coi là hỏng
 PENDING_TTL_MINUTES = _env_float("PENDING_TTL_MINUTES", 10)
+# Lease giữ quyền chấm một bài. Worker gia hạn trong lúc chờ Judge0 (mỗi 1/4 lease), nên
+# worker chết (backend restart) thì sau tối đa chừng này giây bài được worker khác nhận lại.
+GRADING_LEASE_SECONDS = _env_float("GRADING_LEASE_SECONDS", 120)
 # Số bài nộp chấm song song trong backend, nên xấp xỉ số worker Judge0
 GRADING_WORKERS = _env_int("GRADING_WORKERS", 4)
 # Số lượt Run đang chạy đồng thời tối đa, để không chiếm hết thread của API

@@ -21,7 +21,7 @@
 | **Trigger** | Người dùng mở một Lesson trong Course |
 | **Pre-condition** | Đã đăng nhập; Course và Lesson tồn tại; người dùng có quyền xem Course |
 | **Post-condition** | Không thay đổi dữ liệu |
-| **Basic flow** | 1. Người dùng mở Lesson<br>2. Hệ thống kiểm tra quyền xem Course và Lesson thuộc Course<br>3. Hệ thống lấy các Problem trong Lesson<br>4. Với Student, hệ thống chỉ giữ Problem đã tới `start_datetime`, chỉ trả testcase mẫu và trả các trường thống kê/số lượt nộp là `null`<br>5. Hệ thống trả chi tiết Lesson |
+| **Basic flow** | 1. Người dùng mở Lesson<br>2. Hệ thống kiểm tra quyền xem Course và Lesson thuộc Course<br>3. Hệ thống lấy các Problem trong Lesson<br>4. Với Student, hệ thống chỉ giữ Problem đã tới `start_datetime`, chỉ trả testcase mẫu và trả các trường thống kê/số lượt nộp là `null`. Với Admin/Teacher, thống kê chỉ tính Student đang enroll; điểm trung bình lấy điểm như bảng điểm lớp (ưu tiên điểm chấm tay)<br>5. Hệ thống trả chi tiết Lesson |
 | **Exception flow** | **E1. Không có quyền hoặc không tìm thấy Course/Lesson**: hệ thống trả lỗi tương ứng; không trả dữ liệu chi tiết<br>**E2. Lỗi truy vấn**: hệ thống trả lỗi chung |
 
 ### Use-case: Cập nhật và sắp xếp buổi học

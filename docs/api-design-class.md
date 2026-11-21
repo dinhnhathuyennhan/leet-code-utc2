@@ -12,7 +12,7 @@
 - Mã lớp được chuẩn hoá Unicode (NFC) trước khi lưu, để cùng một chữ có dấu gõ theo 2 kiểu không tạo ra 2 lớp khác nhau.
 - Import Excel (`POST /students/import`) tự tạo lớp còn thiếu và dùng chung quy ước này, nên lớp tạo bằng tay và lớp tạo khi import luôn cùng định dạng.
 - `class_id` **phân biệt chữ hoa/thường** và được lưu đúng như ghép ra. `cq.67.cntt` và `CQ.67.CNTT` là 2 lớp khác nhau.
-- `class_id` là khoá chính và đang được `user.class_id` tham chiếu, nên **không có API sửa lớp**. Muốn đổi thì xoá lớp sai (khi lớp chưa có Sinh viên) rồi tạo lại.
+- `class_id` là khoá chính và đang được `user.class_id` tham chiếu. Muốn sửa hệ/khoá/ngành thì dùng `PATCH /classes/{class_id}` (chỉ Admin): server tạo lớp với mã mới, chuyển toàn bộ Sinh viên sang, rồi xoá lớp cũ. Lớp tạo nhầm chưa có Sinh viên thì cũng có thể xoá rồi tạo lại.
 
 ## POST /classes: Tạo lớp hành chính
 
@@ -102,6 +102,41 @@ Ví dụ:
 
 - **Yêu cầu quyền**: Admin hoặc Teacher.
 
+## PATCH /classes/{class_id}: Đổi mã lớp hành chính
+
+`class_id` trên đường dẫn là mã lớp **hiện tại**, ví dụ `PATCH /classes/CQ.67.CNTT`.
+
+**Request body**: giống `POST /classes`, **bắt buộc đủ cả 3 field** `type`, `course_number`, `department`, cùng quy tắc kiểm tra và chuẩn hoá. Mã lớp mới do server ghép từ 3 field này.
+
+Ví dụ đổi `CQ.67.CNTT` thành `CQ.68.CNTT`:
+
+```json
+{ "type": "CQ", "course_number": 68, "department": "CNTT" }
+```
+
+**Response 200 OK**: object giống response của `POST /classes`, là lớp với **mã mới**, `student_count` là số Sinh viên đã được chuyển sang.
+
+```json
+{ "class_id": "CQ.68.CNTT", "type": "CQ", "course_number": 68, "department": "CNTT", "student_count": 97 }
+```
+
+**Response lỗi**
+
+| Status | Khi nào | Body |
+|---|---|---|
+| 422 | Body sai, giống bảng lỗi 422 của `POST /classes` (thiếu field, `type`/`department`/`course_number` sai định dạng, mã lớp mới dài quá 50 ký tự) (use-case "Đổi mã lớp hành chính" bước 5a) | như `POST /classes` |
+| 404 | `class_id` hiện tại không tồn tại (bước 6a) | `{"error_code": "NOT_FOUND", "message": "Không tìm thấy lớp CQ.67.CNTT"}` |
+| 409 | Mã lớp mới đã tồn tại, kể cả khi request khác vừa tạo đúng mã đó cùng lúc (bước 7a) | `{"error_code": "CONFLICT", "message": "Lớp CQ.68.CNTT đã tồn tại"}` |
+| 409 | Có Sinh viên được thêm vào lớp cũ ngay lúc đang đổi mã (E2) | `{"error_code": "CONFLICT", "message": "Lớp CQ.67.CNTT vừa có sinh viên mới, vui lòng thử lại"}` |
+| 403 | Người gọi không phải Admin (kể cả Teacher) | `{"error_code": "FORBIDDEN", "message": "Bạn không có quyền thực hiện hành động này"}` |
+
+**Quy tắc nghiệp vụ**
+
+- `class_id` là khoá chính và khoá ngoại `user.class_id` không tự cập nhật theo, nên server làm 3 bước: tạo lớp mới, chuyển mọi tài khoản có `class_id` cũ sang mã mới, xoá lớp cũ. Cả 3 bước nằm trong **một transaction**: lỗi ở bước nào thì rollback, lớp cũ và Sinh viên giữ nguyên như trước.
+- Mã mới ghép ra **trùng mã hiện tại**: không thay đổi gì, trả 200 với dữ liệu hiện tại.
+- Sau khi đổi, `GET /classes/<mã cũ>` trả 404; danh sách Sinh viên xem qua `GET /users?class_id=<mã mới>`. Ghi danh lớp học phần (Enrollment) không bị ảnh hưởng.
+- **Yêu cầu quyền**: chỉ Admin (`require_role(Role.ADMIN)`).
+
 ## DELETE /classes/{class_id}: Xoá lớp hành chính
 
 **Request body**: không có
@@ -120,5 +155,5 @@ Ví dụ:
 **Quy tắc nghiệp vụ**
 
 - Chỉ xoá được lớp **không còn Sinh viên nào**. Endpoint này không bao giờ xoá hay sửa tài khoản Sinh viên.
-- Dùng để dọn lớp tạo nhầm (vd gõ sai hệ/khoá/ngành). Muốn xoá lớp đang có Sinh viên thì phải chuyển hết Sinh viên sang lớp khác trước.
+- Dùng để dọn lớp tạo nhầm (vd gõ sai hệ/khoá/ngành). Muốn xoá lớp đang có Sinh viên thì phải chuyển hết Sinh viên sang lớp khác trước. Nếu chỉ cần sửa mã lớp gõ sai thì dùng `PATCH /classes/{class_id}`, Sinh viên được chuyển theo.
 - **Yêu cầu quyền**: chỉ Admin (`require_role(Role.ADMIN)`).

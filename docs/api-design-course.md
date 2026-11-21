@@ -87,6 +87,7 @@ Problem bank có `lesson_id = null` nên chưa thuộc Course; bản nguồn kh�
 **Quy tắc nghiệp vụ**
 
 - Cùng quy tắc scope như `GET /courses`, áp dụng cho 1 lớp cụ thể.
+- `sessions[].participant_count`: số sinh viên **đang ghi danh** trong lớp đã nộp ít nhất một bài của buổi học đó. Bài nộp của sinh viên đã bị xoá khỏi lớp không được đếm. Sinh viên gọi thì nhận `null`.
 - **Yêu cầu quyền**: Bearer token hợp lệ, đúng phạm vi truy cập theo vai trò.
 
 ## PATCH /courses/{course_id} — Cập nhật lớp học
@@ -122,19 +123,42 @@ Field gửi lên với giá trị `null` sẽ bị **bỏ qua** (giữ nguyên g
 
 ## DELETE /courses/{course_id} — Xoá lớp học
 
-**Quyền**: Admin (mọi lớp) hoặc Teacher là chủ lớp (`created_by`).
+**Quyền**: Admin (mọi lớp) hoặc Teacher là chủ lớp (`created_by`). Riêng `force=true` chỉ Admin.
 
-Xoá lớp cùng toàn bộ buổi học, bài tập (bản sao trong lớp), testcase của các bài đó và danh sách ghi danh. Đề nguồn trong ngân hàng (`lesson_id = null`) không bị ảnh hưởng.
+Xoá lớp cùng toàn bộ buổi học, bài tập (bản sao trong lớp), testcase của các bài đó và danh sách ghi danh. Đề nguồn trong ngân hàng (`lesson_id = null`) và tài khoản Sinh viên không bị ảnh hưởng.
+
+**Query parameter**
+
+| Tham số | Kiểu | Bắt buộc | Ghi chú |
+|---|---|---|---|
+| force | bool | không | mặc định `false`. `true`: xoá vĩnh viễn cả bài nộp của Sinh viên trong lớp. Chỉ Admin được dùng |
+
+Ví dụ: `DELETE /courses/JAVA01?force=true`
+
+**Request body**: không có
 
 **Response 204 No Content**
 
 **Response lỗi**
 
-| Status | Khi nào |
-|---|---|
-| 403 | Teacher không phải chủ lớp, hoặc người gọi là Student |
-| 404 | Lớp không tồn tại |
-| 409 | Lớp đã có bài nộp của sinh viên ("Không thể xoá lớp học đã có bài nộp của sinh viên") — giữ lịch sử chấm |
+| Status | Khi nào | Body |
+|---|---|---|
+| 422 | `force` không phải giá trị boolean, vd `force=maybe` | `{"error_code": "VALIDATION_ERROR", "message": "..."}` (message của pydantic, tiếng Anh) |
+| 403 | Người gọi không phải Admin/Teacher | `{"error_code": "FORBIDDEN", "message": "Bạn không có quyền thực hiện hành động này"}` |
+| 403 | `force=true` nhưng người gọi là Teacher, kể cả chủ lớp. Kiểm tra trước mọi truy vấn, nên trả 403 cả khi lớp không tồn tại | `{"error_code": "FORBIDDEN", "message": "Chỉ Admin mới được xoá lớp học đã có bài nộp"}` |
+| 404 | `course_id` không tồn tại | `{"error_code": "NOT_FOUND", "message": "Không tìm thấy lớp học"}` |
+| 403 | Teacher không phải chủ lớp (use-case "Xoá lớp học" bước 4b) | `{"error_code": "FORBIDDEN", "message": "Bạn không có quyền xoá lớp học này"}` |
+| 409 | Không dùng `force` mà lớp đã có bài nộp của Sinh viên (bước 5a, 5b) | `{"error_code": "COURSE_HAS_SUBMISSIONS", "message": "Không thể xoá lớp học đã có bài nộp của sinh viên (2 bài nộp)"}` |
+| 409 | Có bài nộp mới chen vào ngay lúc đang xoá (E2) | `{"error_code": "COURSE_HAS_SUBMISSIONS", "message": "Lớp học vừa có bài nộp mới của sinh viên, vui lòng thử lại"}` |
+
+**Quy tắc nghiệp vụ**
+
+- Mặc định **không xoá lớp đã có bài nộp**, để giữ lịch sử chấm của Sinh viên. Message 409 ghi số bài nộp để FE hỏi Admin có muốn xoá cưỡng bức không.
+- `force=true` (chỉ Admin): xoá vĩnh viễn mọi bài nộp của các bài tập trong lớp, rồi xoá lớp như trên. Không thể khôi phục. Lớp chưa có bài nộp thì `force=true` xoá như bình thường.
+- Toàn bộ thao tác xoá nằm trong một transaction. Nếu có bài nộp mới được ghi vào sau bước kiểm tra, khoá ngoại chặn việc xoá, hệ thống rollback (lớp giữ nguyên) và trả 409 như bảng trên để thử lại.
+- Xoá cưỡng bức được ghi log ứng dụng (mức INFO): `user_id` của Admin, `course_id` và số bài nộp đã xoá.
+- Bài nộp đang được chấm mà bị xoá: worker chấm bài dừng chấm và bỏ kết quả, không thử lại.
+- **Yêu cầu quyền**: Admin, hoặc Teacher chủ lớp (`require_role(Role.ADMIN, Role.TEACHER)` + kiểm tra `created_by`); `force=true` chỉ Admin.
 
 ## POST /courses/{course_id}/enrollments — Thêm sinh viên vào lớp
 
@@ -166,11 +190,64 @@ Truyền **đúng một** trong `student_id` / `student_code`. Chuỗi rỗng ho
 | 404 | `course_id` không tồn tại | `{"error_code": "NOT_FOUND", "message": "Không tìm thấy lớp học"}` |
 | 404 | `student_id` / `student_code` không khớp Sinh viên nào, hoặc thuộc tài khoản không phải Sinh viên (use-case bước 4a) | `{"error_code": "NOT_FOUND", "message": "Không tìm thấy sinh viên"}` |
 | 403 | Teacher không phải chủ lớp (use-case bước 3a) | `{"error_code": "FORBIDDEN", "message": "Bạn không có quyền thêm sinh viên vào lớp này"}` |
-| 409 | Sinh viên đã có trong lớp học (use-case bước 5a) | `{"error_code": "CONFLICT", "message": "Sinh viên đã có trong lớp học"}` |
+| 409 | Sinh viên đã có trong lớp học (use-case bước 5a), kể cả khi 2 request thêm cùng một Sinh viên chạy cùng lúc (E2) | `{"error_code": "CONFLICT", "message": "Sinh viên đã có trong lớp học"}` |
 
 **Quy tắc nghiệp vụ**
 
 - Sau khi thêm thành công, `total_number_student` của lớp học tăng lên 1.
+- DB có ràng buộc unique `uq_enrollment_course_student` trên (`course_id`, `student_id`). Nếu 2 request cùng qua bước kiểm tra trùng, request đến sau bị ràng buộc chặn, rollback (sĩ số không tăng) và nhận 409 như trên, không phải 500.
+- **Yêu cầu quyền**: Admin, hoặc Teacher chủ lớp.
+
+## POST /courses/{course_id}/enrollments/class — Thêm cả lớp hành chính vào lớp học
+
+**Request body**
+
+| Field | Kiểu | Bắt buộc | Ghi chú |
+|---|---|---|---|
+| class_id | string | có | mã lớp hành chính, vd `CQ.67.CNTT`, 1-50 ký tự (xem [api-design-class.md](api-design-class.md)) |
+
+Ví dụ:
+
+```json
+{ "class_id": "CQ.67.CNTT" }
+```
+
+**Response 201 Created**
+
+| Field | Kiểu | Ghi chú |
+|---|---|---|
+| course_id | string | |
+| class_id | string | |
+| added_count | int | số Sinh viên vừa được thêm |
+| skipped_count | int | số Sinh viên của lớp hành chính đã có trong lớp học từ trước, bị bỏ qua |
+| added_student_ids | string[] | `user_id` (UUID) của các Sinh viên vừa được thêm |
+
+```json
+{
+  "course_id": "JAVA01",
+  "class_id": "CQ.67.CNTT",
+  "added_count": 95,
+  "skipped_count": 2,
+  "added_student_ids": ["3f6c1e2a-...", "..."]
+}
+```
+
+**Response lỗi**
+
+| Status | Khi nào | Body |
+|---|---|---|
+| 422 | Thiếu `class_id`, rỗng `""` hoặc dài quá 50 ký tự | `{"error_code": "VALIDATION_ERROR", "message": "..."}` (message của pydantic, tiếng Anh) |
+| 403 | Người gọi không phải Admin/Teacher | `{"error_code": "FORBIDDEN", "message": "Bạn không có quyền thực hiện hành động này"}` |
+| 404 | `course_id` không tồn tại | `{"error_code": "NOT_FOUND", "message": "Không tìm thấy lớp học"}` |
+| 403 | Teacher không phải chủ lớp (use-case "Thêm lớp hành chính vào lớp học" bước 4a) | `{"error_code": "FORBIDDEN", "message": "Bạn không có quyền thêm sinh viên vào lớp này"}` |
+| 404 | `class_id` không tồn tại (bước 5a) | `{"error_code": "NOT_FOUND", "message": "Không tìm thấy lớp hành chính"}` |
+| 409 | Có Sinh viên của lớp hành chính vừa được request khác thêm vào lớp học cùng lúc (E3) | `{"error_code": "CONFLICT", "message": "Danh sách lớp học vừa được thay đổi đồng thời, vui lòng thử lại"}` |
+
+**Quy tắc nghiệp vụ**
+
+- Chỉ lấy tài khoản có `class_id` bằng lớp hành chính và `role_id = 3` (Sinh viên). Sinh viên đã có trong lớp học được bỏ qua, không báo lỗi.
+- Cả lô được lưu trong **một transaction**: `total_number_student` tăng đúng bằng `added_count`. Nếu ràng buộc unique (`course_id`, `student_id`) chặn một dòng bất kỳ (request đồng thời), **cả lô bị huỷ**, không Sinh viên nào được thêm, sĩ số không lệch; gọi lại thì những Sinh viên đã có sẽ được tính vào `skipped_count`.
+- Lớp hành chính không có Sinh viên nào: trả 201 với `added_count = 0`.
 - **Yêu cầu quyền**: Admin, hoặc Teacher chủ lớp.
 
 ## GET /courses/{course_id}/enrollments — Danh sách sinh viên trong lớp
@@ -179,7 +256,23 @@ Truyền **đúng một** trong `student_id` / `student_code`. Chuỗi rỗng ho
 
 | Field | Kiểu | Ghi chú |
 |---|---|---|
-| (mảng object) | | mỗi phần tử: `enrollment_id`, `student_id` (UUID), `student_code` (MSSV, có thể null), `full_name`, `email` |
+| (mảng object) | | mỗi phần tử: `enrollment_id`, `student_id` (UUID), `student_code` (MSSV, có thể null), `full_name`, `email`, `class_id`, `is_active` |
+| class_id | string \| null | lớp hành chính của Sinh viên. Chỉ trả cho Admin/Teacher; Student gọi thì luôn `null` |
+| is_active | bool \| null | `false` nếu tài khoản Sinh viên đang bị khoá. Chỉ trả cho Admin/Teacher; Student gọi thì luôn `null` |
+
+Ví dụ một phần tử (Admin/Teacher gọi):
+
+```json
+{
+  "enrollment_id": 12,
+  "student_id": "3f6c1e2a-...",
+  "student_code": "6751071001",
+  "full_name": "Nguyễn Văn A",
+  "email": "6751071001@st.utc2.edu.vn",
+  "class_id": "CQ.67.CNTT",
+  "is_active": true
+}
+```
 
 **Response lỗi**
 
@@ -191,6 +284,7 @@ Truyền **đúng một** trong `student_id` / `student_code`. Chuỗi rỗng ho
 **Quy tắc nghiệp vụ**
 
 - Admin và Teacher chủ lớp thấy toàn bộ danh sách; Student chỉ gọi được cho chính lớp mình đã được thêm vào.
+- `class_id` và `is_active` chỉ trả khi người gọi là Admin hoặc Teacher (whitelist theo `role_id`); Student nhận `null` để không lộ lớp hành chính và trạng thái khoá của bạn cùng lớp.
 - **Yêu cầu quyền**: Bearer token hợp lệ, đúng phạm vi truy cập theo vai trò.
 
 ## DELETE /courses/{course_id}/enrollments/{student_id} — Xoá sinh viên khỏi lớp
@@ -211,3 +305,30 @@ Truyền **đúng một** trong `student_id` / `student_code`. Chuỗi rỗng ho
 
 - Sau khi xoá thành công, `total_number_student` của lớp học giảm đi 1.
 - **Yêu cầu quyền**: Admin, hoặc Teacher chủ lớp.
+
+## GET /students/{student_id}/dashboard — Tổng quan học tập của sinh viên
+
+**Response 200 OK**
+
+| Field | Kiểu | Ghi chú |
+|---|---|---|
+| total_classes | int | Số lớp sinh viên đang ghi danh (trong phạm vi người gọi được xem) |
+| completed_problems | int | Số bài đã có ít nhất một bài nộp `accepted` (mỗi bài đếm 1 lần) |
+| total_problems | int | Tổng số bài tập của các lớp trên |
+| average_score | float \| null | Điểm trung bình **thang 10**, làm tròn 2 chữ số. `null` khi chưa có bài nào có điểm |
+| due_this_week | int | Số bài đang mở, hạn nộp trong 7 ngày tới (tính cả hôm nay) mà sinh viên chưa nộp đạt |
+| courses | array | Danh sách lớp, mỗi phần tử cùng shape với `GET /courses/{course_id}` |
+
+**Response lỗi**
+
+| Status | Khi nào | Body |
+|---|---|---|
+| 404 | `student_id` không phải UUID (mọi vai trò); hoặc Admin/Sinh viên xem `student_id` không tồn tại hay không phải Sinh viên | `{"error_code": "NOT_FOUND", "message": "Không tìm thấy sinh viên"}` |
+| 403 | Sinh viên xem của người khác, hoặc Giáo viên xem `student_id` không học lớp nào do mình tạo (kể cả `student_id` không tồn tại: Giáo viên nhận 403, không phải 404) | `{"error_code": "FORBIDDEN", "message": "Bạn không có quyền xem thông tin sinh viên này"}` |
+| 403 | Role của người gọi không thuộc Admin/Teacher/Student | `{"error_code": "FORBIDDEN", "message": "Bạn không có quyền thực hiện hành động này"}` |
+
+**Quy tắc nghiệp vụ**
+
+- Phạm vi lớp: Admin và chính sinh viên thấy mọi lớp sinh viên đang ghi danh. Giáo viên chỉ thấy các lớp do mình tạo, mọi chỉ số (kể cả `average_score`) cũng chỉ tính trên các lớp đó.
+- `average_score`: mỗi bài lấy **một** bài nộp theo đúng cách bảng điểm lớp chọn: ưu tiên bài có điểm chấm tay (`manual_score`), nếu không thì bài có `passed_count` cao nhất (điểm = `passed_count / total_number_testcase × 10`, làm tròn 1 chữ số). Sau đó lấy trung bình trên các bài có điểm. Bài chưa nộp không tính vào mẫu số.
+- **Yêu cầu quyền**: Bearer token hợp lệ, đúng phạm vi theo vai trò như trên.

@@ -9,13 +9,17 @@ from app.modules.students.service import MAX_IMPORT_FILE_BYTES, import_students
 from app.modules.users.schemas import (
     CreateStudentRequest,
     CreateTeacherRequest,
+    UpdateUserRequest,
     UserResetPasswordResponse,
     UserResponse, UserListResponse,
 )
 from app.modules.users.service import (
     create_student,
     create_teacher,
+    lock_user,
     reset_password,
+    unlock_user,
+    update_user,
     user_response, list_users,
 )
 from app.models import User
@@ -65,6 +69,35 @@ def reset_password_route(
     return UserResetPasswordResponse(
         user_id=target_user_id, temporary_password=temporary_password
     )
+
+
+@router.patch("/users/{user_id}", response_model=UserResponse)
+def update_user_route(
+    user_id: str,
+    data: UpdateUserRequest,
+    session: Session = Depends(get_session),
+    current_user: User = Depends(require_role(Role.ADMIN, Role.TEACHER)),
+):
+    return user_response(update_user(session, current_user, user_id, data))
+
+
+@router.post("/users/{user_id}/lock", response_model=UserResponse)
+def lock_user_route(
+    user_id: str,
+    session: Session = Depends(get_session),
+    current_user: User = Depends(require_role(Role.ADMIN, Role.TEACHER)),
+):
+    return user_response(lock_user(session, current_user, user_id))
+
+
+@router.post("/users/{user_id}/unlock", response_model=UserResponse)
+def unlock_user_route(
+    user_id: str,
+    session: Session = Depends(get_session),
+    current_user: User = Depends(require_role(Role.ADMIN, Role.TEACHER)),
+):
+    return user_response(unlock_user(session, current_user, user_id))
+
 
 @router.get("/users/me", response_model=UserResponse)
 def get_me_route(current_user: User = Depends(get_current_user)):

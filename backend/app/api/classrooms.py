@@ -4,12 +4,13 @@ from starlette import status
 
 from app.core.database import get_session
 from app.core.dependencies import Role, require_role
-from app.modules.classrooms.schemas import ClassResponse, CreateClassRequest
+from app.modules.classrooms.schemas import ClassResponse, CreateClassRequest, UpdateClassRequest
 from app.modules.classrooms.service import (
     create_class,
     delete_class,
     get_class,
     list_classes,
+    update_class,
 )
 from app.models import User
 
@@ -44,6 +45,16 @@ def get_class_route(
     current_user: User = Depends(require_role(Role.ADMIN, Role.TEACHER)),
 ) -> ClassResponse:
     return get_class(session, class_id)
+
+
+@router.patch("/classes/{class_id}", response_model=ClassResponse)
+def update_class_route(
+    class_id: str,
+    data: UpdateClassRequest,
+    session: Session = Depends(get_session),
+    current_user: User = Depends(require_role(Role.ADMIN)),
+) -> ClassResponse:
+    return update_class(session, class_id, data)
 
 
 @router.delete("/classes/{class_id}", status_code=status.HTTP_204_NO_CONTENT)

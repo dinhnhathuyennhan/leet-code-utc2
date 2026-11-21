@@ -125,11 +125,16 @@ def refresh_access_token(session: Session, refresh_token: str | None) -> str:
         raise SessionExpiredError("Phiên đăng nhập đã hết hạn") from None
 
     user = session.get(User, user_id)
-    if user is None or user.token_version != tv:
+    if user is None:
         raise SessionRevokedError("Phiên đăng nhập không còn hợp lệ")
 
+    # Kiểm tra khoá trước token_version (khoá luôn tăng token_version), để người
+    # đang đăng nhập bị khoá nhận ACCOUNT_LOCKED thay vì SESSION_REVOKED.
     if not user.is_active:
         raise AccountLockedError("Tài khoản đã bị khoá")
+
+    if user.token_version != tv:
+        raise SessionRevokedError("Phiên đăng nhập không còn hợp lệ")
 
     return create_access_token(user.user_id, user.role_id, user.token_version)
 

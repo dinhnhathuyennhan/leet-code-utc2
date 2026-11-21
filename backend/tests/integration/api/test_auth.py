@@ -10,6 +10,7 @@ from app.core.security import tokens as token_mod
 from app.core.security.passwords import hash_password
 from app.core.security.tokens import create_access_token, create_refresh_token
 from app.models import User
+from app.modules.users.service import lock_user
 from app.api.auth import (
     REFRESH_TOKEN_MAX_AGE_SECONDS,
     _clear_refresh_token_cookie,
@@ -134,3 +135,36 @@ def test_api_call_with_locked_account_token_returns_403(client, locked_user):
 
     assert response.status_code == 403
     assert response.json() == LOCKED_BODY
+
+
+def test_online_user_locked_by_admin_gets_account_locked_with_old_tokens(
+    client, session, monkeypatch
+):
+    """Kịch bản thật: user đang đăng nhập rồi bị khoá (khoá luôn tăng token_version)."""
+    monkeypatch.setattr(token_mod, "JWT_SECRET_KEY", "test-secret-key-at-least-32-bytes-long!!")
+    admin = User(full_name="Admin", email="admin@example.com", hashed_password="x", role_id=1)
+    student = User(
+        full_name="Online Student",
+        email="0000000001@st.utc2.edu.vn",
+        student_code="0000000001",
+        hashed_password="x",
+        role_id=3,
+    )
+    session.add_all([admin, student])
+    session.commit()
+    access = create_access_token(
+        user_id=student.user_id, role_id=student.role_id, token_version=student.token_version
+    )
+    refresh = create_refresh_token(user_id=student.user_id, token_version=student.token_version)
+
+    lock_user(session, admin, student.user_id)
+
+    api = client.get("/users/me", headers={"Authorization": f"Bearer {access}"})
+    assert api.status_code == 403
+    assert api.json() == LOCKED_BODY
+
+    client.cookies.set("refresh_token", refresh)
+    refreshed = client.post("/auth/refresh-access-token")
+    assert refreshed.status_code == 403
+    assert refreshed.json() == LOCKED_BODY
+    assert "max-age=0" in refreshed.headers["set-cookie"].lower()

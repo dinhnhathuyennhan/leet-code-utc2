@@ -39,11 +39,13 @@ def get_current_user(
     if user is None:
         raise UnauthorizedError("Token không hợp lệ")
 
-    if payload.get("tv") != user.token_version:
-        raise UnauthorizedError("Phiên đăng nhập đã hết hạn")
-
+    # Kiểm tra khoá trước token_version: khoá luôn tăng token_version, nên nếu
+    # kiểm tra version trước thì người đang đăng nhập bị khoá chỉ nhận 401 chung.
     if not user.is_active:
         raise AccountLockedError("Tài khoản đã bị khoá")
+
+    if payload.get("tv") != user.token_version:
+        raise UnauthorizedError("Phiên đăng nhập đã hết hạn")
 
     return user
 

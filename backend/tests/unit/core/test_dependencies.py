@@ -81,15 +81,18 @@ def test_rejects_stale_token_version_with_401(session, user):
     assert exc.value.status_code == 401
 
 
-def test_stale_token_version_wins_over_locked(session, user):
+def test_locked_wins_over_stale_token_version(session, user):
+    """Khoá luôn tăng token_version: người đang đăng nhập bị khoá phải nhận ACCOUNT_LOCKED."""
     creds = _creds(user)
     user.is_active = False
     user.token_version += 1
     session.add(user)
     session.commit()
 
-    with pytest.raises(UnauthorizedError):
+    with pytest.raises(AccountLockedError) as exc:
         get_current_user(creds, session)
+    assert exc.value.status_code == 403
+    assert exc.value.error_code == "ACCOUNT_LOCKED"
 
 
 def test_rejects_deleted_user(session, user):

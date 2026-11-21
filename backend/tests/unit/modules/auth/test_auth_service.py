@@ -331,16 +331,17 @@ class TestRefreshAccessToken:
             svc.refresh_access_token(session, refresh)
         _assert_app_error(exc, 403, "ACCOUNT_LOCKED")
 
-    def test_locked_user_with_stale_token_is_revoked(self, session, user):
+    def test_locked_user_with_stale_token_is_rejected_as_locked(self, session, user):
+        """Khoá luôn tăng token_version: refresh token đang dùng phải nhận ACCOUNT_LOCKED."""
         refresh = create_refresh_token(user_id=user.user_id, token_version=user.token_version)
         user.is_active = False
         user.token_version += 1
         session.add(user)
         session.commit()
 
-        with pytest.raises(svc.SessionRevokedError) as exc:
+        with pytest.raises(AccountLockedError) as exc:
             svc.refresh_access_token(session, refresh)
-        _assert_app_error(exc, 401, "SESSION_REVOKED")
+        _assert_app_error(exc, 403, "ACCOUNT_LOCKED")
 
     def test_deleted_user_is_revoked(self, session, user):
         refresh = create_refresh_token(user_id=user.user_id, token_version=user.token_version)

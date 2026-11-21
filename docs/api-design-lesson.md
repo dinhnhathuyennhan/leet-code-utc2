@@ -39,6 +39,7 @@
 - Admin/Teacher có quyền xem Course nhận tất cả Problem/testcase và trường thống kê.
 - Student chỉ nhận Problem đã tới `start_datetime`, testcase mẫu; các trường `submitted_students`, `total_students`, `stats`, `alert` và `submitted_count` được trả về là `null`.
 - Thống kê dành cho Admin/Teacher chỉ tính các Student hiện đang enroll trong Course; bài nộp của Student đã bị gỡ enrollment không được tính.
+- `stats.avg_score` (thang 10, làm tròn 1 chữ số) chọn bài nộp như bảng điểm lớp: với mỗi cặp (Student, Problem), bài có `manual_score` được ưu tiên, sau đó tới `passed_count` cao nhất; điểm là `manual_score` nếu có, nếu không là `10 × passed_count / total_number_testcase`. Bằng `0` khi chưa có bài nào có điểm.
 
 **Response lỗi**
 

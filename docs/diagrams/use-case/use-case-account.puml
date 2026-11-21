@@ -24,6 +24,10 @@ rectangle "Quản lý tài khoản" {
   usecase "Xem danh sách tài khoản" as ListUsers
   usecase "Lọc theo vai trò / lớp hành chính" as Filter
   usecase "Sinh mật khẩu tạm\n(SV = MSSV, GV/Admin = email)" as TempPw
+  usecase "Sửa thông tin tài khoản" as EditUser
+  usecase "Khoá tài khoản" as Lock
+  usecase "Mở khoá tài khoản" as Unlock
+  usecase "Đăng xuất mọi thiết bị\n(tăng token_version)" as RevokeTokens
 }
 
 Admin --> CreateTeacher
@@ -31,6 +35,9 @@ Teacher --> CreateStudent
 Teacher --> Import
 Teacher --> Reset
 Teacher --> ListUsers
+Teacher --> EditUser
+Teacher --> Lock
+Teacher --> Unlock
 
 CreateTeacher ..> TempPw : <<include>>
 CreateStudent ..> TempPw : <<include>>
@@ -38,6 +45,7 @@ Import ..> TempPw : <<include>>
 Reset ..> TempPw : <<include>>
 Import ..> AutoClass : <<include>>
 Filter .> ListUsers : <<extend>>
+Lock ..> RevokeTokens : <<include>>
 
 note bottom of Reset
   Giáo viên chỉ reset được Sinh viên
@@ -46,5 +54,13 @@ end note
 note bottom of ListUsers
   Giáo viên chỉ thấy Sinh viên
   trong lớp học phần của mình
+end note
+note bottom of Lock
+  Giáo viên chỉ sửa/khoá Sinh viên đang học
+  lớp do mình tạo; Admin không khoá Admin
+end note
+note bottom of Unlock
+  Giáo viên không mở khoá được
+  tài khoản do Admin khoá (locked_by)
 end note
 @enduml

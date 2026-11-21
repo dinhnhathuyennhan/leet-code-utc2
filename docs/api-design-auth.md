@@ -20,12 +20,15 @@
 | role_id | int | luôn = 2 |
 | student_code | null | luôn `null` với Giáo viên |
 | class_id | null | luôn `null` với Giáo viên |
+| is_active | bool | trạng thái khoá tài khoản, luôn `true` khi tạo mới |
 
 **Response lỗi**
 
 | Status | Khi nào | Body |
 |---|---|---|
-| 422 | Sai định dạng email / thiếu field | `{"error_code": "VALIDATION_ERROR", "message": "..."}` |
+| 422 | `email` sai định dạng hoặc không phải chuỗi (số, mảng, object...) | `{"error_code": "INVALID_FORMAT", "message": "Email không đúng định dạng"}` |
+| 422 | `email` rỗng hoặc chỉ có khoảng trắng | `{"error_code": "EMPTY_FIELD", "message": "Email không được để trống"}` |
+| 422 | Thiếu field bắt buộc | `{"error_code": "VALIDATION_ERROR", "message": "..."}` |
 | 422 | Email không có đuôi `@st.utc2.edu.vn` | `{"error_code": "INVALID_FORMAT", "message": "Email phải có đuôi @st.utc2.edu.vn."}` |
 | 409 | Email đã tồn tại | `{"error_code": "CONFLICT", "message": "Email đã được đăng ký"}` |
 
@@ -61,12 +64,15 @@
 | role_id | int | luôn = 3 |
 | student_code | string | MSSV |
 | class_id | string | |
+| is_active | bool | trạng thái khoá tài khoản, luôn `true` khi tạo mới |
 
 **Response lỗi**
 
 | Status | Khi nào | Body |
 |---|---|---|
-| 422 | Sai định dạng email / thiếu field | `{"error_code": "VALIDATION_ERROR", "message": "..."}` |
+| 422 | `email` sai định dạng hoặc không phải chuỗi (số, mảng, object...) | `{"error_code": "INVALID_FORMAT", "message": "Email không đúng định dạng"}` |
+| 422 | `email` rỗng hoặc chỉ có khoảng trắng | `{"error_code": "EMPTY_FIELD", "message": "Email không được để trống"}` |
+| 422 | Thiếu field bắt buộc | `{"error_code": "VALIDATION_ERROR", "message": "..."}` |
 | 422 | `student_code` trống, không đủ 10 ký tự hoặc chứa ký tự không phải chữ số | `{"error_code": "INVALID_FORMAT", "message": "Mã sinh viên phải gồm đúng 10 chữ số"}` (hoặc `"Mã sinh viên chỉ được gồm chữ số (0-9)"`) |
 | 422 | Email không có đuôi `@st.utc2.edu.vn` | `{"error_code": "INVALID_FORMAT", "message": "Email phải có đuôi @st.utc2.edu.vn."}` |
 | 404 | `class_id` không tồn tại (tạo lớp trước bằng [`POST /classes`](api-design-class.md)) | `{"error_code": "NOT_FOUND", "message": "Không tìm thấy lớp học có ID: ..."}` |
@@ -152,6 +158,61 @@ Hàng 13  : 2   | 675107A002   | Trần Thị         | Bình | CQ.67.CNTT |
 - Mật khẩu tạm được băm (bcrypt) song song trên nhiều luồng để rút ngắn thời gian xử lý. Một lớp khoảng 100 sinh viên mất vài giây; FE nên đặt timeout riêng cho request này, dài hơn timeout mặc định.
 - **Yêu cầu quyền**: Admin hoặc Teacher (`require_role(Role.ADMIN, Role.TEACHER)`). Teacher import cũng có thể tạo lớp hành chính mới.
 
+## GET /users/me — Thông tin tài khoản đang đăng nhập
+
+**Response 200 OK**: `UserResponse` của người gọi (`user_id`, `full_name`, `email`, `role_id`, `student_code`, `class_id`, `is_active`). Không bao giờ trả `hashed_password`.
+
+**Response lỗi**: 401 token không hợp lệ/hết hạn; 403 `ACCOUNT_LOCKED` nếu tài khoản đang bị khoá (xem `POST /users/{user_id}/lock`).
+
+- **Yêu cầu quyền**: Bearer token hợp lệ, mọi vai trò.
+
+## GET /users — Danh sách tài khoản
+
+**Query parameters**
+
+| Field | Kiểu | Bắt buộc | Mặc định | Ghi chú |
+|---|---|---|---|---|
+| role_id | int \| null | không | null | `1` Admin, `2` Giáo viên, `3` Sinh viên. Chỉ có tác dụng với Admin |
+| class_id | string \| null | không | null | 1–50 ký tự; chỉ lấy Sinh viên thuộc lớp hành chính này |
+| page | int | không | 1 | ≥ 1 |
+| page_size | int | không | 20 | Từ 1 đến 100 |
+
+**Response 200 OK**
+
+```json
+{
+  "items": [
+    {
+      "user_id": "6f1c...-uuid",
+      "full_name": "Nguyễn Văn A",
+      "email": "6451071001@st.utc2.edu.vn",
+      "role_id": 3,
+      "student_code": "6451071001",
+      "class_id": "CQ.64.CNTT",
+      "is_active": true
+    }
+  ],
+  "total": 1,
+  "page": 1,
+  "page_size": 20
+}
+```
+
+**Response lỗi**
+
+| Status | Khi nào | Body |
+|---|---|---|
+| 422 | `role_id` khác 1/2/3 | `{"error_code": "INVALID_FORMAT", "message": "role_id không hợp lệ"}` |
+| 422 | Query sai kiểu, `page`/`page_size`/`class_id` ngoài giới hạn | `{"error_code": "VALIDATION_ERROR", "message": "..."}` |
+| 403 | Người gọi không phải Admin/Giáo viên | `{"error_code": "FORBIDDEN", "message": "Bạn không có quyền thực hiện hành động này"}` |
+
+**Quy tắc nghiệp vụ**
+
+- Scope theo vai trò người gọi: Admin thấy mọi tài khoản (lọc được theo `role_id`); Giáo viên chỉ thấy Sinh viên đang ghi danh ít nhất một lớp học phần do mình tạo; `role_id` hợp lệ (1/2/3) truyền vào bị bỏ qua, còn giá trị khác vẫn bị 422 như mọi vai trò.
+- Có `class_id` thì luôn chỉ trả Sinh viên của lớp đó (kết hợp với scope ở trên).
+- Sắp xếp theo `user_id`; `total` là tổng số bản ghi khớp điều kiện (trước phân trang).
+- **Yêu cầu quyền**: Bearer token hợp lệ, role Admin hoặc Giáo viên.
+
 ## POST /users/{user_id}/reset-password — Đặt lại mật khẩu
 
 **Request body**: không có (chỉ cần `user_id` trên path, là UUID)
@@ -168,7 +229,7 @@ Hàng 13  : 2   | 675107A002   | Trần Thị         | Bình | CQ.67.CNTT |
 | Status | Khi nào | Body |
 |---|---|---|
 | 404 | `user_id` không tồn tại hoặc không phải UUID hợp lệ | `{"error_code": "USER_NOT_FOUND", "message": "Không tìm thấy tài khoản"}` |
-| 403 | Người gọi là Student (bị chặn hoàn toàn, kể cả tự reset chính mình) | `{"error_code": "NOT_ALLOWED_TO_RESET", "message": "Bạn không có quyền đặt lại mật khẩu cho tài khoản này"}` |
+| 403 | Người gọi là Student hoặc có vai trò lạ (bị chặn hoàn toàn, kể cả tự reset chính mình) | `{"error_code": "NOT_ALLOWED_TO_RESET", "message": "Bạn không có quyền đặt lại mật khẩu cho tài khoản này"}` |
 | 403 | Người gọi là Teacher nhưng tài khoản mục tiêu không phải Student | `{"error_code": "NOT_ALLOWED_TO_RESET", "message": "Bạn không có quyền đặt lại mật khẩu cho tài khoản này"}` |
 | 403 | Người gọi là Teacher, mục tiêu là Student nhưng không học khoá nào do Teacher này tạo | `{"error_code": "NOT_ALLOWED_TO_RESET", "message": "Bạn không có quyền đặt lại mật khẩu cho tài khoản này"}` |
 | 403 | Tài khoản mục tiêu có vai trò không thuộc Admin/Teacher/Student (vai trò lạ) | `{"error_code": "NOT_ALLOWED_TO_RESET", "message": "Bạn không có quyền đặt lại mật khẩu cho tài khoản này"}` |
@@ -181,7 +242,131 @@ Hàng 13  : 2   | 675107A002   | Trần Thị         | Bình | CQ.67.CNTT |
   - **Teacher/Admin**: email của tài khoản.
   - Vai trò khác: bị chặn (403), không thay đổi gì. Danh sách vai trò được phép là whitelist.
 - Đặt `must_change_password = true`, tăng `token_version` (vô hiệu hoá toàn bộ token cũ của tài khoản mục tiêu).
-- **Yêu cầu quyền**: Admin (mọi tài khoản) hoặc Teacher — nhưng Teacher chỉ được reset cho Student đang học **ít nhất một khoá học do chính Teacher đó tạo** (`Course.created_by = current_user.user_id`, kiểu UUID), không phải cứ `role_id = 3` là được; Student không được reset cho bất kỳ ai. Endpoint không dùng `require_role` ở router — toàn bộ logic phân quyền nằm trong service (`backend/app/modules/users/service.py::reset_password`).
+- **Yêu cầu quyền**: Admin (mọi tài khoản Admin/Teacher/Student) hoặc Teacher — nhưng Teacher chỉ được reset cho Student đang học **ít nhất một khoá học do chính Teacher đó tạo** (`Course.created_by = current_user.user_id`, kiểu UUID), không phải cứ `role_id = 3` là được; Student và mọi vai trò khác không được reset cho bất kỳ ai. Quyền là whitelist theo vai trò người gọi, vai trò lạ không bị xử lý nhầm như Admin. Endpoint không dùng `require_role` ở router — toàn bộ logic phân quyền nằm trong service (`backend/app/modules/users/service.py::reset_password`).
+
+## PATCH /users/{user_id} — Sửa thông tin tài khoản
+
+**Request body**: mọi field đều không bắt buộc. Field không gửi hoặc gửi `null` thì giữ nguyên. Field không có trong bảng (ví dụ `role_id`, `is_active`) bị bỏ qua.
+
+| Field | Kiểu | Sửa được với tài khoản | Ghi chú |
+|---|---|---|---|
+| full_name | string | Admin (tự sửa mình), Giáo viên, Sinh viên | không được rỗng; khoảng trắng thừa được gộp thành một dấu cách |
+| email | string (email) | Admin (tự sửa mình), Giáo viên | đúng định dạng email và có đuôi `@st.utc2.edu.vn`. Email Sinh viên không sửa trực tiếp được |
+| student_code | string | Sinh viên | MSSV, đúng 10 chữ số (0-9). Đổi MSSV thì email tự đổi thành `<MSSV>@st.utc2.edu.vn` |
+| class_id | string | Sinh viên | mã lớp hành chính, phải tồn tại trong bảng `class` |
+
+Ví dụ đổi MSSV và lớp của Sinh viên:
+
+```json
+{"student_code": "6851071002", "class_id": "CQ.68.CNTT"}
+```
+
+**Response 200 OK**: thông tin tài khoản sau khi sửa, cùng các field như response của `POST /students`
+
+```json
+{
+  "user_id": "3f6c2a8e-6d1b-4c3e-9a51-2b7f0d4e8c19",
+  "full_name": "Nguyễn Văn An",
+  "email": "6851071002@st.utc2.edu.vn",
+  "role_id": 3,
+  "student_code": "6851071002",
+  "class_id": "CQ.68.CNTT",
+  "is_active": true
+}
+```
+
+**Response lỗi**
+
+| Status | Khi nào | Body |
+|---|---|---|
+| 403 | Người gọi là Student hoặc có vai trò lạ (chặn ở `require_role`) | `{"error_code": "FORBIDDEN", "message": "Bạn không có quyền thực hiện hành động này"}` |
+| 422 | `full_name` rỗng hoặc chỉ có khoảng trắng / không phải chuỗi | `{"error_code": "EMPTY_FIELD", "message": "Họ và tên không được để trống"}` / `{"error_code": "INVALID_FORMAT", "message": "Họ và tên phải là chuỗi"}` |
+| 422 | `email` sai định dạng, không phải chuỗi, hoặc không có đuôi `@st.utc2.edu.vn` | `{"error_code": "INVALID_FORMAT", "message": "Email không đúng định dạng"}` (hoặc `"Email phải có đuôi @st.utc2.edu.vn."`) |
+| 422 | `email` rỗng hoặc chỉ có khoảng trắng | `{"error_code": "EMPTY_FIELD", "message": "Email không được để trống"}` |
+| 422 | `student_code` trống, không đủ 10 ký tự hoặc chứa ký tự không phải chữ số | `{"error_code": "INVALID_FORMAT", "message": "Mã sinh viên phải gồm đúng 10 chữ số"}` (hoặc `"Mã sinh viên chỉ được gồm chữ số (0-9)"`; trống thì `EMPTY_FIELD` `"Mã sinh viên không được trống"`) |
+| 422 | `class_id` rỗng / không phải chuỗi | `{"error_code": "EMPTY_FIELD", "message": "Mã lớp không được trống"}` / `{"error_code": "INVALID_FORMAT", "message": "Mã lớp phải là chuỗi"}` |
+| 404 | `user_id` không tồn tại hoặc không phải UUID hợp lệ | `{"error_code": "USER_NOT_FOUND", "message": "Không tìm thấy tài khoản"}` |
+| 403 | Không có quyền sửa tài khoản đích (xem ma trận quyền bên dưới) | `{"error_code": "NOT_ALLOWED_TO_MANAGE_ACCOUNT", "message": "Bạn không có quyền quản lý tài khoản này"}` |
+| 422 | Gửi `email` cho tài khoản Sinh viên | `{"error_code": "FIELD_NOT_EDITABLE", "message": "Email sinh viên được tạo tự động theo MSSV, không thể sửa trực tiếp"}` |
+| 422 | Gửi `student_code` hoặc `class_id` cho tài khoản Admin/Giáo viên | `{"error_code": "FIELD_NOT_EDITABLE", "message": "Chỉ tài khoản sinh viên mới có mã sinh viên và lớp hành chính"}` |
+| 409 | `student_code` mới đã thuộc tài khoản khác | `{"error_code": "CONFLICT", "message": "Mã sinh viên đã được sử dụng"}` |
+| 409 | Email tự sinh từ MSSV mới đã thuộc tài khoản khác | `{"error_code": "CONFLICT", "message": "Email 6851071002@st.utc2.edu.vn đã được đăng ký"}` |
+| 409 | `email` mới (Admin/Giáo viên) đã thuộc tài khoản khác | `{"error_code": "CONFLICT", "message": "Email đã được đăng ký"}` |
+| 409 | Trùng dữ liệu lúc lưu (request khác vừa ghi cùng email/MSSV) | `{"error_code": "CONFLICT", "message": "Email hoặc mã sinh viên đã được sử dụng"}` |
+| 404 | `class_id` không tồn tại (hoặc vừa bị xoá/đổi mã lúc lưu) | `{"error_code": "NOT_FOUND", "message": "Không tìm thấy lớp học có ID: ..."}` |
+
+Các lỗi 422 về định dạng (`EMPTY_FIELD`, `INVALID_FORMAT`) được kiểm tra ở schema `UpdateUserRequest`: sau `require_role`, nhưng trước khi service kiểm tra tài khoản đích (404) và quyền quản lý (`NOT_ALLOWED_TO_MANAGE_ACCOUNT`).
+
+**Ma trận quyền** (whitelist theo vai trò người gọi, `backend/app/modules/users/service.py::_ensure_can_edit_account`)
+
+| Người gọi | Được sửa | Không được sửa |
+|---|---|---|
+| Admin | chính mình (chỉ `full_name`, `email`), mọi Giáo viên, mọi Sinh viên | Admin khác, tài khoản có vai trò lạ |
+| Giáo viên | Sinh viên đang học ít nhất một khoá do chính Giáo viên đó tạo (`Course.created_by`) | chính mình, Giáo viên khác, Admin, Sinh viên ngoài lớp mình quản lý |
+| Sinh viên, vai trò lạ | không tài khoản nào, kể cả của mình | |
+
+**Quy tắc nghiệp vụ**
+
+- Field được sửa phụ thuộc vai trò của **tài khoản đích**: Giáo viên/Admin sửa `full_name`, `email`; Sinh viên sửa `full_name`, `student_code`, `class_id`.
+- Đổi `student_code` thì server tự đặt `email = <MSSV>@st.utc2.edu.vn`. Gửi lại đúng MSSV hiện tại thì không đổi gì.
+- Không đổi mật khẩu, `must_change_password` và `token_version`, nên người dùng không bị đăng xuất. Từ lần đăng nhập sau phải dùng email mới.
+- Mọi kiểm tra chạy xong mới ghi database, lỗi không để lại thay đổi dở dang. Body không có thay đổi nào thì trả 200 với dữ liệu hiện tại.
+- `role_id` và trạng thái khoá không sửa qua endpoint này.
+- Không trả `hashed_password` trong response.
+- **Yêu cầu quyền**: Admin hoặc Teacher (`require_role(Role.ADMIN, Role.TEACHER)`), phân quyền chi tiết theo tài khoản đích nằm trong service (`update_user`).
+
+## POST /users/{user_id}/lock — Khoá tài khoản
+
+**Request body**: không có (chỉ cần `user_id` trên path, là UUID)
+
+**Response 200 OK**: thông tin tài khoản, cùng các field như response của `PATCH /users/{user_id}`, với `is_active = false`
+
+**Response lỗi**
+
+| Status | Khi nào | Body |
+|---|---|---|
+| 403 | Người gọi là Student hoặc có vai trò lạ (chặn ở `require_role`) | `{"error_code": "FORBIDDEN", "message": "Bạn không có quyền thực hiện hành động này"}` |
+| 404 | `user_id` không tồn tại hoặc không phải UUID hợp lệ | `{"error_code": "USER_NOT_FOUND", "message": "Không tìm thấy tài khoản"}` |
+| 403 | Tự khoá chính mình; Admin khoá Admin khác; Giáo viên khoá Giáo viên/Admin hoặc Sinh viên không học khoá nào do mình tạo; tài khoản đích có vai trò lạ | `{"error_code": "NOT_ALLOWED_TO_MANAGE_ACCOUNT", "message": "Bạn không có quyền quản lý tài khoản này"}` |
+| 409 | Request khoá/mở khoá khác chạy đồng thời liên tục làm đổi trạng thái (thử tối đa 3 lần vẫn không được) | `{"error_code": "CONFLICT", "message": "Trạng thái tài khoản vừa thay đổi, vui lòng thử lại"}` |
+
+**Quy tắc nghiệp vụ**
+
+- Khoá: đặt `is_active = false`, ghi `locked_by = user_id` của người khoá và tăng `token_version` (UPDATE nguyên tử), nên mọi access/refresh token cũ bị vô hiệu hoá, tài khoản bị đăng xuất khỏi mọi thiết bị.
+- Idempotent: tài khoản đã khoá thì trả 200 và **không** tăng `token_version` lần nữa.
+  - Giáo viên khoá lại: giữ nguyên `locked_by` (người khoá trước vẫn là người khoá, kể cả khi đó là Admin).
+  - Admin khoá lại: `locked_by` chuyển sang Admin này, từ đó Giáo viên không mở khoá được nữa.
+- Sau khi bị khoá:
+  - Đăng nhập đúng mật khẩu → 403 `ACCOUNT_LOCKED`; sai mật khẩu → vẫn 401 lỗi chung `"Email hoặc mật khẩu không đúng"`.
+  - Refresh token và mọi API dùng Bearer token (kể cả token đang dùng lúc bị khoá) → 403 `{"error_code": "ACCOUNT_LOCKED", "message": "Tài khoản đã bị khoá"}`, response kèm `Set-Cookie` xoá cookie `refresh_token`.
+- `locked_by` không có trong response.
+- **Yêu cầu quyền**: Admin hoặc Teacher (`require_role(Role.ADMIN, Role.TEACHER)`), whitelist theo vai trò người gọi (`_ensure_can_manage_account`):
+  - Admin: khoá Giáo viên và Sinh viên; không tự khoá mình, không khoá Admin khác.
+  - Giáo viên: chỉ khoá Sinh viên đang học ít nhất một khoá do chính mình tạo.
+
+## POST /users/{user_id}/unlock — Mở khoá tài khoản
+
+**Request body**: không có (chỉ cần `user_id` trên path, là UUID)
+
+**Response 200 OK**: thông tin tài khoản, cùng các field như response của `PATCH /users/{user_id}`, với `is_active = true`
+
+**Response lỗi**
+
+| Status | Khi nào | Body |
+|---|---|---|
+| 403 | Người gọi là Student hoặc có vai trò lạ (chặn ở `require_role`) | `{"error_code": "FORBIDDEN", "message": "Bạn không có quyền thực hiện hành động này"}` |
+| 404 | `user_id` không tồn tại hoặc không phải UUID hợp lệ | `{"error_code": "USER_NOT_FOUND", "message": "Không tìm thấy tài khoản"}` |
+| 403 | Không có quyền quản lý tài khoản đích (giống `POST /users/{user_id}/lock`) | `{"error_code": "NOT_ALLOWED_TO_MANAGE_ACCOUNT", "message": "Bạn không có quyền quản lý tài khoản này"}` |
+| 403 | Giáo viên mở khoá tài khoản không do Giáo viên khoá (Admin khoá, `locked_by` NULL, người khoá đã bị xoá hoặc có vai trò lạ), hoặc Admin vừa khoá lại cùng lúc | `{"error_code": "NOT_ALLOWED_TO_MANAGE_ACCOUNT", "message": "Tài khoản này chỉ Quản trị viên mới được mở khoá"}` |
+
+**Quy tắc nghiệp vụ**
+
+- Mở khoá: đặt `is_active = true`, `locked_by = NULL`. **Không** đổi `token_version`, nên token phát hành trước khi khoá vẫn không dùng được (access token cũ → 401 `UNAUTHORIZED` `"Phiên đăng nhập đã hết hạn"`, refresh token cũ → 401 `SESSION_REVOKED`). Người dùng phải đăng nhập lại.
+- Idempotent: tài khoản đang hoạt động thì trả 200, không đổi gì.
+- Ai được mở khoá phụ thuộc người khoá (`locked_by`):
+  - Admin: mở khoá được mọi Giáo viên/Sinh viên đang bị khoá.
+  - Giáo viên: chỉ mở khoá được khi người khoá còn tồn tại và có vai trò Giáo viên (không bắt buộc là chính mình, Giáo viên khác cùng dạy Sinh viên đó cũng được). Tài khoản do Admin khoá, bị khoá từ trước khi có cột `locked_by` (NULL), hay người khoá đã bị xoá thì chỉ Admin mở khoá được.
+- **Yêu cầu quyền**: giống `POST /users/{user_id}/lock`.
 
 ## POST /auth/login — Đăng nhập
 
@@ -206,13 +391,17 @@ Hàng 13  : 2   | 675107A002   | Trần Thị         | Bình | CQ.67.CNTT |
 
 | Status | Khi nào | Body |
 |---|---|---|
-| 422 | Sai định dạng email/thiếu field | `{"error_code": "VALIDATION_ERROR", "message": "..."}` |
+| 422 | `email` sai định dạng hoặc không phải chuỗi (số, mảng, object...) | `{"error_code": "INVALID_FORMAT", "message": "Email không đúng định dạng"}` |
+| 422 | `email` rỗng hoặc chỉ có khoảng trắng | `{"error_code": "EMPTY_FIELD", "message": "Email không được để trống"}` |
+| 422 | Thiếu field bắt buộc | `{"error_code": "VALIDATION_ERROR", "message": "..."}` |
 | 401 | Email hoặc mật khẩu sai | `{"error_code": "INVALID_CREDENTIALS", "message": "Email hoặc mật khẩu không đúng"}` (thông báo chung, không tiết lộ sai cái nào) |
+| 403 | Mật khẩu đúng nhưng tài khoản đang bị khoá (`is_active = false`) | `{"error_code": "ACCOUNT_LOCKED", "message": "Tài khoản đã bị khoá"}` |
 
 **Quy tắc nghiệp vụ**
 
 - `access_token`/`refresh_token` đều nhúng claim `tv` (token_version hiện tại của tài khoản) và claim `type` (`"access"` hoặc `"refresh"`) để phân biệt 2 loại token — server phải kiểm tra đúng `type` tương ứng ở từng endpoint, không chấp nhận lẫn loại token.
 - Client dựa vào `user.must_change_password` để tự điều hướng sang trang đổi mật khẩu.
+- Trạng thái khoá chỉ được báo **sau khi** mật khẩu đúng. Tài khoản bị khoá mà nhập sai mật khẩu vẫn nhận 401 lỗi chung, để người lạ không dò được tài khoản nào đang bị khoá.
 - **Yêu cầu quyền**: không (public, ai cũng gọi được).
 
 ## POST /auth/change-password — Đổi mật khẩu
@@ -272,10 +461,14 @@ Cookie `refresh_token` giữ nguyên (không rotate).
 | Status | Khi nào | Body |
 |---|---|---|
 | 401 | Cookie `refresh_token` thiếu | `{"error_code": "SESSION_EXPIRED", "message": "Phiên đăng nhập đã hết hạn"}` |
-| 401 | `token_version` trong token không khớp database (đã bị thu hồi do đổi mật khẩu/reset ở nơi khác) | `{"error_code": "SESSION_REVOKED", "message": "Phiên đăng nhập không còn hợp lệ"}` |
+| 401 | Cookie `refresh_token` sai chữ ký, hết hạn, sai loại token (không phải `"refresh"`) hoặc thiếu claim | `{"error_code": "SESSION_EXPIRED", "message": "Phiên đăng nhập đã hết hạn"}` |
+| 401 | Tài khoản không còn tồn tại, hoặc `token_version` trong token không khớp database (đã bị thu hồi do đổi mật khẩu/reset/khoá ở nơi khác) | `{"error_code": "SESSION_REVOKED", "message": "Phiên đăng nhập không còn hợp lệ"}` |
+| 403 | Tài khoản đang bị khoá | `{"error_code": "ACCOUNT_LOCKED", "message": "Tài khoản đã bị khoá"}` |
 
 **Quy tắc nghiệp vụ**
 
 - Không rotate refresh token — chỉ cấp access token mới.
-- Server không kiểm tra claim `type` của token trong cookie `refresh_token` trước khi cấp access token mới — chỉ kiểm tra `token_version` khớp với database (`backend/app/modules/auth/service.py::refresh_access_token`, `backend/app/core/security/tokens.py::decode_token`).
+- Server kiểm tra token trong cookie phải có claim `type = "refresh"` (access token đặt vào cookie bị từ chối), rồi kiểm tra tài khoản còn tồn tại, chưa bị khoá và `token_version` khớp với database (`backend/app/modules/auth/service.py::refresh_access_token`, `backend/app/core/security/tokens.py::decode_token`).
+- Trạng thái khoá được kiểm tra **trước** `token_version`. Khoá luôn tăng `token_version`, nên nhờ thứ tự này người đang đăng nhập bị khoá nhận `ACCOUNT_LOCKED` thay vì `SESSION_REVOKED`.
+- Mọi lỗi `SESSION_EXPIRED`, `SESSION_REVOKED`, `ACCOUNT_LOCKED` đều kèm `Set-Cookie` xoá cookie `refresh_token` (`Path=/auth`, `Secure`, `SameSite=None`, khớp thuộc tính lúc set để trình duyệt chấp nhận xoá ở ngữ cảnh cross-site).
 - **Yêu cầu quyền**: cookie `refresh_token` hợp lệ (không cần access token).

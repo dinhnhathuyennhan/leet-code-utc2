@@ -14,13 +14,28 @@
 
 | Field | Kiểu | Bắt buộc | Mặc định | Ghi chú |
 |---|---|---|---|---|
-| filter | string | không | `all` | `error` chỉ lọc compile_error; `late_appeal`, `similarity` chưa có dữ liệu riêng |
-| search | string \| null | không | null | Tìm theo mã/tên Student, Course hoặc Problem |
+| filter | string | không | `all` | Xem bảng giá trị `filter` bên dưới |
+| search | string \| null | không | null | Tìm (không phân biệt hoa thường) theo MSSV, tên Sinh viên, mã/tên Course, report hoặc tên Problem |
 | limit | int | không | 100 | Từ 1 đến 500 |
+| course | string \| null | không | null | Chỉ lấy bài nộp thuộc `course_id` này |
+| lesson_id | int \| null | không | null | Chỉ lấy bài nộp thuộc buổi học này |
+| problem_id | int \| null | không | null | Chỉ lấy bài nộp của bài tập này |
+| include_graded | bool | không | `false` | `true` thì lấy thêm bài `accepted` |
 
-Danh sách gồm Submission status `pending`, `wrong_answer`, `compile_error`.
+Danh sách gồm Submission status `pending`, `processing`, `wrong_answer`, `compile_error`, `time_limit_exceeded`, `runtime_error`, `internal_error` (thêm `accepted` khi `include_graded=true`), mới nộp xếp trước, đã giới hạn theo quyền người gọi.
 
-**Response 200 OK**: `PendingSubmissionListResponse` gồm `items`, `total`, `counts`. `counts` được tính sau khi giới hạn theo quyền và `search`, nhưng trước khi áp dụng `filter`; `all` là tổng bài cần xử lý khớp tìm kiếm, `error` là số `compile_error`. `late_appeal` và `similarity` hiện bằng 0 vì chưa có dữ liệu riêng.
+Mỗi bài có `judge_kind` gom status thành 4 nhóm: `accepted`, `pending`, `compile_error`, còn lại (`processing`, `wrong_answer`, `time_limit_exceeded`, `runtime_error`, `internal_error`) là `wrong_answer`.
+
+| `filter` | Lọc |
+|---|---|
+| `all` (hoặc giá trị lạ) | Không lọc |
+| `pending`, `wrong_answer`, `compile_error`, `accepted` | Theo `judge_kind` |
+| `graded` | status `accepted` |
+| `error` | status `compile_error` |
+| `needs_grading` | Chưa có `manual_score` và `judge_kind` khác `accepted` |
+| `late_appeal`, `similarity` | Luôn rỗng (chưa có dữ liệu riêng) |
+
+**Response 200 OK**: `PendingSubmissionListResponse` gồm `items`, `total`, `counts`. `counts` được tính sau khi giới hạn theo quyền, các query `course`/`lesson_id`/`problem_id` và `search`, nhưng trước khi áp dụng `filter`. Các key: `all`, `graded`, `ungraded`, `pending`, `wrong_answer`, `compile_error`, `needs_grading`, `error`, `late_appeal`, `similarity` (hai key cuối hiện luôn bằng 0).
 
 **Response lỗi**: 403 người gọi không phải Admin/Teacher; 422 query sai kiểu hoặc limit ngoài giới hạn.
 
@@ -48,9 +63,16 @@ Trường `testcase_results` (danh sách `{index, is_sample, status, time}`, the
 | Field | Kiểu | Ghi chú |
 |---|---|---|
 | feedback | string \| null | Tối đa 10.000 ký tự; chuỗi rỗng sau trim được lưu thành null |
-| status | string \| null | Chỉ nhận `pending`, `accepted`, `wrong_answer`, `compile_error` |
+| status | string \| null | Chỉ nhận `pending`, `processing`, `accepted`, `wrong_answer`, `compile_error`, `time_limit_exceeded`, `runtime_error`, `internal_error` |
+| manual_score | float \| null | Điểm chấm tay, 0–10. Gửi `null` để xoá điểm tay; bỏ field thì giữ nguyên |
 
 **Response 200 OK**: `SubmissionDetailResponse` sau cập nhật.
+
+**Tương tác với máy chấm**
+
+- Khi gửi `status`, quyền chấm (lease) của worker đang chấm bài này bị thu hồi: kết quả máy chấm trả về sau đó bị bỏ, không ghi đè trạng thái giáo viên vừa sửa.
+- Đổi về `pending` hoặc `processing`: chấm lại từ đầu như regrade. Token Judge0, `testcase_results`, `passed_count`, `compile_output` bị xoá, rồi bài được đưa lại vào hàng đợi để máy chấm nộp mới lên Judge0.
+- Chỉ sửa `feedback`/`manual_score` (không gửi `status`): không ảnh hưởng worker đang chấm.
 
 **Response lỗi**
 
@@ -69,13 +91,22 @@ Chỉ chủ bài nộp (role Student). Bài của người khác trả 404 (khô
 
 ## POST /submissions/{submission_id}/regrade — Chấm lại bài lỗi hệ thống
 
-Admin/Teacher (trong phạm vi lớp của mình). Chỉ nhận bài có `status = internal_error`; reset `passed_count`, `compile_output`, token Judge0 và `testcase_results`, rồi đưa vào hàng đợi chấm.
+Admin/Teacher (trong phạm vi lớp của mình). Chỉ nhận bài có `status = internal_error`; reset `passed_count`, `compile_output`, token Judge0, `testcase_results` và lease chấm (`grading_claimed_at`), rồi đưa vào hàng đợi chấm.
 
 **Response 202 Accepted**: `{"submission_id": int, "status": "pending"}`. **409** nếu bài không ở trạng thái `internal_error`; **403** với Student.
 
 ## Chấm theo lô và dừng sớm
 
 Backend gửi testcase lên Judge0 theo lô `GRADING_CHUNK_SIZE` (mặc định 10). Sau một lô có test `time_limit_exceeded`, các lô sau **không được gửi**; các test còn lại có `status = skipped` và tính là không đạt. Lô có `compile_error` cũng dừng (mọi test lỗi biên dịch như nhau, không biên dịch lại). Lý do: Judge0 chạy test gần như tuần tự, một bài lặp vô hạn trên 50 test có thể chiếm máy chấm khoảng 4 phút. Thời gian chờ mỗi lô = `max(GRADING_TIMEOUT_SECONDS, số test × wall time + GRADING_CHUNK_EXTRA_SECONDS)`.
+
+## Nhận bài chấm và chống chấm trùng
+
+- Worker nhận bài bằng một UPDATE có điều kiện trên `submission.grading_claimed_at` (lease): chỉ nhận được bài `pending`, hoặc `processing` mà lease trống/đã hết hạn. Nhờ vậy khôi phục lúc khởi động backend và lượt enqueue mới không chấm trùng một bài.
+- Lease mặc định 120 giây (`GRADING_LEASE_SECONDS`). Trong lúc chờ Judge0, worker gia hạn lease mỗi 1/4 thời hạn. Worker chết (backend dừng giữa chừng) thì sau tối đa một lease, worker khác nhận lại bài.
+- Bài đang được worker khác giữ lease thì được hẹn kiểm tra lại lúc lease hết hạn.
+- Mọi lần ghi của worker (lưu token, gia hạn, ghi kết quả) đều kèm điều kiện lease còn đúng giá trị worker đã ghi. Worker mất lease (hết hạn, bị worker khác nhận, hoặc giáo viên sửa `status` qua PATCH) thì bỏ kết quả.
+- Bài nộp bị xoá trong lúc chấm (Admin xoá cưỡng bức lớp học phần) thì worker dừng và bỏ qua, không chấm lại.
+- Ghi kết quả xong thì lease được trả về `null`.
 
 ## Chưa triển khai
 

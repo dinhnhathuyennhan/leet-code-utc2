@@ -68,6 +68,7 @@ Kết quả review production `1.0.0-rc.1` (19/11/2026): Judge0 chạy testcase 
 - **Tăng số worker:** đặt `COUNT=<số worker>` trong `judge0.conf` (biến của Judge0 cho số tiến trình worker chạy song song), rồi chạy `docker compose restart workers`. Chọn bằng số vCPU của máy Judge0. EC2 1–2 vCPU chỉ đủ cho nhóm nhỏ, nên nâng lên loại 4 vCPU trước buổi thi hoặc demo. Cũng đặt `GRADING_WORKERS` ở backend bằng số này.
 - **Kiểm tra:** gửi 2 bài lặp vô hạn cùng lúc (Admin, `POST /problems/{id}/run-preview` ở 2 tab). Nếu tổng thời gian vẫn gấp đôi một bài, các worker chưa chạy song song.
 - **Backend chấm theo lô** `GRADING_CHUNK_SIZE` (mặc định 10 test). Lô có test quá thời gian thì không gửi các lô sau (test còn lại có trạng thái `skipped`), và lô lỗi biên dịch cũng dừng. Xem docs/api-design-submission.md, mục "Chấm theo lô và dừng sớm".
+- **Không chấm trùng:** mỗi bài chỉ một worker giữ quyền chấm (lease `GRADING_LEASE_SECONDS`, mặc định 120 s, gia hạn trong lúc chờ Judge0). Backend restart giữa chừng thì sau tối đa một lease bài được chấm lại. Xem docs/api-design-submission.md, mục "Nhận bài chấm và chống chấm trùng".
 
 ### Phiên bản ngôn ngữ (image `judge0/judge0:1.13.1`)
 

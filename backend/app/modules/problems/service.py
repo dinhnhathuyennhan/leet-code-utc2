@@ -439,7 +439,7 @@ def get_problem_detail(
 
 
 def _has_submissions(session: Session, problem_id: int) -> bool:
-    return session.exec(select(Submission.submission_id).where(Submission.problem_id == problem_id)).first() is not None
+    return session.exec(select(Submission.submission_id).where(Submission.problem_id == problem_id).limit(1)).first() is not None
 
 
 def _get_admin_testcase_problem(session: Session, problem_id: int) -> Problem:

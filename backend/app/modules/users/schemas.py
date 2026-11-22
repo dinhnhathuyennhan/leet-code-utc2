@@ -1,3 +1,4 @@
+import unicodedata
 from typing import Annotated
 
 from pydantic import (
@@ -10,8 +11,16 @@ from app.core.exceptions import InvalidFormatError
 from app.core.utils.validation import AppEmailStr, required_text
 
 
+ACCOUNT_EMAIL_DOMAIN = "st.utc2.edu.vn"
+
+
+def student_email(code: str) -> str:
+    """Email sinh viên luôn là <MSSV>@st.utc2.edu.vn."""
+    return f"{code}@{ACCOUNT_EMAIL_DOMAIN}"
+
+
 def validate_account_email(value: str) -> str:
-    if value.rsplit("@", 1)[-1].lower() != "st.utc2.edu.vn":
+    if value.rsplit("@", 1)[-1].lower() != ACCOUNT_EMAIL_DOMAIN:
         raise InvalidFormatError("Email phải có đuôi @st.utc2.edu.vn.")
     return value
 
@@ -63,6 +72,41 @@ class CreateStudentRequest(BaseModel):
         )
 
 
+def _validate_full_name(value) -> str:
+    if not isinstance(value, str):
+        raise InvalidFormatError("Họ và tên phải là chuỗi")
+    text = required_text(value, "Họ và tên không được để trống")
+    return " ".join(text.split())
+
+
+class UpdateUserRequest(BaseModel):
+    """Body PATCH /users/{id}. Field không gửi hoặc null = không đổi."""
+
+    full_name: str | None = None
+    email: AccountEmailStr | None = None
+    student_code: str | None = None
+    class_id: str | None = None
+
+    @field_validator("full_name", mode="before")
+    @classmethod
+    def validate_full_name(cls, value):
+        return None if value is None else _validate_full_name(value)
+
+    @field_validator("student_code", mode="before")
+    @classmethod
+    def validate_student_code(cls, value):
+        return None if value is None else _validate_student_code(str(value))
+
+    @field_validator("class_id", mode="before")
+    @classmethod
+    def validate_class_id(cls, value):
+        if value is None:
+            return None
+        if not isinstance(value, str):
+            raise InvalidFormatError("Mã lớp phải là chuỗi")
+        return required_text(unicodedata.normalize("NFC", value), "Mã lớp không được trống")
+
+
 class UserResponse(BaseModel):
     user_id: str
     full_name: str
@@ -70,6 +114,7 @@ class UserResponse(BaseModel):
     role_id: int
     student_code: str | None = None
     class_id: str | None = None
+    is_active: bool
 
 
 class UserListResponse(BaseModel):

@@ -5,7 +5,7 @@ from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
-from app.core.exceptions import AppError
+from app.core.exceptions import AccountLockedError, AppError
 from app.core.schemas import ErrorResponse
 from app.modules.auth.service import SessionExpiredError, SessionRevokedError
 
@@ -54,12 +54,13 @@ async def request_validation_exception_handler(request: Request, exc: RequestVal
 async def session_ended_handler(request: Request, exc: AppError) -> JSONResponse:
     body = ErrorResponse(error_code=exc.error_code, message=exc.message)
     response = JSONResponse(status_code=exc.status_code, content=body.model_dump())
-    response.delete_cookie(key="refresh_token", path="/auth")
+    response.delete_cookie(key="refresh_token", path="/auth", secure=True, samesite="none")
     return response
 
 def register_exception_handlers(app: FastAPI) -> None:
     app.add_exception_handler(SessionRevokedError, session_ended_handler)
     app.add_exception_handler(SessionExpiredError, session_ended_handler)
+    app.add_exception_handler(AccountLockedError, session_ended_handler)
     app.add_exception_handler(AppError, app_error_handler)
     app.add_exception_handler(StarletteHTTPException, http_exception_handler)
     app.add_exception_handler(RequestValidationError, request_validation_exception_handler)

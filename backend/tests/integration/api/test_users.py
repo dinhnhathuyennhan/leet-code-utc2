@@ -162,3 +162,14 @@ def test_create_account_accepts_case_insensitive_email_domain(client, session, c
     assert response.status_code == 201, response.text
     created_id = uuid.UUID(response.json()["user_id"])
     assert session.get(User, created_id).email == email
+
+
+@pytest.mark.parametrize("endpoint, body", [("/teachers", TEACHER_BODY), ("/students", STUDENT_BODY)])
+def test_create_account_rejects_non_string_email(client, session, class_68, endpoint, body):
+    _login_as(Role.ADMIN)
+
+    response = client.post(endpoint, json={**body, "email": 123})
+
+    assert response.status_code == 422
+    assert response.json()["error_code"] == "INVALID_FORMAT"
+    assert session.exec(select(User)).all() == []

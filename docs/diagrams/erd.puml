@@ -28,6 +28,8 @@ entity "user\n(Tài khoản)" as e_user {
   * must_change_password : bool
   * role_id : int
   * token_version : int
+  * is_active : bool
+  locked_by : uuid <<FK>>
   class_id : varchar(50) <<FK>>
 }
 
@@ -48,6 +50,8 @@ entity "enrollment\n(Ghi danh)" as e_enrollment {
   --
   * course_id : varchar(50) <<FK>>
   * student_id : uuid <<FK>>
+  ..
+  (course_id, student_id) <<UNIQUE>>
 }
 
 entity "lesson\n(Buổi học)" as e_lesson {
@@ -67,9 +71,11 @@ entity "problem\n(Bài tập)" as e_problem {
   --
   * lesson_id : int <<FK>>
   * title : varchar
+  function_name : varchar
   * description : text
   * time_limit_seconds : int
   * start_format_code : text
+  * starter_codes : json
   * constraints : text
   * level : varchar
   hint : text
@@ -101,11 +107,16 @@ entity "submission\n(Bài nộp)" as e_submission {
   * status : varchar
   compile_output : text
   feedback : text
+  manual_score : float
   * passed_count : int
   * submitted_datetime : timestamptz
+  judge_tokens : json
+  testcase_results : json
+  grading_claimed_at : timestamptz
 }
 
 e_class |o--o{ e_user : "gồm"
+e_user |o--o{ e_user : "khoá (locked_by)"
 e_user ||--o{ e_course : "tạo (created_by)"
 e_user ||--o{ e_enrollment : "ghi danh"
 e_course ||--o{ e_enrollment : "có"
@@ -119,6 +130,8 @@ legend right
   * : cột NOT NULL
   role_id: 1 = Admin, 2 = Giáo viên, 3 = Sinh viên
   user.class_id chỉ có giá trị với Sinh viên
+  user.locked_by: người đã khoá tài khoản (NULL khi đang hoạt động), ON DELETE SET NULL
+  submission.grading_claimed_at: lease của worker đang chấm (NULL khi không ai giữ)
 endlegend
 
 @enduml

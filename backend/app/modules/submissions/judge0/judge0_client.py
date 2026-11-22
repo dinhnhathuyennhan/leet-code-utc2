@@ -1,6 +1,7 @@
 import base64
 import logging
 import time
+from collections.abc import Callable
 from dataclasses import dataclass
 
 import httpx
@@ -221,10 +222,21 @@ class Judge0Client:
         except (KeyError, TypeError, ValueError):
             raise Judge0Error(_BUSY_MESSAGE) from None
 
-    def wait_for_results(self, tokens: list[str], timeout_seconds: float) -> list[Judge0Result]:
-        """Poll tới khi mọi token xong hoặc hết timeout (kết quả chưa xong trả về nguyên trạng)."""
+    def wait_for_results(
+        self,
+        tokens: list[str],
+        timeout_seconds: float,
+        heartbeat: Callable[[], None] | None = None,
+    ) -> list[Judge0Result]:
+        """Poll tới khi mọi token xong hoặc hết timeout (kết quả chưa xong trả về nguyên trạng).
+
+        ``heartbeat`` được gọi mỗi vòng poll (kể cả khi Judge0 lỗi), để bên gọi gia hạn quyền
+        chấm; exception nó raise làm dừng poll.
+        """
         deadline = time.monotonic() + timeout_seconds
         while True:
+            if heartbeat is not None:
+                heartbeat()
             try:
                 results = self.get_batch(tokens)
             except Judge0Error:

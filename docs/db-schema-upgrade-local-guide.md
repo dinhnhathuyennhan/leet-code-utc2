@@ -16,6 +16,12 @@ Tài liệu này hướng dẫn upgrade database PostgreSQL local sau khi nhánh
 - Không chạy code backend mới với database chưa upgrade. Tạm dừng API hoặc các tiến trình đang ghi vào DB trong lúc cutover.
 - Backup chứa dữ liệu thật: lưu ở nơi an toàn, ngoài repo; không commit hoặc gửi file này lên chat.
 - UUID migration không hỗ trợ downgrade. Nếu cần rollback sau migration, phải restore backup.
+- Các revision trong tài liệu viết cho migration UUID (`b9804d25ccef` → `e6f7a8b9c0d1`). Repo hiện có thêm migration sau đó (head hiện tại là `c4e5f6a7b8d9`), nên `alembic upgrade head` chạy tiếp tới head; revision cuối cần khớp với `alembic heads`. Quy trình backup → clone → thử trên clone vẫn áp dụng như cũ.
+- Migration `d712d1718327` tạo lại ràng buộc unique `(course_id, student_id)` của `enrollment`, **xoá các dòng ghi danh trùng** (giữ `enrollment_id` nhỏ nhất) và tính lại `course.total_number_student`. Vì vậy số dòng `enrollment` sau migration có thể giảm. Đếm trước trên clone để biết sẽ mất dòng nào:
+
+  ```powershell
+  docker exec cham-code-db psql -U chamcode -d chamcodedb_schema_clone -c "SELECT course_id, student_id, count(*) FROM enrollment GROUP BY 1, 2 HAVING count(*) > 1;"
+  ```
 
 ## 1. Xác nhận trạng thái database chính
 - Đứng tại thư mục gốc của dự án
@@ -151,7 +157,7 @@ Cả ba kết quả phải bằng `0`.
 
 ### Đối chiếu số dòng sau migration
 
-Chạy lại truy vấn đếm ở bước 3 trên clone và DB chính. Số dòng của `user`, `course`, `enrollment`, `submission` phải không đổi. Kiểm tra kiểu `user.user_id` đã là `uuid`:
+Chạy lại truy vấn đếm ở bước 3 trên clone và DB chính. Số dòng của `user`, `course`, `enrollment`, `submission` phải không đổi; riêng `enrollment` được phép giảm đúng bằng số dòng trùng đã đếm ở mục 0 (migration `d712d1718327`). Kiểm tra kiểu `user.user_id` đã là `uuid`:
 
 Các lệnh kiểm tra ở phần này đang nhắm vào clone. Khi kiểm tra DB chính sau upgrade, đổi `-d chamcodedb_schema_clone` thành `-d ChamCodeDB`.
 

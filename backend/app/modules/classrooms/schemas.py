@@ -130,6 +130,14 @@ class CreateClassRequest(BaseModel):
         return build_class_id(self.type, self.course_number, self.department)
 
 
+class UpdateClassRequest(CreateClassRequest):
+    """Body của ``PATCH /classes/{class_id}``: đổi mã lớp.
+
+    Bắt buộc đủ cả 3 phần (hệ, khoá, ngành), kiểm tra y hệt ``CreateClassRequest``;
+    ``class_id`` (property) là mã lớp mới do server ghép.
+    """
+
+
 class ClassResponse(BaseModel):
     class_id: str
     type: str

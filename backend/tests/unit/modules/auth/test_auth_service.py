@@ -7,7 +7,7 @@ from datetime import UTC, datetime, timedelta
 import jwt
 import pytest
 from app.core.security import tokens as token_mod
-from app.core.exceptions import AppError, TokenError
+from app.core.exceptions import AccountLockedError, AppError, TokenError
 from app.core.security.passwords import hash_password, verify_password
 from app.core.security.tokens import create_access_token, create_refresh_token
 from app.modules.auth.schemas import ChangePasswordRequest, LoginRequest
@@ -123,6 +123,28 @@ class TestLogin:
         with pytest.raises(svc.InvalidCredentialsError) as exc:
             svc.login(session, _login_req(password=BAD_PASSWORD))
         _assert_app_error(exc, 401, "INVALID_CREDENTIALS")
+
+    def test_locked_account_with_correct_password_raises_account_locked(self, session):
+        _make_user(session, is_active=False)
+        with pytest.raises(AccountLockedError) as exc:
+            svc.login(session, _login_req())
+        _assert_app_error(exc, 403, "ACCOUNT_LOCKED")
+        assert exc.value.message == "Tài khoản đã bị khoá"
+
+    def test_locked_account_with_wrong_password_gets_generic_invalid_credentials(self, session):
+        _make_user(session, is_active=False)
+        with pytest.raises(svc.InvalidCredentialsError) as exc:
+            svc.login(session, _login_req(password=BAD_PASSWORD))
+        _assert_app_error(exc, 401, "INVALID_CREDENTIALS")
+        assert exc.value.message == "Email hoặc mật khẩu không đúng"
+
+    def test_unlocked_account_logs_in_again(self, session):
+        user = _make_user(session, is_active=False)
+        user.is_active = True
+        session.add(user)
+        session.commit()
+        response, _ = svc.login(session, _login_req())
+        assert response.user.email == "a@example.com"
 
     def test_unknown_email_rejected_with_same_error_as_wrong_password(
             self, session, user
@@ -298,6 +320,28 @@ class TestRefreshAccessToken:
         with pytest.raises(svc.SessionRevokedError) as exc:
             svc.refresh_access_token(session, refresh)
         _assert_app_error(exc, 401, "SESSION_REVOKED")
+
+    def test_locked_user_with_current_token_is_rejected_as_locked(self, session, user):
+        refresh = create_refresh_token(user_id=user.user_id, token_version=user.token_version)
+        user.is_active = False
+        session.add(user)
+        session.commit()
+
+        with pytest.raises(AccountLockedError) as exc:
+            svc.refresh_access_token(session, refresh)
+        _assert_app_error(exc, 403, "ACCOUNT_LOCKED")
+
+    def test_locked_user_with_stale_token_is_rejected_as_locked(self, session, user):
+        """Khoá luôn tăng token_version: refresh token đang dùng phải nhận ACCOUNT_LOCKED."""
+        refresh = create_refresh_token(user_id=user.user_id, token_version=user.token_version)
+        user.is_active = False
+        user.token_version += 1
+        session.add(user)
+        session.commit()
+
+        with pytest.raises(AccountLockedError) as exc:
+            svc.refresh_access_token(session, refresh)
+        _assert_app_error(exc, 403, "ACCOUNT_LOCKED")
 
     def test_deleted_user_is_revoked(self, session, user):
         refresh = create_refresh_token(user_id=user.user_id, token_version=user.token_version)

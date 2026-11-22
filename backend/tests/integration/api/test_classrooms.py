@@ -314,3 +314,147 @@ def test_delete_class_not_found_returns_404(client):
 
     assert response.status_code == 404
     assert response.json()["error_code"] == "NOT_FOUND"
+
+
+# ---------- PATCH /classes/{class_id} ----------
+
+CNTT_68 = {"type": "CQ", "course_number": 68, "department": "CNTT"}
+
+
+def test_admin_updates_class_returns_new_class_with_student_count(client, session):
+    _login_as(Role.ADMIN)
+    _add_class(session)
+    _add_student(session, "6751070001", "CQ.67.CNTT")
+    _add_student(session, "6751070002", "CQ.67.CNTT")
+
+    response = client.patch("/classes/CQ.67.CNTT", json=CNTT_68)
+
+    assert response.status_code == 200, response.text
+    assert response.json() == {
+        "class_id": "CQ.68.CNTT",
+        "type": "CQ",
+        "course_number": 68,
+        "department": "CNTT",
+        "student_count": 2,
+    }
+    assert session.get(Class, "CQ.67.CNTT") is None
+
+
+def test_update_class_same_code_returns_200_unchanged(client, session):
+    _login_as(Role.ADMIN)
+    _add_class(session)
+    _add_student(session, "6751070001", "CQ.67.CNTT")
+
+    response = client.patch("/classes/CQ.67.CNTT", json=CNTT_67)
+
+    assert response.status_code == 200
+    assert response.json() == {**CNTT_67, "class_id": "CQ.67.CNTT", "student_count": 1}
+
+
+def test_update_class_with_dots_in_path(client, session):
+    _login_as(Role.ADMIN)
+    _add_class(session, "CQ.67.KTXDCTGT.2")
+
+    response = client.patch(
+        "/classes/CQ.67.KTXDCTGT.2",
+        json={"type": "CQ", "course_number": 67, "department": "KTXDCTGT.3"},
+    )
+
+    assert response.status_code == 200
+    assert response.json()["class_id"] == "CQ.67.KTXDCTGT.3"
+
+
+def test_users_filter_by_new_class_after_update(client, session):
+    _login_as(Role.ADMIN)
+    _add_class(session)
+    student = _add_student(session, "6751070001", "CQ.67.CNTT")
+
+    assert client.patch("/classes/CQ.67.CNTT", json=CNTT_68).status_code == 200
+
+    users = client.get("/users", params={"class_id": "CQ.68.CNTT"})
+    assert users.status_code == 200
+    assert [u["user_id"] for u in users.json()["items"]] == [str(student.user_id)]
+    assert client.get("/users", params={"class_id": "CQ.67.CNTT"}).json()["items"] == []
+    assert client.get("/classes/CQ.67.CNTT").status_code == 404
+
+
+@pytest.mark.parametrize("role_id", [Role.TEACHER, Role.STUDENT, 99])
+def test_only_admin_can_update_class(client, session, role_id):
+    _login_as(role_id)
+    _add_class(session)
+
+    response = client.patch("/classes/CQ.67.CNTT", json=CNTT_68)
+
+    assert response.status_code == 403
+    assert session.get(Class, "CQ.67.CNTT") is not None
+    assert session.get(Class, "CQ.68.CNTT") is None
+
+
+def test_update_class_requires_login(client, session):
+    _add_class(session)
+
+    response = client.patch("/classes/CQ.67.CNTT", json=CNTT_68)
+
+    assert response.status_code == 401
+    assert session.get(Class, "CQ.67.CNTT") is not None
+
+
+def test_update_class_to_existing_returns_409(client, session):
+    _login_as(Role.ADMIN)
+    _add_class(session, "CQ.67.CNTT")
+    _add_class(session, "CQ.68.CNTT")
+
+    response = client.patch("/classes/CQ.67.CNTT", json=CNTT_68)
+
+    assert response.status_code == 409
+    assert response.json() == {
+        "error_code": "CONFLICT",
+        "message": "Lớp CQ.68.CNTT đã tồn tại",
+    }
+
+
+def test_update_class_not_found_returns_404(client):
+    _login_as(Role.ADMIN)
+
+    response = client.patch("/classes/CQ.99.CNTT", json=CNTT_68)
+
+    assert response.status_code == 404
+    assert response.json() == {
+        "error_code": "NOT_FOUND",
+        "message": "Không tìm thấy lớp CQ.99.CNTT",
+    }
+
+
+@pytest.mark.parametrize(
+    ("body", "error_code", "message"),
+    [
+        ({**CNTT_68, "type": "   "}, "EMPTY_FIELD", "Hệ đào tạo không được trống"),
+        ({**CNTT_68, "department": ""}, "EMPTY_FIELD", "Ngành không được trống"),
+        ({**CNTT_68, "type": "C.Q"}, "INVALID_FORMAT", "Hệ đào tạo chỉ được gồm chữ cái không dấu"),
+        ({**CNTT_68, "course_number": 0}, "INVALID_FORMAT", "Khoá phải là số nguyên dương"),
+        ({**CNTT_68, "course_number": True}, "INVALID_FORMAT", "Khoá phải là số nguyên dương"),
+        ({**CNTT_68, "department": "X" * 45}, "INVALID_FORMAT", "Mã lớp không được dài quá 50 ký tự"),
+        ({**CNTT_68, "department": ["CNTT"]}, "INVALID_FORMAT", "Ngành phải là chuỗi"),
+    ],
+)
+def test_update_class_invalid_body_returns_422_with_message(
+    client, session, body, error_code, message
+):
+    _login_as(Role.ADMIN)
+    _add_class(session)
+
+    response = client.patch("/classes/CQ.67.CNTT", json=body)
+
+    assert response.status_code == 422
+    assert response.json() == {"error_code": error_code, "message": message}
+    assert session.get(Class, "CQ.67.CNTT") is not None
+
+
+def test_update_class_missing_field_returns_validation_error(client, session):
+    _login_as(Role.ADMIN)
+    _add_class(session)
+
+    response = client.patch("/classes/CQ.67.CNTT", json={"type": "CQ", "course_number": 68})
+
+    assert response.status_code == 422
+    assert response.json()["error_code"] == "VALIDATION_ERROR"

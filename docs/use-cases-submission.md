@@ -30,11 +30,11 @@ Các use-case quản lý Submission hiện chỉ bao gồm bài thuộc Lesson/C
 
 | | |
 |---|---|
-| **Description** | Admin hoặc Giáo viên ghi feedback hoặc điều chỉnh trạng thái Submission |
-| **Trigger** | Người dùng chỉnh phản hồi/trạng thái và lưu |
+| **Description** | Admin hoặc Giáo viên ghi feedback, điểm chấm tay hoặc điều chỉnh trạng thái Submission |
+| **Trigger** | Người dùng chỉnh phản hồi/điểm/trạng thái và lưu |
 | **Pre-condition** | Đã đăng nhập với vai trò Admin/Teacher; Submission nằm trong phạm vi được quản lý |
-| **Post-condition** | Feedback và/hoặc status được cập nhật |
-| **Basic flow** | 1. Người dùng gửi `feedback` và/hoặc `status`<br>2. Hệ thống kiểm tra Submission và quyền truy cập<br>3. Hệ thống xác thực status thuộc `pending`, `accepted`, `wrong_answer`, `compile_error`<br>4. Hệ thống lưu thay đổi và trả chi tiết Submission |
+| **Post-condition** | Feedback, `manual_score` và/hoặc status được cập nhật; nếu đổi status, kết quả máy chấm đang chạy dở không ghi đè status mới |
+| **Basic flow** | 1. Người dùng gửi `feedback`, `manual_score` và/hoặc `status`<br>2. Hệ thống kiểm tra Submission và quyền truy cập<br>3. Hệ thống xác thực status thuộc `pending`, `processing`, `accepted`, `wrong_answer`, `compile_error`, `time_limit_exceeded`, `runtime_error`, `internal_error`<br>4. Hệ thống lưu thay đổi; nếu có `status`, thu hồi quyền chấm (lease) của worker đang chấm bài này. Chỉ sửa feedback/`manual_score` thì không ảnh hưởng worker<br>5. Nếu status mới là `pending`/`processing`, hệ thống xoá kết quả chấm cũ (token Judge0, kết quả từng testcase, số test đạt, compile output) và đưa bài lại vào hàng đợi chấm từ đầu<br>6. Hệ thống trả chi tiết Submission |
 | **Exception flow** | **E1. Status không hợp lệ**: trả lỗi 422, không cập nhật<br>**E2. Submission không tồn tại/ngoài phạm vi**: trả lỗi 404<br>**E3. Người gọi không có quyền**: trả lỗi 403 |
 
-**Phạm vi hiện tại:** các use case Student tạo Submission, Run code, Judge0 async, deadline, Assignment snapshot và công bố điểm chưa được triển khai trong API hiện có.
+**Phạm vi hiện tại:** Sinh viên nộp bài (`POST /courses/{course_id}/lessons/{lesson_id}/problems/{problem_id}/submissions`, chấm Judge0 bất đồng bộ) và chạy thử (`POST .../run`) đã có trong code nhưng chưa có use-case/API docs riêng. Assignment snapshot và công bố điểm chưa được triển khai.

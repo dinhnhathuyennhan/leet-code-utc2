@@ -252,8 +252,15 @@ Biến môi trường mới từ bản sau `1.0.0-rc.1`. Thêm tay vào `/opt/ch
 |---|---|---|
 | `API_DOCS_ENABLED` | `false` | Ẩn Swagger `/docs`, `/redoc`, `/openapi.json` |
 | `GRADING_CHUNK_SIZE` | `10` | Chấm theo lô, dừng sớm sau test quá thời gian |
+| `GRADING_LEASE_SECONDS` | `120` (tuỳ chọn: không khai báo thì dùng 120; không để dòng rỗng `GRADING_LEASE_SECONDS=`, backend sẽ lỗi khi khởi động) | Thời hạn giữ quyền chấm một bài nộp. Backend dừng giữa chừng thì sau chừng này giây bài được chấm lại |
 
 Đồng thời xoá `"go":{...}` khỏi `JUDGE_LANGUAGES`, vì Go đã bị loại bỏ. Nếu để sót, backend chỉ ghi cảnh báo và bỏ qua.
+
+Migration `d712d1718327` tạo lại ràng buộc unique `(course_id, student_id)` của `enrollment` và **xoá các dòng ghi danh trùng** (giữ `enrollment_id` nhỏ nhất, tính lại `total_number_student`). `deploy.sh` vẫn tự backup trước khi chạy migration, nhưng nên đếm trước để biết sẽ mất dòng nào:
+
+```bash
+docker compose exec -T postgres psql -U chamcode -d ChamCodeDB -c "SELECT course_id, student_id, count(*) FROM enrollment GROUP BY 1, 2 HAVING count(*) > 1;"
+```
 
 `Caddyfile` đã thêm header bảo mật (HSTS, `X-Content-Type-Options`, `X-Frame-Options`, `Referrer-Policy`, `Permissions-Policy`) và bỏ header `Server`. Sau lần deploy đầu tiên có thay đổi này, kiểm tra cấu hình bằng:
 

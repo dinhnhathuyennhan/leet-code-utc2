@@ -642,7 +642,7 @@ export function AccountManagement() {
                         {account.full_name}
                       </p>
                     </TableCell>
-                    <TableCell className="text-sm text-slate-600 dark:text-slate-300">
+                    <TableCell className="text-sm break-all text-slate-600 dark:text-slate-300">
                       {account.email}
                     </TableCell>
                     <TableCell>

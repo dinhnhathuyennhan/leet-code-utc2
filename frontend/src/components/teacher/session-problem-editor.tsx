@@ -432,8 +432,8 @@ export function SessionProblemEditor({
 
   return (
     <section className="space-y-4 rounded-xl border bg-card p-4 shadow-sm">
-      <div className="flex items-center justify-between">
-        <div>
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <div className="min-w-0">
           <h2 className="font-bold text-[#2f226b]">
             SOẠN THẢO BÀI {exercise.order}
           </h2>
@@ -441,7 +441,7 @@ export function SessionProblemEditor({
             Chỉnh nội dung theo dữ liệu bài tập đang chọn.
           </p>
         </div>
-        <div className="flex gap-2">
+        <div className="flex flex-wrap gap-2">
           <Button
             variant="outline"
             onClick={() => void removeProblem()}

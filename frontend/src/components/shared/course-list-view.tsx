@@ -56,9 +56,9 @@ export function CourseListView({ role, filters, courses, stats, isLoading, isFet
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
+      <div className="flex flex-wrap items-center justify-between gap-3">
         {isLoading || !stats ? <CourseStatsBarSkeleton /> : <CourseStatsBar items={buildStats(stats)} />}
-        {actions && <div className="flex justify-end">{actions}</div>}
+        {actions && <div className="flex min-w-0 flex-wrap justify-end gap-2">{actions}</div>}
       </div>
       <header className="flex flex-wrap items-baseline justify-between gap-2">
         <h1 className="text-2xl font-semibold tracking-tight sm:text-3xl">{heading}</h1>

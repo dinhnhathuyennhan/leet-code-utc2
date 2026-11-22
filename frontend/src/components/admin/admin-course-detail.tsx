@@ -51,8 +51,8 @@ export function AdminCourseDetail({ id }: { id: string }) {
                 <span className="rounded-md bg-indigo-50 px-2 py-1 text-xs text-indigo-700 dark:bg-indigo-500/20 dark:text-indigo-300">{session.status === "open" ? "Đang mở" : session.status === "closed" ? "Đã đóng" : "Sắp mở"}</span></div>
                 <p className="flex flex-wrap items-center gap-2 text-sm text-muted-foreground"><CalendarDays className="size-4" />Hạn nộp: {formatDeadline(session.deadline)} · {session.problems.length} bài tập</p>
               </div>
-              <div className="flex gap-2"><Button size="sm" variant="outline" onClick={() => setLessonEditor(session)}><Pencil className="size-4" />Chỉnh sửa</Button>
-                <Button asChild size="sm" className={ADMIN_PRIMARY}><Link href={`/admin/courses/${encodeURIComponent(id)}/sessions/${session.id}`}>Quản lý buổi học</Link></Button></div>
+              <div className="flex flex-wrap gap-2"><Button size="sm" variant="outline" onClick={() => setLessonEditor(session)}><Pencil className="size-4" />Chỉnh sửa</Button>
+                <Button asChild size="sm" className={`${ADMIN_PRIMARY} shrink-0`}><Link href={`/admin/courses/${encodeURIComponent(id)}/sessions/${session.id}`}>Quản lý buổi học</Link></Button></div>
             </div>
             {!!session.problems.length && <div className="mt-4 flex flex-wrap gap-2">{session.problems.map((problem) => <Link className="rounded-lg bg-muted px-3 py-2 text-xs hover:bg-indigo-50 dark:hover:bg-indigo-500/20" key={problem.id} href={`/admin/courses/${encodeURIComponent(id)}/sessions/${session.id}/problems/${problem.id}`}>{problem.report || `#${problem.id}`} · {problem.title}</Link>)}</div>}
           </article>)}
@@ -114,10 +114,10 @@ function AdminCourseRoster({ id }: { id: string }) {
       <Button className={ADMIN_PRIMARY} onClick={() => setAdding(true)}><Plus className="size-4" />Thêm sinh viên</Button>
     </div>
     {query.isPending ? <p className="p-8 text-center text-sm text-muted-foreground">Đang tải danh sách...</p> : query.error ? <ErrorState error={query.error} onRetry={() => void query.refetch()} /> : !rows.length ? <EmptyState icon={Users} title="Chưa có sinh viên phù hợp" /> :
-      <Table className="min-w-[640px]"><TableHeader><TableRow><TableHead>MSSV</TableHead><TableHead>Họ tên</TableHead><TableHead>Email</TableHead><TableHead>Thao tác</TableHead></TableRow></TableHeader><TableBody>{rows.map((student) =>
-        <TableRow key={student.student_id}><TableCell className="font-medium">{student.student_code || "—"}</TableCell><TableCell>{student.full_name}</TableCell><TableCell>{student.email}</TableCell><TableCell>
+      <div className="overflow-x-auto rounded-lg border"><Table className="min-w-[720px] w-full"><TableHeader><TableRow><TableHead className="whitespace-nowrap">MSSV</TableHead><TableHead className="whitespace-nowrap">Họ tên</TableHead><TableHead>Email</TableHead><TableHead className="w-[140px] whitespace-nowrap text-right">Thao tác</TableHead></TableRow></TableHeader><TableBody>{rows.map((student) =>
+        <TableRow key={student.student_id}><TableCell className="whitespace-nowrap font-medium">{student.student_code || "—"}</TableCell><TableCell className="whitespace-nowrap">{student.full_name}</TableCell><TableCell className="break-all">{student.email}</TableCell><TableCell className="text-right">
           <AdminConfirm label="Xóa khỏi lớp" title="Xóa sinh viên khỏi lớp học phần?" description={`${student.full_name} (${student.student_code || student.email}) sẽ được gỡ khỏi lớp ${id}. Tài khoản sinh viên vẫn được giữ lại.`} onConfirm={() => remove(student.student_id)} />
-        </TableCell></TableRow>)}</TableBody></Table>}
+        </TableCell></TableRow>)}</TableBody></Table></div>}
     {adding && <EnrollmentForm id={id} onClose={() => setAdding(false)} />}
   </div>;
 }

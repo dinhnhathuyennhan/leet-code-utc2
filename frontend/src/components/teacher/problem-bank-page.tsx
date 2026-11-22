@@ -264,9 +264,9 @@ function ProblemCard({
       onClick={onClick}
       className="min-w-0 rounded-xl bg-card p-4 text-left shadow-sm transition hover:ring-2 hover:ring-indigo-300"
     >
-      <div className="flex items-start justify-between gap-3">
-        <div className="min-w-0">
-          <p className="font-mono text-xs text-indigo-700">
+      <div className="flex min-w-0 items-start justify-between gap-3">
+        <div className="min-w-0 flex-1">
+          <p className="break-words font-mono text-xs text-indigo-700">
             {problem.code ?? `Problem #${problem.id}`}
           </p>
           <h2
@@ -276,13 +276,13 @@ function ProblemCard({
             {problem.title}
           </h2>
         </div>
-        <span className="shrink-0 rounded px-2 py-0.5 text-xs font-semibold bg-indigo-50 text-indigo-700">
+        <span className="shrink-0 rounded px-2 py-0.5 text-xs font-semibold bg-indigo-50 text-indigo-700 whitespace-nowrap">
           {level}
         </span>
       </div>
-      <div className="mt-4 flex items-center justify-between text-xs text-muted-foreground">
-        <span>{problem.total_number_testcase} testcase</span>
-        <span>
+      <div className="mt-4 flex min-w-0 flex-wrap items-center justify-between gap-2 text-xs text-muted-foreground">
+        <span className="shrink-0">{problem.total_number_testcase} testcase</span>
+        <span className="min-w-0 break-words text-right">
           {problem.lesson_id === null ? "Ngân hàng chung" : "Đã gắn lớp"}
         </span>
       </div>
@@ -307,14 +307,14 @@ function ProblemPreview({
         className="w-full max-w-lg space-y-4 rounded-2xl bg-card p-6 shadow-xl"
         onClick={(event) => event.stopPropagation()}
       >
-        <div className="flex items-start justify-between gap-4">
-          <div>
-            <p className="font-mono text-xs text-indigo-700">
+        <div className="flex min-w-0 flex-wrap items-start justify-between gap-4">
+          <div className="min-w-0 flex-1">
+            <p className="break-words font-mono text-xs text-indigo-700">
               {problem.code ?? `Problem #${problem.id}`}
             </p>
-            <h2 className="text-xl font-bold">{problem.title}</h2>
+            <h2 className="break-words text-xl font-bold">{problem.title}</h2>
           </div>
-          <Button variant="ghost" size="icon" onClick={onClose}>
+          <Button variant="ghost" size="icon" className="shrink-0" onClick={onClose}>
             <X className="size-4" />
           </Button>
         </div>

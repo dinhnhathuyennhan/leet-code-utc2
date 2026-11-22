@@ -5,7 +5,7 @@ import type { CourseSummary, CourseView } from "@/lib/types/course";
 import { cn } from "@/lib/utils";
 
 const LAYOUT: Record<CourseView, string> = {
-  grid: "grid grid-cols-1 gap-5 sm:grid-cols-2 xl:grid-cols-5",
+  grid: "grid grid-cols-1 gap-5 sm:grid-cols-2 xl:grid-cols-4",
   list: "flex flex-col gap-3",
 };
 

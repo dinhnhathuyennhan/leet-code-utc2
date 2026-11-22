@@ -21,8 +21,8 @@ export function StudentCourseHeaderCard({ course }: { course: CourseDetail }) {
     <section className="relative flex flex-wrap items-start justify-between gap-6 overflow-hidden rounded-2xl border bg-card p-6 pl-8 shadow-sm">
       <span aria-hidden className="absolute inset-y-6 left-0 w-1.5 rounded-r-full bg-indigo-600" />
 
-      <div className="space-y-4">
-        <h1 className="text-2xl font-semibold tracking-tight sm:text-3xl">
+      <div className="min-w-0 flex-1 space-y-4">
+        <h1 className="break-words text-2xl font-semibold tracking-tight sm:text-3xl">
           {course.name} — {course.code}
         </h1>
         <span className="inline-block rounded-md bg-indigo-700 px-3 py-1 text-sm font-medium text-white">

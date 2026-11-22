@@ -13,7 +13,7 @@ export const ADMIN_PRIMARY = "bg-[#352078] text-white hover:bg-[#29175f]";
 export const ADMIN_SELECT = "h-10 rounded-lg border bg-background px-3 text-sm";
 
 export function AdminHeading({ title, description, actions }: { title: string; description?: string; actions?: ReactNode }) {
-  return <header className="flex flex-wrap items-end justify-between gap-4">
+  return <header className="flex flex-wrap items-center justify-between gap-4">
     <div className="min-w-0 space-y-1">
       <p className="text-sm font-medium text-indigo-700 dark:text-indigo-300">Quản trị hệ thống</p>
       <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">{title}</h1>
@@ -30,7 +30,7 @@ export function AdminMetric({ label, value, icon: Icon, detail }: { label: strin
         <p className="mt-3 text-3xl font-bold">{value ?? "—"}</p></div>
       <span className="rounded-xl bg-indigo-50 p-3 text-indigo-700 dark:bg-indigo-500/15 dark:text-indigo-300"><Icon className="size-5" /></span>
     </div>
-    {detail && <p className="mt-3 text-xs text-muted-foreground">{detail}</p>}
+    {detail && <p className="mt-3 text-xs break-words text-muted-foreground">{detail}</p>}
   </article>;
 }
 

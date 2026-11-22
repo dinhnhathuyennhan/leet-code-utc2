@@ -56,9 +56,9 @@ export function SessionList({ sessions, studentCount, courseId = "JAVA01", onCha
 
   return (
     <div className="space-y-5">
-      <div className="flex items-center justify-between gap-3">
-        <p className="text-sm text-muted-foreground">Kéo thả để sắp xếp thứ tự buổi học.</p>
-        <Button onClick={() => void saveOrder()} disabled={!dirty || saving} size="sm"><Save className="size-4" /> {saving ? "Đang lưu..." : "Lưu thứ tự"}</Button>
+      <div className="flex min-w-0 flex-wrap items-center justify-between gap-3">
+        <p className="min-w-0 text-sm text-muted-foreground">Kéo thả để sắp xếp thứ tự buổi học.</p>
+        <Button className="shrink-0" onClick={() => void saveOrder()} disabled={!dirty || saving} size="sm"><Save className="size-4" /> {saving ? "Đang lưu..." : "Lưu thứ tự"}</Button>
       </div>
       {openSession && <SessionAlertBanner session={openSession} studentCount={studentCount} />}
       {sorted.map((session) => {

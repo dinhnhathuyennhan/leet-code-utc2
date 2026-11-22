@@ -90,7 +90,7 @@ function SubmissionWorkspace({ submission }: { submission: Submission }) {
           <p className="text-sm text-muted-foreground">Nộp lúc {formatDeadline(submission.submitted_datetime)} · {submission.language}</p>
         </section>
         <section className="overflow-hidden rounded-xl border bg-slate-950 text-slate-100">
-          <div className="flex items-center justify-between gap-3 border-b border-slate-800 px-4 py-3"><h2 className="text-sm font-semibold">Mã nguồn bài nộp</h2><Button variant="ghost" size="sm" onClick={() => void copyCode()}><Copy className="size-4" />Sao chép</Button></div>
+          <div className="flex min-w-0 flex-wrap items-center justify-between gap-3 border-b border-slate-800 px-4 py-3"><h2 className="min-w-0 text-sm font-semibold">Mã nguồn bài nộp</h2><Button variant="ghost" size="sm" className="shrink-0" onClick={() => void copyCode()}><Copy className="size-4" />Sao chép</Button></div>
           <pre className="max-h-[65vh] overflow-auto p-5 font-mono text-xs leading-6"><code>{submission.submitted_code}</code></pre>
         </section>
         {submission.compile_output && <section className="rounded-xl border border-rose-200 bg-rose-50 p-5 dark:bg-rose-500/10"><h2 className="mb-3 font-semibold text-rose-700 dark:text-rose-300">Thông báo biên dịch</h2><pre className="max-h-72 overflow-auto whitespace-pre-wrap text-xs">{submission.compile_output}</pre></section>}

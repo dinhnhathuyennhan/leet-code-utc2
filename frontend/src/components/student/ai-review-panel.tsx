@@ -291,12 +291,12 @@ export function ReviewResultCard({
 
   return (
     <article className="space-y-4 rounded-2xl border border-indigo-200 bg-card p-5 dark:border-indigo-500/30" data-testid="ai-review-result">
-      <header className="flex items-start justify-between gap-3">
-        <h3 className="flex items-center gap-2 text-base font-bold text-[#2f226b] dark:text-indigo-200">
-          <Sparkles className="size-4" aria-hidden />
+      <header className="flex min-w-0 flex-wrap items-start justify-between gap-3">
+        <h3 className="flex min-w-0 flex-1 items-center gap-2 break-words text-base font-bold text-[#2f226b] dark:text-indigo-200">
+          <Sparkles className="size-4 shrink-0" aria-hidden />
           {t("aiReview.title")}
         </h3>
-        <Button type="button" variant="ghost" size="icon-sm" onClick={onClose} aria-label={t("aiReview.close")}>
+        <Button type="button" variant="ghost" size="icon-sm" className="shrink-0" onClick={onClose} aria-label={t("aiReview.close")}>
           <X className="size-4" aria-hidden />
         </Button>
       </header>

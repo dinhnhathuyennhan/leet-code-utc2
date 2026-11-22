@@ -18,13 +18,13 @@ import { AdminHeading, AdminMetric, ADMIN_PRIMARY, ADMIN_SELECT } from "./admin-
 
 export function AdminSubmissionTable({ rows }: { rows: PendingSubmission[] }) {
   return <Table className="min-w-[740px]"><TableHeader><TableRow className="bg-[#352078] hover:bg-[#352078]">
-    {["Sinh viên", "Lớp / Buổi học", "Trạng thái", "Bài tập", "Thao tác"].map((label) => <TableHead key={label} className="text-white">{label}</TableHead>)}
+    {["Sinh viên", "Lớp / Buổi học", "Trạng thái", "Bài tập", "Thao tác"].map((label) => <TableHead key={label} className="whitespace-nowrap text-white">{label}</TableHead>)}
   </TableRow></TableHeader><TableBody>{rows.map((row) => <TableRow key={row.id}>
-    <TableCell><p className="font-semibold">{row.student_name}</p><p className="text-xs text-muted-foreground">{row.student_code}</p></TableCell>
-    <TableCell><Link className="font-medium text-indigo-700 dark:text-indigo-300" href={`/admin/courses/${encodeURIComponent(row.course_id)}`}>{row.course_code}</Link><p className="mt-1 text-xs text-muted-foreground">{row.session_label}</p></TableCell>
-    <TableCell><span className={`inline-block rounded-md px-2 py-1 text-xs font-medium ${row.judge_kind === "graded" ? "bg-emerald-100 text-emerald-800" : row.judge_kind === "compile_error" ? "bg-rose-100 text-rose-800" : "bg-amber-100 text-amber-800"}`}>{row.judge_label}</span></TableCell>
-    <TableCell className="max-w-xs"><p className="font-medium">{row.topic}</p><p className="mt-1 line-clamp-2 text-xs text-muted-foreground">{row.judge_kind === "graded" ? "Bài nộp đã được chấp nhận." : row.issue}</p></TableCell>
-    <TableCell><Button asChild size="sm" className={ADMIN_PRIMARY}><Link href={`/admin/submissions/${row.id}`}>Xem & đánh giá</Link></Button></TableCell>
+    <TableCell className="min-w-36"><p className="font-semibold break-words">{row.student_name}</p><p className="text-xs text-muted-foreground">{row.student_code}</p></TableCell>
+    <TableCell className="min-w-32"><Link className="font-medium break-words text-indigo-700 dark:text-indigo-300" href={`/admin/courses/${encodeURIComponent(row.course_id)}`}>{row.course_code}</Link><p className="mt-1 text-xs text-muted-foreground break-words">{row.session_label}</p></TableCell>
+    <TableCell className="whitespace-nowrap"><span className={`inline-block rounded-md px-2 py-1 text-xs font-medium ${row.judge_kind === "graded" ? "bg-emerald-100 text-emerald-800" : row.judge_kind === "compile_error" ? "bg-rose-100 text-rose-800" : "bg-amber-100 text-amber-800"}`}>{row.judge_label}</span></TableCell>
+    <TableCell className="max-w-xs min-w-48"><p className="font-medium break-words">{row.topic}</p><p className="mt-1 line-clamp-2 text-xs break-words text-muted-foreground">{row.judge_kind === "graded" ? "Bài nộp đã được chấp nhận." : row.issue}</p></TableCell>
+    <TableCell className="whitespace-nowrap"><Button asChild size="sm" className={ADMIN_PRIMARY}><Link href={`/admin/submissions/${row.id}`}>Xem & đánh giá</Link></Button></TableCell>
   </TableRow>)}</TableBody></Table>;
 }
 

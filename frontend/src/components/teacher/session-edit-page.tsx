@@ -385,7 +385,7 @@ function NewProblemModal({
             </p>
             {testcases.map((testcase, index) => (
               <div key={index} className="space-y-2 rounded-md bg-muted/40 p-3">
-                <div className="flex items-center justify-between gap-2">
+                <div className="flex flex-wrap items-center justify-between gap-2">
                   <span className="text-xs font-semibold">
                     Test #{index + 1}
                   </span>
@@ -887,7 +887,7 @@ export function SessionEditPage({
 
         <main className="space-y-5">
           <section className="space-y-3 rounded-xl border bg-card p-4 shadow-sm">
-            <div className="flex items-center justify-between">
+            <div className="flex flex-wrap items-center justify-between gap-2">
               <div>
                 <h2 className="font-bold text-[#2f226b]">
                   DANH SÁCH BÀI TẬP TRONG BUỔI
@@ -1003,11 +1003,11 @@ function BankPicker({
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
       <div className="w-full max-w-2xl space-y-4 rounded-2xl bg-card p-6">
-        <div className="flex items-center justify-between">
-          <h2 className="text-xl font-bold">
+        <div className="flex min-w-0 flex-wrap items-center justify-between gap-2">
+          <h2 className="min-w-0 flex-1 break-words text-xl font-bold">
             Thêm bài từ ngân hàng/lesson khác
           </h2>
-          <Button variant="ghost" size="icon" onClick={onClose}>
+          <Button variant="ghost" size="icon" className="shrink-0" onClick={onClose}>
             <X className="size-4" />
           </Button>
         </div>
@@ -1026,16 +1026,16 @@ function BankPicker({
                 type="button"
                 key={problem.id}
                 onClick={() => onToggle(problem.id)}
-                className={`flex w-full items-center justify-between rounded-lg border p-3 text-left ${selectedIds.includes(problem.id) ? "border-indigo-400 bg-indigo-50" : "bg-card"}`}
+                className={`flex w-full min-w-0 items-center justify-between gap-3 rounded-lg border p-3 text-left ${selectedIds.includes(problem.id) ? "border-indigo-400 bg-indigo-50" : "bg-card"}`}
               >
-                <span>
-                  <strong>{problem.title}</strong>
-                  <span className="ml-2 text-xs text-muted-foreground">
+                <span className="min-w-0 flex-1">
+                  <strong className="block break-words">{problem.title}</strong>
+                  <span className="mt-0.5 block text-xs break-words text-muted-foreground">
                     {problem.total_number_testcase} testcase ·{" "}
                     {problem.lesson_id === null ? "Ngân hàng" : "Lesson khác"}
                   </span>
                 </span>
-                <span className="text-xs font-semibold">
+                <span className="shrink-0 text-xs font-semibold">
                   {selectedIds.includes(problem.id) ? "Đã chọn" : "Chọn"}
                 </span>
               </button>
@@ -1072,13 +1072,13 @@ function InfoCard({
   hint: string;
 }) {
   return (
-    <div className="rounded-xl border bg-card p-4 shadow-sm">
-      <div className="flex items-center justify-between text-indigo-700">
-        <span className="text-[10px] font-bold tracking-wide">{label}</span>
-        {icon}
+    <div className="min-w-0 rounded-xl border bg-card p-4 shadow-sm">
+      <div className="flex min-w-0 items-center justify-between gap-2 text-indigo-700">
+        <span className="min-w-0 flex-1 truncate text-[10px] font-bold tracking-wide">{label}</span>
+        <span className="shrink-0">{icon}</span>
       </div>
-      <p className="mt-2 text-xl font-bold text-[#2f226b]">{value}</p>
-      <p className="text-[11px] text-muted-foreground">{hint}</p>
+      <p className="mt-2 break-words text-xl font-bold text-[#2f226b]">{value}</p>
+      <p className="break-words text-[11px] text-muted-foreground">{hint}</p>
     </div>
   );
 }

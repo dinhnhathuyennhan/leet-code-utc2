@@ -72,6 +72,22 @@ export async function createBankProblem(
   }
 }
 
+export async function downloadCourseGrades(courseId: string): Promise<void> {
+  try {
+    const response = await axiosInstance.get(`/courses/${encodeURIComponent(courseId)}/grades/export`, {
+      responseType: "blob",
+    });
+    const url = URL.createObjectURL(response.data as Blob);
+    const anchor = document.createElement("a");
+    anchor.href = url;
+    anchor.download = `bang-diem-${courseId}.xlsx`;
+    anchor.click();
+    URL.revokeObjectURL(url);
+  } catch (error) {
+    throw wrapAxiosError(error);
+  }
+}
+
 export async function attachProblemsToLesson(
   courseId: string,
   lessonId: string | number,

@@ -59,6 +59,25 @@ cố định của Problem (`function_name` có giá trị thì dùng function-c
 thì dùng stdin/stdout). Preview không cho đổi kiểu chấm hoặc nhập cặp stdin/stdout
 riêng cho một lần chạy.
 
+## Quyền dùng AI review
+
+- `POST /ai/review`: Admin, Teacher và Student đều được gọi để nhận review/gợi ý
+  trên đoạn code tự do. Đây là review tham khảo, không thay đổi điểm hoặc
+  Problem trong database.
+- `POST /ai/review/{submission_id}`: chỉ Student được gọi cho bài nộp của chính
+  mình sau khi đã đạt toàn bộ testcase.
+- `POST /ai/problems/{problem_id}/review-preview`: Admin và Teacher được gọi sau
+  khi đã chạy preview hợp lệ. Teacher chỉ được dùng với đề thư viện hoặc đề đã
+  gắn trong Course do chính mình phụ trách.
+- `GET /ai/test-connection`: chỉ Admin được gọi vì đây là thao tác kiểm tra cấu
+  hình hệ thống, không cần hiển thị cho Teacher.
+
+Trang chi tiết Problem bank của Teacher không cho sửa/xóa đề thư viện. Teacher
+được xem nội dung, chạy toàn bộ testcase đã lưu và nhận AI review giống Admin;
+với đề đã gắn lớp của mình, Teacher có thêm lối vào màn hình chỉnh sửa. Quyền
+chỉnh sửa vẫn đi qua các endpoint Course/Lesson và bị từ chối nếu Course không
+do Teacher đó phụ trách.
+
 **Response lỗi**
 
 | Status | Khi nào |

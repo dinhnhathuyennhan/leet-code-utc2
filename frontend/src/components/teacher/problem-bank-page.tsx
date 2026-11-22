@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import Link from "next/link";
 import { FileUp, Filter, Plus, Search, X } from "lucide-react";
 import { toast } from "sonner";
 import {
@@ -43,8 +44,6 @@ export function ProblemBankPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<unknown>(null);
   const [refreshKey, setRefreshKey] = useState(0);
-  const [selectedProblem, setSelectedProblem] =
-    useState<ProblemListItem | null>(null);
   const [createOpen, setCreateOpen] = useState(false);
   const [importOpen, setImportOpen] = useState(false);
   const pageSize = 12;
@@ -168,7 +167,6 @@ export function ProblemBankPage() {
               <ProblemCard
                 key={problem.id}
                 problem={problem}
-                onClick={() => setSelectedProblem(problem)}
               />
             ))}
             {!items.length && (
@@ -201,12 +199,6 @@ export function ProblemBankPage() {
             </div>
           </footer>
         </>
-      )}
-      {selectedProblem && (
-        <ProblemPreview
-          problem={selectedProblem}
-          onClose={() => setSelectedProblem(null)}
-        />
       )}
       <ProblemImportDialog
         open={importOpen}
@@ -247,10 +239,8 @@ export function ProblemBankPage() {
 
 function ProblemCard({
   problem,
-  onClick,
 }: {
   problem: ProblemListItem;
-  onClick: () => void;
 }) {
   const level =
     problem.level === "easy"
@@ -259,10 +249,8 @@ function ProblemCard({
         ? "Khó"
         : "Trung bình";
   return (
-    <button
-      type="button"
-      onClick={onClick}
-      className="min-w-0 rounded-xl bg-card p-4 text-left shadow-sm transition hover:ring-2 hover:ring-indigo-300"
+    <article
+      className="min-w-0 space-y-3 rounded-xl border bg-card p-5 text-left shadow-sm transition hover:-translate-y-0.5 hover:border-indigo-300 hover:shadow-md"
     >
       <div className="flex min-w-0 items-start justify-between gap-3">
         <div className="min-w-0 flex-1">
@@ -280,66 +268,19 @@ function ProblemCard({
           {level}
         </span>
       </div>
-      <div className="mt-4 flex min-w-0 flex-wrap items-center justify-between gap-2 text-xs text-muted-foreground">
+      <div className="flex min-w-0 flex-wrap items-center justify-between gap-2 text-sm text-muted-foreground">
         <span className="shrink-0">{problem.total_number_testcase} testcase</span>
         <span className="min-w-0 break-words text-right">
           {problem.lesson_id === null ? "Ngân hàng chung" : "Đã gắn lớp"}
         </span>
       </div>
-      <p className="mt-3 text-xs font-medium text-indigo-700">Xem chi tiết</p>
-    </button>
-  );
-}
-
-function ProblemPreview({
-  problem,
-  onClose,
-}: {
-  problem: ProblemListItem;
-  onClose: () => void;
-}) {
-  return (
-    <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4"
-      onClick={onClose}
-    >
-      <div
-        className="w-full max-w-lg space-y-4 rounded-2xl bg-card p-6 shadow-xl"
-        onClick={(event) => event.stopPropagation()}
+      <Link
+        href={`/teacher/problem-bank/${problem.id}`}
+        className="mt-3 inline-flex text-sm font-semibold text-indigo-700 hover:underline"
       >
-        <div className="flex min-w-0 flex-wrap items-start justify-between gap-4">
-          <div className="min-w-0 flex-1">
-            <p className="break-words font-mono text-xs text-indigo-700">
-              {problem.code ?? `Problem #${problem.id}`}
-            </p>
-            <h2 className="break-words text-xl font-bold">{problem.title}</h2>
-          </div>
-          <Button variant="ghost" size="icon" className="shrink-0" onClick={onClose}>
-            <X className="size-4" />
-          </Button>
-        </div>
-        <div className="grid grid-cols-2 gap-3 text-sm">
-          <p>
-            <span className="text-muted-foreground">Mức độ:</span>{" "}
-            {problem.level}
-          </p>
-          <p>
-            <span className="text-muted-foreground">Testcase:</span>{" "}
-            {problem.total_number_testcase}
-          </p>
-          <p className="col-span-2">
-            <span className="text-muted-foreground">Nguồn:</span>{" "}
-            {problem.lesson_id === null
-              ? "Ngân hàng chung (lesson_id = null)"
-              : "Bài đã gắn lesson"}
-          </p>
-        </div>
-        <p className="text-xs text-muted-foreground">
-          Bài trong ngân hàng được giữ nguyên nguồn. Khi thêm vào buổi học,
-          frontend sẽ gửi id nguồn qua API attach để backend tạo bản sao riêng.
-        </p>
-      </div>
-    </div>
+        Xem chi tiết
+      </Link>
+    </article>
   );
 }
 

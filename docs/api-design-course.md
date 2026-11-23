@@ -55,7 +55,7 @@ Problem bank có `lesson_id = null` nên chưa thuộc Course; bản nguồn kh�
 **Quy tắc nghiệp vụ**
 
 - `created_by` luôn set = `user_id` của người đang đăng nhập, không nhận từ client.
-- `total_number_student` luôn khởi tạo = 0, không nhận từ client.
+- `total_number_student` luôn khởi tạo = 0, không nhận từ client. Ở các response chi tiết/danh sách lớp học (có buổi học), giá trị này là số dòng `enrollment` thật của lớp tại thời điểm gọi, không đọc cột cache.
 - **Yêu cầu quyền**: Admin hoặc Teacher (`require_role(Role.ADMIN, Role.TEACHER)`).
 
 ## GET /courses — Danh sách lớp học
@@ -194,7 +194,7 @@ Truyền **đúng một** trong `student_id` / `student_code`. Chuỗi rỗng ho
 
 **Quy tắc nghiệp vụ**
 
-- Sau khi thêm thành công, `total_number_student` của lớp học tăng lên 1.
+- Sau khi thêm thành công, `total_number_student` được đếm lại từ bảng `enrollment` (không cộng dồn), nên giá trị cũ bị lệch cũng tự đúng lại.
 - DB có ràng buộc unique `uq_enrollment_course_student` trên (`course_id`, `student_id`). Nếu 2 request cùng qua bước kiểm tra trùng, request đến sau bị ràng buộc chặn, rollback (sĩ số không tăng) và nhận 409 như trên, không phải 500.
 - **Yêu cầu quyền**: Admin, hoặc Teacher chủ lớp.
 
@@ -246,7 +246,7 @@ Ví dụ:
 **Quy tắc nghiệp vụ**
 
 - Chỉ lấy tài khoản có `class_id` bằng lớp hành chính và `role_id = 3` (Sinh viên). Sinh viên đã có trong lớp học được bỏ qua, không báo lỗi.
-- Cả lô được lưu trong **một transaction**: `total_number_student` tăng đúng bằng `added_count`. Nếu ràng buộc unique (`course_id`, `student_id`) chặn một dòng bất kỳ (request đồng thời), **cả lô bị huỷ**, không Sinh viên nào được thêm, sĩ số không lệch; gọi lại thì những Sinh viên đã có sẽ được tính vào `skipped_count`.
+- Cả lô được lưu trong **một transaction**: `total_number_student` được đếm lại từ bảng `enrollment`. Nếu ràng buộc unique (`course_id`, `student_id`) chặn một dòng bất kỳ (request đồng thời), **cả lô bị huỷ**, không Sinh viên nào được thêm, sĩ số không lệch; gọi lại thì những Sinh viên đã có sẽ được tính vào `skipped_count`.
 - Lớp hành chính không có Sinh viên nào: trả 201 với `added_count = 0`.
 - **Yêu cầu quyền**: Admin, hoặc Teacher chủ lớp.
 
@@ -303,7 +303,7 @@ Ví dụ một phần tử (Admin/Teacher gọi):
 
 **Quy tắc nghiệp vụ**
 
-- Sau khi xoá thành công, `total_number_student` của lớp học giảm đi 1.
+- Sau khi xoá thành công, `total_number_student` được đếm lại từ bảng `enrollment`.
 - **Yêu cầu quyền**: Admin, hoặc Teacher chủ lớp.
 
 ## GET /students/{student_id}/dashboard — Tổng quan học tập của sinh viên

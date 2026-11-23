@@ -10,11 +10,12 @@ from sqlalchemy import and_, or_, update
 from sqlmodel import Session, func, select
 
 from app.core import config
+from app.core.dependencies import Role
 from app.modules.ai_review.preview_receipt import create_preview_receipt
 from app.core.database import engine
 from app.core.exceptions import ConflictError, ForbiddenError, InvalidFormatError, NotFoundError
 from app.core.utils.datetime_utils import as_utc, now_utc
-from app.models import Problem, Submission, Testcase, User
+from app.models import Course, Lesson, Problem, Submission, Testcase, User
 from app.modules.courses.access import (
     find_enrollment,
     get_lesson_in_course,
@@ -221,6 +222,11 @@ def run_admin_preview(
     problem = session.get(Problem, problem_id)
     if problem is None:
         raise NotFoundError("Không tìm thấy bài tập")
+    if current_user.role_id == Role.TEACHER and problem.lesson_id is not None:
+        lesson = session.get(Lesson, problem.lesson_id)
+        course = session.get(Course, lesson.course_id) if lesson else None
+        if course is None or course.created_by != current_user.user_id:
+            raise ForbiddenError("Teacher chỉ được chạy thử bài thuộc lớp mình phụ trách")
     testcases = list(session.exec(
         select(Testcase)
         .where(Testcase.problem_id == problem_id)

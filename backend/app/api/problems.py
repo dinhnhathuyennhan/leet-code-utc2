@@ -135,7 +135,7 @@ def delete_admin_testcase_route(
 def run_admin_problem_preview_route(
     problem_id: int, data: AdminPreviewRequest,
     session: Session = Depends(get_session),
-    current_user: User = Depends(require_role(Role.ADMIN)),
+    current_user: User = Depends(require_role(Role.ADMIN, Role.TEACHER)),
 ) -> RunResponse:
     return judge_service.run_admin_preview(session, problem_id, data, current_user)
 

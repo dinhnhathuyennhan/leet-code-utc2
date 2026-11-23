@@ -258,14 +258,25 @@ def test_unauthenticated_request_is_blocked(client, session, problem, student, c
 # ─── Route free-form (admin/teacher): POST /ai/review ───────────────────────
 
 
-@pytest.mark.parametrize("role_id", [Role.ADMIN, Role.TEACHER, Role.STUDENT])
-def test_free_form_route_allows_all_three_roles(client, session, captured, role_id):
+@pytest.mark.parametrize("role_id", [Role.ADMIN, Role.TEACHER])
+def test_free_form_route_allows_admin_and_teacher(client, session, captured, role_id):
     _login(make_user(session, f"F{role_id}", role_id))
 
     response = client.post("/ai/review", json={"code": "print(1)", "language": "python"})
 
     assert response.status_code == 200
     assert captured["data"].code == "print(1)"
+
+
+def test_free_form_route_forbids_student(client, student, captured):
+    """Sinh viên không được review code tuỳ ý: phải qua bài nộp đã pass và bị giới hạn lượt."""
+    _login(student)
+
+    response = client.post("/ai/review", json={"code": "print(1)", "language": "python"})
+
+    assert response.status_code == 403
+    assert response.json()["error_code"] == "FORBIDDEN"
+    assert "data" not in captured
 
 
 def test_free_form_route_unknown_role_is_forbidden_403(client, session, captured):
@@ -298,13 +309,12 @@ def test_too_long_code_returns_422(client, session, problem, student, captured):
     assert "data" not in captured
 
 
-def test_endpoint_accepts_arbitrary_code(client, student, captured):
-    """`POST /ai/review` (không có submission_id) review code tuỳ ý — route của admin.
+def test_endpoint_accepts_arbitrary_code(client, session, captured):
+    """`POST /ai/review` (không có submission_id) review code tuỳ ý — route của admin/teacher.
 
-    Route này tồn tại ở develop (dùng cho admin/teacher), nên phải giữ lại.
-    Sinh viên vẫn dùng `/ai/review/{submission_id}` để review bài nộp đã pass.
+    Sinh viên dùng `/ai/review/{submission_id}` để review bài nộp đã pass.
     """
-    _login(student)
+    _login(make_user(session, "GV_FREE", Role.TEACHER))
 
     response = client.post("/ai/review", json={"code": "print(1)", "language": "python"})
 
@@ -315,8 +325,8 @@ def test_endpoint_accepts_arbitrary_code(client, student, captured):
     assert captured["data"].free_form is True
 
 
-def test_missing_code_returns_422(client, student):
-    _login(student)
+def test_missing_code_returns_422(client, session):
+    _login(make_user(session, "GV_MISSING", Role.TEACHER))
 
     response = client.post("/ai/review", json={"language": "python"})
 

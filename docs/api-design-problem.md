@@ -61,11 +61,13 @@ riêng cho một lần chạy.
 
 ## Quyền dùng AI review
 
-- `POST /ai/review`: Admin, Teacher và Student đều được gọi để nhận review/gợi ý
-  trên đoạn code tự do. Đây là review tham khảo, không thay đổi điểm hoặc
-  Problem trong database.
+- `POST /ai/review`: chỉ Admin và Teacher được gọi để nhận review/gợi ý trên
+  đoạn code tự do. Đây là review tham khảo, không thay đổi điểm hoặc Problem
+  trong database.
 - `POST /ai/review/{submission_id}`: chỉ Student được gọi cho bài nộp của chính
-  mình sau khi đã đạt toàn bộ testcase.
+  mình sau khi đã đạt toàn bộ testcase, tối đa `AI_REVIEW_MAX_PER_PROBLEM` (mặc
+  định 3) lượt mỗi bài tập; hết lượt trả 429 `AI_REVIEW_LIMIT_REACHED`. Chi tiết ở
+  `ui-design-ai-review.md`.
 - `POST /ai/problems/{problem_id}/review-preview`: Admin và Teacher được gọi sau
   khi đã chạy preview hợp lệ. Teacher chỉ được dùng với đề thư viện hoặc đề đã
   gắn trong Course do chính mình phụ trách.

@@ -1,13 +1,13 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
-import { CalendarDays, Check, Loader2, Plus, Trash2 } from "lucide-react";
+import { useRef, useState } from "react";
+import { CalendarDays, Loader2, Plus } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { createLesson, updateLesson } from "@/lib/api/endpoints/courses";
-import { getProblems, type ProblemListItem } from "@/lib/api/endpoints/problems";
+import { ProblemBankPicker, type PickedProblem } from "@/components/teacher/problem-bank-picker";
 import { courseKeys } from "@/lib/hooks/use-courses";
 import { useQueryClient } from "@tanstack/react-query";
 import { toDateInput } from "@/lib/helpers/datetime";
@@ -27,38 +27,22 @@ export function SessionEditorDialog({ course, session, open, onOpenChange, onSav
   const [title, setTitle] = useState(session?.title ?? "");
   const [startDate, setStartDate] = useState(session?.opens_at ? toDateInput(session.opens_at) : "");
   const [endDate, setEndDate] = useState(session?.deadline ? toDateInput(session.deadline) : "");
-  const [selectedProblemIds, setSelectedProblemIds] = useState<number[]>(session?.problems.map((problem) => problem.id) ?? []);
+  const [selectedProblems, setSelectedProblems] = useState<PickedProblem[]>(
+    session?.problems.map((problem) => ({ id: problem.id, title: problem.title, code: problem.report })) ?? [],
+  );
   const [saving, setSaving] = useState(false);
   const savingRef = useRef(false);
   const [errors, setErrors] = useState<{ title?: string; startDate?: string; endDate?: string }>({});
-  const [bankProblems, setBankProblems] = useState<ProblemListItem[]>([]);
-  const [bankLoaded, setBankLoaded] = useState(false);
   const queryClient = useQueryClient();
 
-  useEffect(() => {
-    if (!open) return;
-    let active = true;
-    getProblems({ page: 1, page_size: 100 })
-      .then((result) => { if (active) { setBankProblems(result.items.filter((problem) => problem.lesson_id === null && problem.total_number_testcase > 0)); setBankLoaded(true); } })
-      .catch(() => { if (active) { setBankProblems([]); setBankLoaded(true); } });
-    return () => { active = false; };
-  }, [open]);
-  const bankLoading = open && !bankLoaded;
+  const lessonOrders = new Map(course.sessions.map((item) => [item.id, item.order]));
+  const lessonLabel = (lessonId: number) => {
+    const order = lessonOrders.get(lessonId);
+    return order === undefined ? undefined : `Buổi ${order}`;
+  };
 
-  const availableProblems = useMemo(
-    () => {
-      const assigned = course.sessions.flatMap((item) => item.problems.map((problem) => ({ ...problem, sessionId: item.id })));
-      const assignedIds = new Set(assigned.map((problem) => problem.id));
-      const bank = bankProblems
-        .filter((problem) => !assignedIds.has(problem.id))
-        .map((problem) => ({ id: problem.id, title: problem.title, report: problem.code, total_number_testcase: problem.total_number_testcase, sessionId: "bank" }));
-      return [...assigned, ...bank];
-    },
-    [course.sessions, bankProblems],
-  );
-
-  function toggleProblem(id: number) {
-    setSelectedProblemIds((current) => current.includes(id) ? current.filter((item) => item !== id) : [...current, id]);
+  function toggleProblem(problem: PickedProblem) {
+    setSelectedProblems((current) => current.some((item) => item.id === problem.id) ? current.filter((item) => item.id !== problem.id) : [...current, problem]);
   }
 
   async function submit() {
@@ -75,7 +59,7 @@ export function SessionEditorDialog({ course, session, open, onOpenChange, onSav
       lesson_name: title.trim(),
       start_date: startDate,
       end_date: endDate,
-      problem_ids: selectedProblemIds,
+      problem_ids: selectedProblems.map((problem) => problem.id),
     };
     savingRef.current = true;
     setSaving(true);
@@ -125,13 +109,8 @@ export function SessionEditorDialog({ course, session, open, onOpenChange, onSav
           </div>
 
           <section className="space-y-3">
-            <div className="flex min-w-0 flex-wrap items-center justify-between gap-2"><div className="min-w-0"><h3 className="break-words font-bold">Danh sách bài tập dự kiến <span className="rounded bg-violet-100 px-2 py-0.5 text-xs text-violet-800">{selectedProblemIds.length} bài</span></h3><p className="text-xs break-words text-muted-foreground">Chọn bài tập từ ngân hàng hiện có.</p></div></div>
-            <div className="max-h-[30vh] space-y-2 overflow-y-auto rounded-xl bg-indigo-50/70 p-3 sm:max-h-[360px]">
-              {bankLoading ? <p className="py-6 text-center text-sm text-muted-foreground">Đang tải bài từ ngân hàng...</p> : availableProblems.length ? availableProblems.map((problem) => {
-                const selected = selectedProblemIds.includes(problem.id);
-                return <button type="button" key={`${problem.sessionId}-${problem.id}`} onClick={() => toggleProblem(problem.id)} className={`flex w-full min-w-0 items-center justify-between gap-3 rounded-lg border px-3 py-3 text-left transition ${selected ? "border-indigo-300 bg-white" : "border-transparent bg-white/60 opacity-60"}`}><span className="min-w-0 flex-1"><span className="mr-2 rounded bg-indigo-100 px-1.5 py-0.5 text-xs font-mono whitespace-nowrap text-indigo-800">{problem.report ?? `Bài ${problem.id}`}</span><strong className="break-words">{problem.title}</strong><span className="ml-2 text-xs break-words text-muted-foreground">{problem.total_number_testcase} test cases · Hạn {endDate || "theo buổi học"}</span></span>{selected ? <Check className="size-4 shrink-0 text-emerald-600" /> : <Trash2 className="size-4 shrink-0 text-slate-400" />}</button>;
-              }) : <p className="py-6 text-center text-sm text-muted-foreground">Chưa có bài tập trong ngân hàng.</p>}
-            </div>
+            <div className="flex min-w-0 flex-wrap items-center justify-between gap-2"><div className="min-w-0"><h3 className="break-words font-bold">Danh sách bài tập dự kiến <span className="rounded bg-violet-100 px-2 py-0.5 text-xs text-violet-800">{selectedProblems.length} bài</span></h3><p className="text-xs break-words text-muted-foreground">Chọn bài tập từ ngân hàng hiện có. Cuộn xuống cuối danh sách để tải thêm.</p></div></div>
+            <ProblemBankPicker courseId={course.code} enabled={open} selected={selectedProblems} onToggle={toggleProblem} deadlineLabel={endDate || "theo buổi học"} lessonLabel={lessonLabel} />
           </section>
         </div>
 

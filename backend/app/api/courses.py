@@ -1,6 +1,6 @@
 import logging
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, Query, Response
 from sqlmodel import Session
 from starlette import status
 
@@ -24,6 +24,7 @@ from app.modules.courses.service import (
     get_student_dashboard as _get_student_dashboard,
     get_student_enrollments as _get_student_enrollments,
     update_course as _update_course,
+    export_course_grades as _export_course_grades,
 )
 from app.models import User
 
@@ -128,6 +129,20 @@ def delete_course_route(
 ) -> None:
     _delete_course(
         course_id=course_id, session=session, current_user=current_user, force=force
+    )
+
+
+@router.get("/courses/{course_id}/grades/export")
+def export_course_grades_route(
+    course_id: str,
+    session: Session = Depends(get_session),
+    current_user: User = Depends(require_role(Role.ADMIN, Role.TEACHER)),
+) -> Response:
+    content = _export_course_grades(session, course_id, current_user)
+    return Response(
+        content=content,
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={"Content-Disposition": f'attachment; filename="bang-diem-{course_id}.xlsx"'},
     )
 
 

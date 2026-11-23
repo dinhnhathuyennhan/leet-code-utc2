@@ -48,12 +48,16 @@ export function AdminProblemEditor({
   onBusyChange,
   uploadTestcases,
   hideTestcases = false,
+  defaultStart,
+  defaultEnd,
 }: {
   problem?: AdminProblem;
   onSave: (data: AdminProblemPayload) => Promise<unknown>;
   onBusyChange?: (busy: boolean) => void;
   uploadTestcases?: (file: File) => Promise<AdminProblem>;
   hideTestcases?: boolean;
+  defaultStart?: string;
+  defaultEnd?: string;
 }) {
   const [title, setTitle] = useState(problem?.title ?? "");
   const [report, setReport] = useState(problem?.code ?? "");
@@ -70,10 +74,10 @@ export function AdminProblemEditor({
   );
   const [timeLimit, setTimeLimit] = useState(problem?.time_limit_seconds ?? 1);
   const [start, setStart] = useState(
-    problem ? dateTimeInput(problem.start_datetime) : "",
+    problem ? dateTimeInput(problem.start_datetime) : (defaultStart ?? ""),
   );
   const [end, setEnd] = useState(
-    problem ? dateTimeInput(problem.end_datetime) : "",
+    problem ? dateTimeInput(problem.end_datetime) : (defaultEnd ?? ""),
   );
   const [hint, setHint] = useState(problem?.hint ?? "");
   const [complexity, setComplexity] = useState(problem?.complexity ?? "");

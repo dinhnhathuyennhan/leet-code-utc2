@@ -332,3 +332,19 @@ Ví dụ một phần tử (Admin/Teacher gọi):
 - Phạm vi lớp: Admin và chính sinh viên thấy mọi lớp sinh viên đang ghi danh. Giáo viên chỉ thấy các lớp do mình tạo, mọi chỉ số (kể cả `average_score`) cũng chỉ tính trên các lớp đó.
 - `average_score`: mỗi bài lấy **một** bài nộp theo đúng cách bảng điểm lớp chọn: ưu tiên bài có điểm chấm tay (`manual_score`), nếu không thì bài có `passed_count` cao nhất (điểm = `passed_count / total_number_testcase × 10`, làm tròn 1 chữ số). Sau đó lấy trung bình trên các bài có điểm. Bài chưa nộp không tính vào mẫu số.
 - **Yêu cầu quyền**: Bearer token hợp lệ, đúng phạm vi theo vai trò như trên.
+
+## GET /courses/{course_id}/grades/export — Xuất bảng điểm Excel
+
+**Response 200 OK**: file `.xlsx` với `Content-Type` là
+`application/vnd.openxmlformats-officedocument.spreadsheetml.sheet` và tên file
+`bang-diem-{course_id}.xlsx`.
+
+Sheet `Bảng điểm` gồm MSSV, họ tên, lớp, điểm từng bài, tổng từng buổi và điểm
+tổng. Số liệu được tính cùng quy tắc với bảng điểm trên UI: điểm tay được ưu
+tiên, bài chưa nộp hiển thị 0 khi tính tổng; các tổng được làm tròn 1 chữ số.
+MSSV được xuất dạng text để giữ số 0 ở đầu. Các chuỗi bắt đầu bằng `=`, `+`,
+`-`, hoặc `@` được escape trước khi ghi vào workbook để tránh Excel formula
+injection.
+
+**Yêu cầu quyền**: Admin hoặc Teacher là chủ lớp. Endpoint chỉ đọc dữ liệu và
+không tạo hoặc thay đổi bảng/cột database.

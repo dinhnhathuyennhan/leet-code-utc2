@@ -1,10 +1,12 @@
 import logging
 import re
+from io import BytesIO
 from datetime import timedelta
 from uuid import UUID
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import load_only, selectinload
 from sqlmodel import Session, delete, func, or_, select
+from openpyxl import Workbook
 
 from app.core.exceptions import (
     ConflictError,
@@ -39,6 +41,77 @@ from app.models import (
 )
 
 logger = logging.getLogger(__name__)
+
+
+def _excel_text(value: object) -> object:
+    """Keep text cells safe from Excel formula injection."""
+    if isinstance(value, str) and value.startswith(("=", "+", "-", "@")):
+        return f"'{value}"
+    return value
+
+
+def export_course_grades(session: Session, course_id: str, current_user: User) -> bytes:
+    """Build the teacher/admin grade view as a real XLSX without schema changes."""
+    get_manageable_course(
+        course_id, session, current_user, "Bạn không có quyền xuất bảng điểm này"
+    )
+    lessons = session.exec(
+        select(Lesson).where(Lesson.course_id == course_id).order_by(Lesson.lesson_number)
+    ).all()
+    lesson_ids = [lesson.lesson_id for lesson in lessons]
+    problems = session.exec(
+        select(Problem).where(Problem.lesson_id.in_(lesson_ids)).order_by(Problem.problem_id)
+    ).all() if lesson_ids else []
+    problems_by_lesson = {lesson_id: [] for lesson_id in lesson_ids}
+    for problem in problems:
+        problems_by_lesson[problem.lesson_id].append(problem)
+    enrollments = session.exec(
+        select(Enrollment, User).join(User, Enrollment.student_id == User.user_id).where(
+            Enrollment.course_id == course_id
+        ).order_by(User.student_code, User.full_name)
+    ).all()
+    best = grade_service.best_grade_scores(
+        session, [problem.problem_id for problem in problems], [student.user_id for _, student in enrollments]
+    )
+    rows = grade_service.build_grade_rows(lessons, problems_by_lesson, enrollments, best)
+
+    workbook = Workbook()
+    sheet = workbook.active
+    sheet.title = "Bảng điểm"
+    columns = ["STT", "MSSV", "Họ tên", "Lớp"]
+    for lesson in lessons:
+        columns.extend([f"Buổi {lesson.lesson_number}: {problem.report or problem.title}" for problem in problems_by_lesson[lesson.lesson_id]])
+        columns.append(f"Buổi {lesson.lesson_number}: TỔNG")
+    columns.append("ĐIỂM TỔNG")
+    sheet.append([_excel_text(value) for value in columns])
+
+    for index, row in enumerate(rows, start=1):
+        values: list[object] = [index, _excel_text(row["student_code"] or ""), _excel_text(row["full_name"]), _excel_text(row["class_id"] or "")]
+        session_totals: list[float] = []
+        for lesson in lessons:
+            scores = row["session_scores"][str(lesson.lesson_id)]
+            numeric_scores = []
+            for score in scores:
+                value = score["value"]
+                numeric = float(value) if value is not None else 0.0
+                numeric_scores.append(numeric)
+                values.append(round(numeric, 1))
+            total = round(sum(numeric_scores) / len(numeric_scores), 1) if numeric_scores else 0.0
+            session_totals.append(total)
+            values.append(total)
+        values.append(round(sum(session_totals) / len(session_totals), 1) if session_totals else 0.0)
+        sheet.append(values)
+
+    sheet.freeze_panes = "A2"
+    sheet.auto_filter.ref = sheet.dimensions
+    for cell in sheet[1]:
+        cell.font = cell.font.copy(bold=True)
+    for column in sheet.columns:
+        width = min(max(max(len(str(cell.value or "")) for cell in column) + 2, 10), 32)
+        sheet.column_dimensions[column[0].column_letter].width = width
+    buffer = BytesIO()
+    workbook.save(buffer)
+    return buffer.getvalue()
 
 
 def get_course(session: Session, course_id: str, current_user: User) -> CourseResponse:

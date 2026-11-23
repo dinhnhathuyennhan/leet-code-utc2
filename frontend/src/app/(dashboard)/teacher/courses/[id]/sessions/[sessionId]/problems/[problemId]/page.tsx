@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useParams } from "next/navigation";
-import { ArrowLeft, Clock3, FileCode2, FlaskConical, Lightbulb, MemoryStick, Terminal } from "lucide-react";
+import { ArrowLeft, Clock3, FileCode2, FlaskConical, Lightbulb, MemoryStick, Pencil, Terminal } from "lucide-react";
 import Link from "next/link";
 
 import { ErrorState, ForbiddenState } from "@/components/shared/page-state";
@@ -11,6 +11,8 @@ import { ProblemSubmissionsPanel } from "@/components/teacher/problem-submission
 import { TestcaseManager } from "@/components/teacher/testcase-manager";
 import { useBreadcrumbLabels } from "@/components/shared/breadcrumb-context";
 import { Button } from "@/components/ui/button";
+import { AdminProblemPreview } from "@/components/admin/admin-problem-preview";
+import type { AdminProblem } from "@/lib/types/admin";
 import { Skeleton } from "@/components/ui/skeleton";
 import { getProblemDetail, getSessionDetail } from "@/lib/api/endpoints/courses";
 import type { ProblemDetailData } from "@/lib/types/course";
@@ -47,7 +49,10 @@ export default function TeacherProblemDetailPage() {
           <h1 className="text-2xl font-bold text-foreground">{data.code ?? "Bài tập"}: {data.title}</h1>
           <p className="text-sm text-muted-foreground">Tên hàm: <code>{data.function_name ?? "Chưa khai báo"}</code></p>
         </div>
-        <Button asChild className="bg-[#2f226b] text-white hover:bg-[#251b56]"><Link href="#submissions"><Terminal className="size-4" /> Xem bài nộp</Link></Button>
+        <div className="flex flex-wrap gap-2">
+          <Button asChild variant="outline"><Link href={`/teacher/courses/${courseId}/sessions/${sessionId}?mode=edit`}><Pencil className="size-4" /> Chỉnh sửa bài</Link></Button>
+          <Button asChild className="bg-[#2f226b] text-white hover:bg-[#251b56]"><Link href="#submissions"><Terminal className="size-4" /> Xem bài nộp</Link></Button>
+        </div>
       </div>
 
       <div className="grid gap-4 sm:grid-cols-4">
@@ -69,8 +74,21 @@ export default function TeacherProblemDetailPage() {
       </section>
       <ProblemSubmissionsPanel courseId={courseId} lessonId={sessionId} problemId={problemId} />
       <TestcaseManager courseId={courseId} lessonId={sessionId} problemId={problemId} hasSubmissions={(data.submitted_count ?? 0) > 0} />
+      <AdminProblemPreview problem={toPreviewProblem(data)} />
     </div>
   );
+}
+
+function toPreviewProblem(data: ProblemDetailData): AdminProblem {
+  return {
+    ...data,
+    starter_codes: data.starter_codes ?? {},
+    testcases: data.testcases.map((testcase) => ({
+      ...testcase,
+      input_type: "json_args",
+      expected_output_type: "json",
+    })),
+  };
 }
 
 function formatTestcaseValue(value: unknown): string {

@@ -31,6 +31,7 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { SessionProblemEditor } from "./session-problem-editor";
 import { ProblemBankPicker, type PickedProblem } from "./problem-bank-picker";
+import { NewProblemModal as CompleteNewProblemModal } from "./new-problem-modal";
 
 const MIN_MANUAL_TESTCASES = 10;
 const MAX_MANUAL_TESTCASES = 50;
@@ -50,6 +51,8 @@ function initialManualTestcases(): ManualTestcaseDraft[] {
 }
 
 // Modal tạo bài tập mới thủ công
+// Kept temporarily for compatibility with the older editor flow; the active flow uses CompleteNewProblemModal.
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
 function NewProblemModal({
   courseId,
   sessionId,
@@ -704,7 +707,7 @@ export function SessionEditPage({
   return (
     <div className="space-y-5">
       {showNewProblem && (
-        <NewProblemModal
+        <CompleteNewProblemModal
           courseId={courseId}
           sessionId={sessionId}
           startDate={startDate}

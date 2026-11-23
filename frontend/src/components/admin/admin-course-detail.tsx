@@ -58,7 +58,7 @@ export function AdminCourseDetail({ id }: { id: string }) {
           </article>)}
       </div>}
       students={<AdminCourseRoster id={id} />}
-      grades={<CourseGradesTable onUpdated={() => void query.refetch()} rows={detail.grades ?? []} sessions={detail.sessions.map((session) => ({
+      grades={<CourseGradesTable courseId={id} onUpdated={() => void query.refetch()} rows={detail.grades ?? []} sessions={detail.sessions.map((session) => ({
         id: session.id, order: session.order, title: session.title, status: session.status,
         problems: session.problems.map((problem) => ({ id: problem.id, code: problem.report ?? `#${problem.id}`, title: problem.title })),
       }))} />}

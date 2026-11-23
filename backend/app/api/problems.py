@@ -21,11 +21,13 @@ router = APIRouter(tags=["problem"])
 BASE = "/courses/{course_id}/lessons/{lesson_id}/problems/{problem_id}"
 
 
+# Ngân hàng bài chung chỉ Admin được thêm/sửa/xoá. Teacher tạo bài mới thẳng trong
+# buổi học (POST .../lessons/{lesson_id}/problems/new) hoặc sao chép bài từ bank.
 @router.post("/problems", response_model=ProblemDetailResponse, status_code=status.HTTP_201_CREATED)
 def create_bank_problem_route(
     data: ProblemCreateRequest,
     session: Session = Depends(get_session),
-    current_user: User = Depends(require_role(Role.ADMIN, Role.TEACHER)),
+    current_user: User = Depends(require_role(Role.ADMIN)),
 ) -> ProblemDetailResponse:
     return problem_service.create_bank_problem(session, data)
 
@@ -38,7 +40,7 @@ def create_bank_problem_route(
 def import_bank_problems_route(
     file: UploadFile = File(...),
     session: Session = Depends(get_session),
-    current_user: User = Depends(require_role(Role.ADMIN, Role.TEACHER)),
+    current_user: User = Depends(require_role(Role.ADMIN)),
 ) -> ProblemImportResponse:
     raw = file.file.read(MAX_PROBLEM_IMPORT_BYTES + 1)
     items = parse_problem_import(file.filename or "", raw)
@@ -52,7 +54,7 @@ def import_bank_problems_route(
 def preview_bank_problems_import_route(
     file: UploadFile = File(...),
     session: Session = Depends(get_session),
-    current_user: User = Depends(require_role(Role.ADMIN, Role.TEACHER)),
+    current_user: User = Depends(require_role(Role.ADMIN)),
 ) -> ProblemImportPreviewResponse:
     raw = file.file.read(MAX_PROBLEM_IMPORT_BYTES + 1)
     inspection = inspect_problem_import(file.filename or "", raw)
@@ -65,6 +67,8 @@ def list_problems_route(
     level: str | None = None,
     grading_mode: str | None = None,
     course_id: str | None = None,
+    bank_only: bool = False,
+    has_testcases: bool = False,
     page: int = Query(default=1, ge=1),
     page_size: int = Query(default=20, ge=1, le=100),
     session: Session = Depends(get_session),
@@ -76,7 +80,7 @@ def list_problems_route(
         raise InvalidFormatError("grading_mode chỉ được nhận harness hoặc stdin_stdout")
     return problem_service.list_problems(
         session, current_user, q=q, level=level, grading_mode=grading_mode, course_id=course_id,
-        page=page, page_size=page_size,
+        page=page, page_size=page_size, bank_only=bank_only, has_testcases=has_testcases,
     )
 
 @router.get("/problems/{problem_id}", response_model=ProblemDetailResponse)
@@ -91,7 +95,7 @@ def get_bank_problem_route(
 def update_bank_problem_route(
     problem_id: int, data: ProblemUpdateRequest,
     session: Session = Depends(get_session),
-    current_user: User = Depends(require_role(Role.ADMIN, Role.TEACHER)),
+    current_user: User = Depends(require_role(Role.ADMIN)),
 ) -> ProblemDetailResponse:
     return problem_service.update_bank_problem(session, problem_id, data)
 
@@ -99,7 +103,7 @@ def update_bank_problem_route(
 def delete_bank_problem_route(
     problem_id: int,
     session: Session = Depends(get_session),
-    current_user: User = Depends(require_role(Role.ADMIN, Role.TEACHER)),
+    current_user: User = Depends(require_role(Role.ADMIN)),
 ):
     problem_service.delete_bank_problem(session, problem_id)
 
@@ -138,6 +142,21 @@ def run_admin_problem_preview_route(
     current_user: User = Depends(require_role(Role.ADMIN)),
 ) -> RunResponse:
     return judge_service.run_admin_preview(session, problem_id, data, current_user)
+
+
+@router.post(
+    "/courses/{course_id}/lessons/{lesson_id}/problems/new",
+    response_model=ProblemDetailResponse,
+    status_code=status.HTTP_201_CREATED,
+)
+def create_lesson_problem_route(
+    course_id: str,
+    lesson_id: int,
+    data: ProblemCreateRequest,
+    session: Session = Depends(get_session),
+    current_user: User = Depends(require_role(Role.ADMIN, Role.TEACHER)),
+) -> ProblemDetailResponse:
+    return problem_service.create_lesson_problem(session, course_id, lesson_id, data, current_user)
 
 
 @router.get(BASE, response_model=ProblemDetailResponse)

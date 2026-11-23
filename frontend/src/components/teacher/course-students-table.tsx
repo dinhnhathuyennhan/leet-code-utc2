@@ -89,7 +89,7 @@ export function CourseStudentsTable({
       ];
       const results = await Promise.allSettled(
         importedStudentIds.map((studentCode) =>
-          addStudentToCourse(courseId, studentCode),
+          addStudentToCourse(courseId, null, studentCode),
         ),
       );
       const addedCount = results.filter(

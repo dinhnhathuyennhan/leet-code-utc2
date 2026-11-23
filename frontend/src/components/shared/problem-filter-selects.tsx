@@ -17,20 +17,16 @@ const TRIGGER =
 const CONTENT = "min-w-[200px] rounded-xl p-1.5 shadow-lg";
 const ITEM = "rounded-lg py-2 pr-8 pl-2.5";
 
-const LEVEL_OPTIONS: Array<{ value: Exclude<ProblemLevelFilter, "">; label: string; dot: string }> = [
-  { value: "easy", label: "Dễ", dot: "bg-emerald-500" },
-  { value: "medium", label: "Trung bình", dot: "bg-amber-500" },
-  { value: "hard", label: "Khó", dot: "bg-red-500" },
+const LEVEL_OPTIONS: Array<{ value: Exclude<ProblemLevelFilter, "">; label: string }> = [
+  { value: "easy", label: "Dễ" },
+  { value: "medium", label: "Trung bình" },
+  { value: "hard", label: "Khó" },
 ];
 
 const GRADING_OPTIONS: Array<{ value: ProblemGradingMode; label: string; hint: string; icon: typeof Braces }> = [
   { value: "harness", label: "Function-call", hint: "harness", icon: Braces },
   { value: "stdin_stdout", label: "stdin/stdout", hint: "đọc/ghi chuẩn", icon: Terminal },
 ];
-
-function Dot({ className }: { className: string }) {
-  return <span aria-hidden className={cn("size-2 shrink-0 rounded-full", className)} />;
-}
 
 export function ProblemLevelSelect({
   value,
@@ -48,14 +44,15 @@ export function ProblemLevelSelect({
     <Select value={value || ALL} onValueChange={(next) => onChange(next === ALL || !next ? "" : (next as ProblemLevelFilter))}>
       <SelectTrigger aria-label="Lọc mức độ" className={cn(TRIGGER, className)}>
         <SelectValue>
-          {current ? <><Dot className={current.dot} />{current.label}</> : <><Gauge className="size-4 text-muted-foreground" />{allLabel}</>}
+          <Gauge className={cn("size-4", current ? "text-indigo-600" : "text-muted-foreground")} />
+          {current?.label ?? allLabel}
         </SelectValue>
       </SelectTrigger>
       <SelectContent className={CONTENT}>
-        <SelectItem value={ALL} className={ITEM}><Gauge className="size-4 text-muted-foreground" />{allLabel}</SelectItem>
+        <SelectItem value={ALL} className={ITEM}>{allLabel}</SelectItem>
         {LEVEL_OPTIONS.map((option) => (
           <SelectItem key={option.value} value={option.value} className={ITEM}>
-            <Dot className={option.dot} />{option.label}
+            {option.label}
           </SelectItem>
         ))}
       </SelectContent>

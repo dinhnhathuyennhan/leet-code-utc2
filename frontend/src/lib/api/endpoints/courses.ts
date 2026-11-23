@@ -58,12 +58,18 @@ export interface ProblemCreateRequest {
   }>;
 }
 
-export async function createBankProblem(
+/**
+ * Tạo bài mới gắn thẳng vào buổi học (không tạo bản trong ngân hàng chung —
+ * ngân hàng chỉ Admin được thêm). Lịch bài do backend lấy theo buổi học.
+ */
+export async function createLessonProblem(
+  courseId: string,
+  lessonId: string | number,
   data: ProblemCreateRequest,
 ): Promise<ProblemDetailData> {
   try {
     const response = await axiosInstance.post<ProblemDetailData>(
-      "/problems",
+      `/courses/${courseId}/lessons/${lessonId}/problems/new`,
       data,
     );
     return response.data;

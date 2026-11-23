@@ -258,6 +258,50 @@ def test_student_and_unknown_role_cannot_get_class(client, session, role_id):
     assert response.status_code == 403
 
 
+# ---------- GET /classes/{class_id}/students ----------
+
+
+@pytest.mark.parametrize("role_id", [Role.ADMIN, Role.TEACHER])
+def test_admin_and_teacher_can_list_class_students(client, session, role_id):
+    _login_as(role_id)
+    _add_class(session, "CQ.67.KTXDCTGT.2")
+    _add_class(session, "CQ.68.CNTT")
+    student = _add_student(session, "6751071001", "CQ.67.KTXDCTGT.2")
+    _add_student(session, "6851071001", "CQ.68.CNTT")
+
+    response = client.get("/classes/CQ.67.KTXDCTGT.2/students")
+
+    assert response.status_code == 200, response.text
+    assert response.json() == [
+        {
+            "user_id": str(student.user_id),
+            "student_code": "6751071001",
+            "full_name": "Sinh viên",
+            "email": "6751071001@example.com",
+            "class_id": "CQ.67.KTXDCTGT.2",
+        }
+    ]
+
+
+def test_list_class_students_not_found_returns_404(client):
+    _login_as(Role.TEACHER)
+
+    response = client.get("/classes/CQ.99.CNTT/students")
+
+    assert response.status_code == 404
+    assert response.json()["error_code"] == "NOT_FOUND"
+
+
+@pytest.mark.parametrize("role_id", [Role.STUDENT, 99])
+def test_student_and_unknown_role_cannot_list_class_students(client, session, role_id):
+    _login_as(role_id)
+    _add_class(session)
+
+    response = client.get("/classes/CQ.67.CNTT/students")
+
+    assert response.status_code == 403
+
+
 # ---------- DELETE /classes/{class_id} ----------
 
 

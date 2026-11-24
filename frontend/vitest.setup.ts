@@ -33,6 +33,23 @@ Object.defineProperty(window, "matchMedia", {
   }),
 });
 
+// Node 25+ tự định nghĩa `localStorage` toàn cục; khi không truyền `--localstorage-file`
+// nó là undefined và che mất localStorage của jsdom → thay bằng Storage trong bộ nhớ.
+if (typeof globalThis.localStorage?.clear !== "function") {
+  class MemoryStorage implements Storage {
+    private store = new Map<string, string>();
+    get length() { return this.store.size; }
+    clear() { this.store.clear(); }
+    getItem(key: string) { return this.store.get(String(key)) ?? null; }
+    key(index: number) { return Array.from(this.store.keys())[index] ?? null; }
+    removeItem(key: string) { this.store.delete(String(key)); }
+    setItem(key: string, value: string) { this.store.set(String(key), String(value)); }
+  }
+  for (const name of ["localStorage", "sessionStorage"] as const) {
+    Object.defineProperty(globalThis, name, { configurable: true, writable: true, value: new MemoryStorage() });
+  }
+}
+
 // Stub IntersectionObserver
 class IOStub {
   observe() {}

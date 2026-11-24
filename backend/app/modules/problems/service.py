@@ -81,10 +81,31 @@ def create_bank_problem(
     return _build_problem_detail_response(session, problem, course_id=None)
 
 
-def _insert_bank_problem(session: Session, data: ProblemCreateRequest) -> Problem:
+def create_lesson_problem(
+    session: Session, course_id: str, lesson_id: int, data: ProblemCreateRequest, current_user: User
+) -> ProblemDetailResponse:
+    """Teacher tạo bài mới thẳng trong buổi học, không đi qua ngân hàng chung.
+
+    Ngân hàng chỉ Admin quản lý; trước đây FE tạo bài ở bank rồi sao chép vào buổi
+    nên mỗi bài mới đều để lại một bản trong bank. Lịch bài lấy theo buổi học,
+    bỏ qua start/end_datetime trong body.
+    """
+    get_manageable_course(course_id, session, current_user, "Bạn không có quyền sửa buổi học")
+    lesson = get_lesson_in_course(session, course_id, lesson_id)
+    problem = _insert_bank_problem(session, data, lesson)
+    refresh_assignment_count(session, lesson)
+    session.commit()
+    session.refresh(problem)
+    return _build_problem_detail_response(session, problem, course_id=course_id)
+
+
+def _insert_bank_problem(session: Session, data: ProblemCreateRequest, lesson: Lesson | None = None) -> Problem:
     starter_code = _first_starter(data.starter_codes)
+    start_datetime, end_datetime = (
+        lesson_problem_window(lesson) if lesson is not None else (data.start_datetime, data.end_datetime)
+    )
     problem = Problem(
-        lesson_id=None,
+        lesson_id=lesson.lesson_id if lesson is not None else None,
         title=data.title,
         report=data.report,
         function_name=data.function_name,
@@ -94,8 +115,8 @@ def _insert_bank_problem(session: Session, data: ProblemCreateRequest) -> Proble
         time_limit_seconds=data.time_limit_seconds,
         start_format_code=starter_code,
         starter_codes=data.starter_codes,
-        start_datetime=data.start_datetime,
-        end_datetime=data.end_datetime,
+        start_datetime=start_datetime,
+        end_datetime=end_datetime,
         hint=data.hint,
         complexity=data.complexity,
         total_number_testcase=len(data.testcases),
@@ -269,6 +290,8 @@ def list_problems(
     course_id: str | None,
     page: int,
     page_size: int,
+    bank_only: bool = False,
+    has_testcases: bool = False,
 ) -> ProblemListResponse:
     filters = []
     if current_user.role_id == Role.TEACHER:
@@ -279,7 +302,9 @@ def list_problems(
             or_(Problem.lesson_id.is_(None), Problem.lesson_id.in_(own_course_lesson_ids))
         )
     if q and q.strip():
-        filters.append(Problem.title.ilike(f"%{q.strip()}%"))
+        keyword = f"%{q.strip()}%"
+        # Tìm theo cả tên bài lẫn mã bài (report, trả ra dưới tên `code`)
+        filters.append(or_(Problem.title.ilike(keyword), Problem.report.ilike(keyword)))
     if level is not None:
         filters.append(Problem.level == level)
     if grading_mode == "harness":
@@ -292,6 +317,11 @@ def list_problems(
                 select(Lesson.lesson_id).where(Lesson.course_id == course_id)
             )
         )
+    # Lọc ở DB (không lọc phía client) để phân trang/total khớp với danh sách hiển thị
+    if bank_only:
+        filters.append(Problem.lesson_id.is_(None))
+    if has_testcases:
+        filters.append(Problem.total_number_testcase > 0)
 
     total = session.exec(
         select(func.count())
@@ -314,6 +344,7 @@ def list_problems(
                 "level": problem.level,
                 "lesson_id": problem.lesson_id,
                 "total_number_testcase": problem.total_number_testcase,
+                "grading_mode": "harness" if problem.function_name is not None else "stdin_stdout",
             }
             for problem in rows
         ],

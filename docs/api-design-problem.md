@@ -6,6 +6,7 @@
 - Problem trong bank là nguồn dùng chung, chưa thuộc Course nào. Khi thêm vào Lesson, hệ thống tạo một Problem mới cho Lesson; không đổi `lesson_id` của bản nguồn.
 - Chưa có `created_by` cho Problem, Topic, archive hoặc Assignment snapshot.
 - Problem gắn Lesson chỉ được quản lý bởi Admin hoặc Teacher chủ Course.
+- **Ngân hàng bài chỉ Admin được ghi**: tạo (`POST /problems`), import (`POST /problems/import`, `/import/preview`), sửa (`PATCH /problems/{problem_id}`) và xoá (`DELETE /problems/{problem_id}`) bài bank đều yêu cầu Admin. Teacher chỉ xem/tìm bài bank (`GET /problems`, `GET /problems/{problem_id}`), sao chép bài vào Lesson (`POST /courses/{course_id}/lessons/{lesson_id}/problems`) hoặc tạo bài mới thẳng trong Lesson (`POST /courses/{course_id}/lessons/{lesson_id}/problems/new`).
 - Datetime request phải kèm UTC offset; response dùng giờ Việt Nam với offset `+07:00`. `start_datetime` mở đề; `end_datetime` chỉ chặn Submit và không chặn xem đề.
 - Với Problem đã gắn Lesson, lịch được suy ra từ `Lesson.start_date`/`end_date`; không chỉnh lịch riêng trên Problem. Khi ngày Lesson thay đổi, các Problem thuộc Lesson được đồng bộ về đầu ngày bắt đầu và cuối ngày kết thúc theo giờ Việt Nam.
 - Mỗi Problem chỉ có một cách chấm, suy ra từ `function_name`: có tên thì chấm function-call (harness), `null` thì chấm stdin/stdout. `function_name` không đổi được sau khi tạo bài.
@@ -82,13 +83,23 @@ do Teacher đó phụ trách.
 
 | Status | Khi nào |
 |---|---|
-| 403 | Người gọi không phải Admin/Teacher |
+| 403 | Người gọi không phải Admin (Teacher cũng bị 403) |
 | 422 | Field sai định dạng, level ngoài tập cho phép, hoặc lịch không hợp lệ |
 | 422 | Bài function-call thiếu starter Python/JavaScript, có starter Java, hoặc starter C/C++ không dựng được harness |
 
+## POST /courses/{course_id}/lessons/{lesson_id}/problems/new — Tạo Problem mới trong Lesson
+
+Teacher (chủ Course) hoặc Admin tạo bài mới gắn thẳng vào Lesson, **không** tạo bản nào trong bank.
+
+**Request body**: giống `POST /problems`. `start_datetime`/`end_datetime` vẫn phải hợp lệ nhưng bị bỏ qua: lịch bài lấy theo Lesson (00:00 ngày bắt đầu → 23:59:59 ngày kết thúc, giờ Việt Nam). `total_number_assignment` của Lesson được đếm lại.
+
+**Response 201 Created**: `ProblemDetailResponse` với `lesson_id` là Lesson đích và `course_id` là Course.
+
+**Response lỗi**: 403 không phải Admin/Teacher hoặc Teacher không phải chủ Course; 404 Course/Lesson không tồn tại hoặc Lesson không thuộc Course; 422 như `POST /problems`.
+
 ## POST /problems/import — Import nhiều Problem từ file JSON
 
-Admin hoặc Teacher gửi `multipart/form-data` với field `file`, file đuôi `.json`, tối đa 25 MB và 5.000 Problem mỗi lần. Nội dung chấp nhận một object Problem, một mảng Problem, hoặc object bọc `{ "problems": [...] }`. Mỗi Problem dùng cùng các field và validation như `POST /problems`. Có `function_name` thì testcase dùng mảng đối số/output JSON; bỏ hoặc đặt `function_name: null` thì testcase dùng chuỗi stdin/stdout. `report` tùy chọn được lưu trên Problem và trả qua field `code`; trường này không yêu cầu duy nhất.
+Chỉ Admin gửi `multipart/form-data` với field `file`, file đuôi `.json`, tối đa 25 MB và 5.000 Problem mỗi lần. Nội dung chấp nhận một object Problem, một mảng Problem, hoặc object bọc `{ "problems": [...] }`. Mỗi Problem dùng cùng các field và validation như `POST /problems`. Có `function_name` thì testcase dùng mảng đối số/output JSON; bỏ hoặc đặt `function_name: null` thì testcase dùng chuỗi stdin/stdout. `report` tùy chọn được lưu trên Problem và trả qua field `code`; trường này không yêu cầu duy nhất.
 
 Với bài function-call, starter C/C++ được validate trực tiếp bằng harness. Nếu không dựng được, preview báo lỗi ở field tương ứng và chặn import; hệ thống không tự xóa starter. Bài thiếu starter Python hoặc JavaScript cũng bị báo lỗi.
 
@@ -109,7 +120,7 @@ Nhận cùng `multipart/form-data` như route import, nhưng không ghi database
 }
 ```
 
-**Response lỗi**: `403` nếu không phải Admin/Teacher; `422` nếu phần mở rộng, kích thước, cấu trúc JSON, dữ liệu Problem không hợp lệ hoặc nội dung trùng trong file/Problem bank. Đây là kiểm tra ứng dụng; không có ràng buộc unique ở database trong giai đoạn này. Phần diễn đạt khác nhau nhưng cùng ý nghĩa vẫn cần người quản trị review.
+**Response lỗi**: `403` nếu không phải Admin (kể cả Teacher); `422` nếu phần mở rộng, kích thước, cấu trúc JSON, dữ liệu Problem không hợp lệ hoặc nội dung trùng trong file/Problem bank. Đây là kiểm tra ứng dụng; không có ràng buộc unique ở database trong giai đoạn này. Phần diễn đạt khác nhau nhưng cùng ý nghĩa vẫn cần người quản trị review.
 
 ## GET /problems — Tìm kiếm Problem
 
@@ -117,14 +128,18 @@ Nhận cùng `multipart/form-data` như route import, nhưng không ghi database
 
 | Field | Kiểu | Bắt buộc | Ghi chú |
 |---|---|---|---|
-| q | string | không | Tìm trong title |
+| q | string | không | Tìm không phân biệt hoa thường trong title hoặc mã bài (`report`, trả ra dưới tên `code`) |
 | level | string | không | `easy`, `medium`, `hard` |
 | grading_mode | string | không | `harness` để lọc bài function-call (`function_name` có giá trị); `stdin_stdout` để lọc bài stdin/stdout (`function_name = null`) |
 | course_id | string | không | Giới hạn Problem thuộc Course |
+| bank_only | bool | không | Mặc định `false`. `true` chỉ lấy bài trong bank (`lesson_id = null`) |
+| has_testcases | bool | không | Mặc định `false`. `true` chỉ lấy bài có ít nhất một testcase (bài gắn được vào Lesson) |
 | page | int | không | Mặc định 1, >= 1 |
 | page_size | int | không | Mặc định 20, từ 1 đến 100 |
 
-Teacher thấy tất cả Problem trong bank và Problem thuộc Course mình tạo; Admin thấy tất cả Problem. Khi không truyền `course_id`, danh sách của Teacher gồm cả bank và các bài thuộc Course của mình. Nếu truyền `course_id`, kết quả chỉ gồm Problem đã gắn vào Lesson của Course đó, không gồm bài bank vì bài bank chưa thuộc Course. `course_id` là bộ lọc, không phải field của Problem list item. Response gồm `items`, `total`, `page`, `page_size`; item có id, `code` (giá trị `report`, null nếu chưa đặt), title, level, `lesson_id` (null với bài bank) và tổng testcase.
+Teacher thấy tất cả Problem trong bank và Problem thuộc Course mình tạo; Admin thấy tất cả Problem. Khi không truyền `course_id`, danh sách của Teacher gồm cả bank và các bài thuộc Course của mình. Nếu truyền `course_id`, kết quả chỉ gồm Problem đã gắn vào Lesson của Course đó, không gồm bài bank vì bài bank chưa thuộc Course. `course_id` là bộ lọc, không phải field của Problem list item. Response gồm `items`, `total`, `page`, `page_size`; item có id, `code` (giá trị `report`, null nếu chưa đặt), title, level, `lesson_id` (null với bài bank), tổng testcase và `grading_mode` (`harness` khi có `function_name`, ngược lại `stdin_stdout`).
+
+Các bộ lọc được áp dụng ở DB trước khi phân trang nên `total` luôn khớp với danh sách đã lọc. Màn tạo/sửa buổi học dùng `bank_only=true&has_testcases=true` cho nhóm "Ngân hàng bài" và `course_id=<course>` cho nhóm "Bài trong lớp học này", tải thêm trang kế tiếp khi cuộn tới cuối danh sách.
 
 **Response lỗi**: 403 không phải Admin/Teacher; 422 query sai kiểu/giới hạn, level hoặc `grading_mode` không hợp lệ.
 

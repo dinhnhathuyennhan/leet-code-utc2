@@ -81,7 +81,7 @@ Ví dụ:
 - **Không giới hạn danh sách theo Giáo viên**: Admin và Teacher đều thấy toàn bộ lớp hành chính. Lý do:
   - lớp hành chính là danh mục dùng chung, response chỉ có mã lớp và số lượng Sinh viên, không có dữ liệu cá nhân;
   - Teacher cần thấy hết để không tạo trùng lớp.
-- Danh sách Sinh viên của một lớp xem qua `GET /users?class_id=<class_id>`, endpoint này đã giới hạn dữ liệu theo vai trò người gọi.
+- Danh sách tài khoản Sinh viên của một lớp (quản lý tài khoản) xem qua `GET /users?class_id=<class_id>`, endpoint này đã giới hạn dữ liệu theo vai trò người gọi. Để xem trước Sinh viên của lớp khi thêm cả lớp vào Course, dùng `GET /classes/{class_id}/students`.
 - Không phân trang, vì số lớp hành chính ít (vài chục tới vài trăm).
 - **Yêu cầu quyền**: Admin hoặc Teacher.
 
@@ -100,6 +100,39 @@ Ví dụ:
 
 **Quy tắc nghiệp vụ**
 
+- **Yêu cầu quyền**: Admin hoặc Teacher.
+
+## GET /classes/{class_id}/students: Sinh viên của lớp hành chính
+
+Dùng ở hộp thoại "Thêm sinh viên vào lớp" (chế độ Theo lớp) để Giáo viên xem trước những Sinh viên sẽ được ghi danh bằng `POST /courses/{course_id}/enrollments/class`.
+
+**Response 200 OK**: mảng, sắp xếp theo `user_id`. Lớp chưa có Sinh viên thì trả `[]`.
+
+```json
+[
+  {
+    "user_id": "6f1c...-uuid",
+    "student_code": "6751071001",
+    "full_name": "Nguyễn Văn A",
+    "email": "6751071001@st.utc2.edu.vn",
+    "class_id": "CQ.67.CNTT"
+  }
+]
+```
+
+`user_id` là UUID (khoá gọi API), `student_code` là MSSV để hiển thị; không dùng lẫn hai trường.
+
+**Response lỗi**
+
+| Status | Khi nào | Body |
+|---|---|---|
+| 404 | `class_id` không tồn tại | `{"error_code": "NOT_FOUND", "message": "Không tìm thấy lớp hành chính"}` |
+| 403 | Người gọi không phải Admin/Teacher | `{"error_code": "FORBIDDEN", "message": "Bạn không có quyền thực hiện hành động này"}` |
+
+**Quy tắc nghiệp vụ**
+
+- Chỉ trả tài khoản Sinh viên (`role_id = 3`) có `class_id` bằng lớp đó, đúng tập mà `POST /courses/{course_id}/enrollments/class` sẽ ghi danh.
+- Teacher xem được mọi lớp: Teacher đã có quyền ghi danh cả lớp vào Course của mình, nên được xem trước danh sách sẽ được thêm. Response chỉ gồm thông tin định danh, không có tiến độ hay điểm.
 - **Yêu cầu quyền**: Admin hoặc Teacher.
 
 ## PATCH /classes/{class_id}: Đổi mã lớp hành chính

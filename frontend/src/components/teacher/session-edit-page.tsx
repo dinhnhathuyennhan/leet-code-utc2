@@ -18,14 +18,11 @@ import { useQueryClient } from "@tanstack/react-query";
 
 import {
   attachProblemsToLesson,
-  createBankProblem,
+  createLessonProblem,
   getSessionDetail,
   updateLesson,
 } from "@/lib/api/endpoints/courses";
-import {
-  getProblems,
-  type ProblemListItem,
-} from "@/lib/api/endpoints/problems";
+import type { ProblemListItem } from "@/lib/api/endpoints/problems";
 import { courseKeys } from "@/lib/hooks/use-courses";
 import { formatDate, fromDateInput, toDateInput } from "@/lib/helpers/datetime";
 import type { SessionDetailData, SessionExercise } from "@/lib/types/course";
@@ -33,6 +30,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { SessionProblemEditor } from "./session-problem-editor";
+import { ProblemBankPicker, type PickedProblem } from "./problem-bank-picker";
 import { NewProblemModal as CompleteNewProblemModal } from "./new-problem-modal";
 
 const MIN_MANUAL_TESTCASES = 10;
@@ -168,7 +166,7 @@ function NewProblemModal({
         hint: hint || null,
         testcases: parsedTestcases,
       };
-      const created = await createBankProblem({
+      const created = await createLessonProblem(courseId, sessionId, {
         ...payload,
         function_name: functionName.trim(),
         starter_codes: {
@@ -178,10 +176,9 @@ function NewProblemModal({
         start_datetime: fromDateInput(startDate, "00:00:00"),
         end_datetime: fromDateInput(endDate, "23:59:59"),
       });
-      await attachProblemsToLesson(courseId, sessionId, [created.id]);
       const refreshed = await getSessionDetail(courseId, sessionId);
       const attached = refreshed.exercises.find(
-        (item) => item.title === created.title,
+        (item) => item.id === created.id,
       );
       if (!attached)
         throw new Error("Không tìm thấy bài tập vừa thêm vào buổi học.");
@@ -604,9 +601,7 @@ export function SessionEditPage({
     end?: string;
   }>({});
   const [bankPickerOpen, setBankPickerOpen] = useState(false);
-  const [bankCandidates, setBankCandidates] = useState<ProblemListItem[]>([]);
-  const [selectedBankIds, setSelectedBankIds] = useState<number[]>([]);
-  const [bankLoading, setBankLoading] = useState(false);
+  const [selectedBankProblems, setSelectedBankProblems] = useState<PickedProblem[]>([]);
   const [bankSaving, setBankSaving] = useState(false);
   const selectedExercise =
     exercises.find((exercise) => exercise.id === selectedId) ?? exercises[0];
@@ -683,52 +678,16 @@ export function SessionEditPage({
     setSelectedId((current) => (current === problemId ? null : current));
   }
 
-  async function openBankPicker() {
+  function openBankPicker() {
+    setSelectedBankProblems([]);
     setBankPickerOpen(true);
-    setBankLoading(true);
-    setSelectedBankIds([]);
-    try {
-      const [bank, courseProblems] = await Promise.all([
-        getProblems({ page: 1, page_size: 100 }),
-        getProblems({ course_id: courseId, page: 1, page_size: 100 }),
-      ]);
-      const currentTitles = new Set(
-        exercises.map((exercise) => exercise.title.trim().toLocaleLowerCase()),
-      );
-      const merged = [
-        ...bank.items.filter((item) => item.lesson_id === null),
-        ...courseProblems.items.filter(
-          (item) => item.lesson_id !== Number(sessionId),
-        ),
-      ];
-      setBankCandidates(
-        Array.from(
-          new Map(
-            merged
-              .filter(
-                (item) =>
-                  item.total_number_testcase > 0 &&
-                  !currentTitles.has(item.title.trim().toLocaleLowerCase()),
-              )
-              .map((item) => [item.id, item]),
-          ).values(),
-        ),
-      );
-    } catch (error) {
-      toast.error(
-        error instanceof Error ? error.message : "Không thể tải ngân hàng bài.",
-      );
-      setBankPickerOpen(false);
-    } finally {
-      setBankLoading(false);
-    }
   }
 
   async function attachSelectedBankProblems() {
-    if (!selectedBankIds.length) return;
+    if (!selectedBankProblems.length) return;
     setBankSaving(true);
     try {
-      await attachProblemsToLesson(courseId, sessionId, selectedBankIds);
+      await attachProblemsToLesson(courseId, sessionId, selectedBankProblems.map((problem) => problem.id));
       const refreshed = await getSessionDetail(courseId, sessionId);
       setExercises(refreshed.exercises);
       setSelectedId(refreshed.exercises.at(-1)?.id ?? null);
@@ -913,7 +872,7 @@ export function SessionEditPage({
                 <Button
                   size="sm"
                   variant="outline"
-                  onClick={() => void openBankPicker()}
+                  onClick={openBankPicker}
                 >
                   <Plus className="size-3.5" /> Thêm từ ngân hàng
                 </Button>
@@ -967,15 +926,16 @@ export function SessionEditPage({
       </div>
       {bankPickerOpen && (
         <BankPicker
-          candidates={bankCandidates}
-          loading={bankLoading}
-          selectedIds={selectedBankIds}
+          courseId={courseId}
+          lessonId={Number(sessionId)}
+          existingTitles={exercises.map((exercise) => exercise.title)}
+          selected={selectedBankProblems}
           saving={bankSaving}
-          onToggle={(id) =>
-            setSelectedBankIds((current) =>
-              current.includes(id)
-                ? current.filter((item) => item !== id)
-                : [...current, id],
+          onToggle={(problem) =>
+            setSelectedBankProblems((current) =>
+              current.some((item) => item.id === problem.id)
+                ? current.filter((item) => item.id !== problem.id)
+                : [...current, problem],
             )
           }
           onClose={() => setBankPickerOpen(false)}
@@ -987,22 +947,31 @@ export function SessionEditPage({
 }
 
 function BankPicker({
-  candidates,
-  loading,
-  selectedIds,
+  courseId,
+  lessonId,
+  existingTitles,
+  selected,
   saving,
   onToggle,
   onClose,
   onConfirm,
 }: {
-  candidates: ProblemListItem[];
-  loading: boolean;
-  selectedIds: number[];
+  courseId: string;
+  lessonId: number;
+  existingTitles: string[];
+  selected: PickedProblem[];
   saving: boolean;
-  onToggle: (id: number) => void;
+  onToggle: (problem: PickedProblem) => void;
   onClose: () => void;
   onConfirm: () => void;
 }) {
+  const titles = new Set(existingTitles.map((title) => title.trim().toLocaleLowerCase()));
+  // Bài đã ở buổi này hoặc trùng tên bài đang có thì không sao chép thêm được.
+  const disabledReason = (problem: ProblemListItem) => {
+    if (problem.lesson_id === lessonId) return "Đang dùng trong buổi này";
+    if (titles.has(problem.title.trim().toLocaleLowerCase())) return "Trùng tên bài đã có";
+    return null;
+  };
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
       <div className="w-full max-w-2xl space-y-4 rounded-2xl bg-card p-6">
@@ -1016,46 +985,22 @@ function BankPicker({
         </div>
         <p className="text-sm text-muted-foreground">
           Bài được chọn sẽ được sao chép thành bản riêng của buổi học. Không thể
-          chọn nội dung trùng bài đã có.
+          chọn nội dung trùng bài đã có. Cuộn xuống cuối danh sách để tải thêm.
         </p>
-        {loading ? (
-          <p className="py-8 text-center text-sm text-muted-foreground">
-            Đang tải...
-          </p>
-        ) : (
-          <div className="max-h-[50vh] space-y-2 overflow-y-auto">
-            {candidates.map((problem) => (
-              <button
-                type="button"
-                key={problem.id}
-                onClick={() => onToggle(problem.id)}
-                className={`flex w-full min-w-0 items-center justify-between gap-3 rounded-lg border p-3 text-left ${selectedIds.includes(problem.id) ? "border-indigo-400 bg-indigo-50" : "bg-card"}`}
-              >
-                <span className="min-w-0 flex-1">
-                  <strong className="block break-words">{problem.title}</strong>
-                  <span className="mt-0.5 block text-xs break-words text-muted-foreground">
-                    {problem.total_number_testcase} testcase ·{" "}
-                    {problem.lesson_id === null ? "Ngân hàng" : "Lesson khác"}
-                  </span>
-                </span>
-                <span className="shrink-0 text-xs font-semibold">
-                  {selectedIds.includes(problem.id) ? "Đã chọn" : "Chọn"}
-                </span>
-              </button>
-            ))}
-            {!candidates.length && (
-              <p className="py-8 text-center text-sm text-muted-foreground">
-                Không có bài phù hợp.
-              </p>
-            )}
-          </div>
-        )}
+        <ProblemBankPicker
+          courseId={courseId}
+          enabled
+          selected={selected}
+          onToggle={onToggle}
+          disabledReason={disabledReason}
+          listClassName="max-h-[45vh] sm:max-h-[45vh]"
+        />
         <div className="flex justify-end gap-2">
           <Button variant="outline" onClick={onClose}>
             Hủy
           </Button>
-          <Button disabled={!selectedIds.length || saving} onClick={onConfirm}>
-            {saving ? "Đang thêm..." : `Xác nhận thêm (${selectedIds.length})`}
+          <Button disabled={!selected.length || saving} onClick={onConfirm}>
+            {saving ? "Đang thêm..." : `Xác nhận thêm (${selected.length})`}
           </Button>
         </div>
       </div>

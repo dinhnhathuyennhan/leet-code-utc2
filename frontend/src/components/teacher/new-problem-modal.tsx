@@ -6,8 +6,7 @@ import { toast } from "sonner";
 import { AdminProblemEditor } from "@/components/admin/admin-problem-editor";
 import { Button } from "@/components/ui/button";
 import {
-  attachProblemsToLesson,
-  createBankProblem,
+  createLessonProblem,
   getSessionDetail,
   type ProblemCreateRequest,
 } from "@/lib/api/endpoints/courses";
@@ -39,8 +38,8 @@ export function NewProblemModal({
           <div>
             <h2 className="text-xl font-bold text-[#2f226b]">Thêm bài tập mới</h2>
             <p className="text-sm text-muted-foreground">
-              Form dùng chung với ngân hàng đề: mức độ, thời gian, chế độ chấm,
-              starter code theo ngôn ngữ và nhiều testcase.
+              Bài được tạo riêng cho buổi học này (không thêm vào ngân hàng bài
+              chung). Lịch mở/đóng bài theo ngày của buổi học.
             </p>
           </div>
           <Button variant="ghost" size="icon" disabled={busy} onClick={onClose}>
@@ -55,10 +54,10 @@ export function NewProblemModal({
             if (existingTitles.some((title) => title.trim().toLocaleLowerCase() === payload.title.trim().toLocaleLowerCase())) {
               throw new Error("Buổi học đã có bài trùng nội dung này.");
             }
-            const created = await createBankProblem(payload as ProblemCreateRequest);
-            await attachProblemsToLesson(courseId, sessionId, [created.id]);
+            // Teacher tạo bài thẳng trong buổi học; ngân hàng bài chung chỉ Admin được thêm.
+            const created = await createLessonProblem(courseId, sessionId, payload as ProblemCreateRequest);
             const refreshed = await getSessionDetail(courseId, sessionId);
-            const attached = refreshed.exercises.find((item) => item.title === created.title);
+            const attached = refreshed.exercises.find((item) => item.id === created.id);
             if (!attached) throw new Error("Không tìm thấy bài tập vừa thêm vào buổi học.");
             onCreated({ ...attached, order: 1 });
             toast.success("Đã tạo bài tập mới.");

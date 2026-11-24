@@ -1,6 +1,6 @@
 from uuid import UUID
 from sqlalchemy.exc import IntegrityError
-from sqlmodel import Session, select
+from sqlmodel import Session, func, select
 
 from app.core.dependencies import Role
 from app.core.exceptions import (
@@ -9,7 +9,7 @@ from app.core.exceptions import (
     InvalidFormatError,
     NotFoundError,
 )
-from app.models import Class, Enrollment, User
+from app.models import Class, Course, Enrollment, User
 from app.modules.courses.access import (
     find_enrollment,
     get_manageable_course,
@@ -27,6 +27,22 @@ DUPLICATE_ENROLLMENT = "Sinh viên đã có trong lớp học"
 CONCURRENT_CLASS_ENROLLMENT = (
     "Danh sách lớp học vừa được thay đổi đồng thời, vui lòng thử lại"
 )
+
+
+def sync_student_count(session: Session, course: Course) -> None:
+    """Đếm lại sĩ số từ bảng ``enrollment`` thay vì cộng/trừ dồn.
+
+    Cộng/trừ ``+= 1`` dễ lệch vĩnh viễn (request đồng thời, dòng enrollment bị xoá
+    ngoài API...); đếm lại mỗi lần ghi danh thay đổi để giá trị tự đúng trở lại.
+    Không commit: hàm gọi commit chung một transaction.
+    """
+    session.flush()
+    course.total_number_student = session.exec(
+        select(func.count())
+        .select_from(Enrollment)
+        .where(Enrollment.course_id == course.course_id)
+    ).one()
+    session.add(course)
 
 
 def get_course_enrollments(
@@ -117,9 +133,9 @@ def add_student_to_course(
         raise ConflictError(DUPLICATE_ENROLLMENT)
 
     enrollment = Enrollment(course_id=course_id, student_id=student.user_id)
-    course.total_number_student += 1
     session.add(enrollment)
     try:
+        sync_student_count(session, course)
         session.commit()
     except IntegrityError:
         # Hai request thêm cùng lúc: cả hai qua được bước kiểm tra ở trên, ràng buộc
@@ -158,7 +174,7 @@ def delete_student_from_course(
         raise NotFoundError("Sinh viên không thuộc lớp học này")
 
     session.delete(enrollment)
-    course.total_number_student -= 1
+    sync_student_count(session, course)
     session.commit()
 
 
@@ -194,9 +210,8 @@ def add_class_to_course(
     session.add_all(
         [Enrollment(course_id=course_id, student_id=student_id) for student_id in new_ids]
     )
-    course.total_number_student += len(new_ids)
-    session.add(course)
     try:
+        sync_student_count(session, course)
         session.commit()
     except IntegrityError:
         # Có sinh viên vừa được ghi danh bởi request khác chạy đồng thời; huỷ cả lô

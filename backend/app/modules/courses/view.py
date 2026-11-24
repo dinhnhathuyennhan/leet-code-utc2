@@ -1,5 +1,5 @@
 from sqlalchemy.orm import load_only
-from sqlmodel import Session, select
+from sqlmodel import Session, func, select
 
 from app.core.utils.datetime_utils import now_utc, vn_day_end, vn_day_start, as_utc
 from app.modules.courses.schemas import CourseResponse, CourseLessonResponse, CourseGradeRowResponse
@@ -31,6 +31,11 @@ def build_course_response(
     )
     if session is None:
         return response
+    # Sĩ số lấy từ số dòng enrollment thật, không tin cột cache total_number_student
+    # (cột này từng bị lệch so với danh sách sinh viên của lớp).
+    response.total_number_student = session.exec(
+        select(func.count()).select_from(Enrollment).where(Enrollment.course_id == course.course_id)
+    ).one()
 
     is_student_view = only_student_id is not None
 

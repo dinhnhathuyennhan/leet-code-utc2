@@ -98,7 +98,8 @@ Mọi chuỗi hiển thị dạng text thuần (`whitespace-pre-wrap`), không r
 | Trạng thái | Giao diện |
 |---|---|
 | Bài chưa pass hết | Không có nút, không có panel |
-| Pass hết, chưa nhấn | Chỉ có nút "Review code" |
+| Pass hết, chưa nhấn | Nút "Review code" kèm dòng "Còn X/3 lượt AI review cho bài này" |
+| Hết lượt | Nút bị disable, dòng "Bạn đã dùng hết 3 lượt AI review cho bài này." Nút "Review lại" trên panel kết quả bị ẩn |
 | Đang review | Nút chuyển "Đang review…" + spinner, bị disable. Panel hiện skeleton. Sau 15 giây hiện thêm "Lần đầu có thể mất 1–2 phút do AI đang khởi động" |
 | Thành công | Panel kết quả |
 | Lỗi | Panel viền đỏ: `message` từ backend + nút "Thử lại" |
@@ -111,6 +112,7 @@ Thông báo lỗi lấy từ `message` của backend:
 | 503 | `AI_UNAVAILABLE` | Không thể kết nối AI Server |
 | 504 | `AI_TIMEOUT` | AI xử lý quá thời gian cho phép |
 | 502 | `AI_INVALID_RESPONSE` | AI trả về dữ liệu không hợp lệ |
+| 429 | `AI_REVIEW_LIMIT_REACHED` | Bạn đã dùng hết lượt AI review cho bài tập này (không có nút Thử lại) |
 
 ## Quy tắc hành vi
 
@@ -118,7 +120,8 @@ Thông báo lỗi lấy từ `message` của backend:
 2. **Không gọi trùng:** đang review thì nút bị disable.
 3. **Timeout client `200_000` ms** cho request này (backend chờ Ollama tối đa 180 giây; mặc định client 10 giây sẽ cắt trước).
 4. **Không lưu:** kết quả chỉ nằm trong state trang, rời trang là mất.
-5. **Accessibility:** panel có `aria-live="polite"`, đang chạy đặt `aria-busy="true"`, nút có nhãn chữ.
+5. **Giới hạn lượt:** mỗi sinh viên có tối đa `AI_REVIEW_MAX_PER_PROBLEM` (mặc định 3) lượt review cho mỗi bài tập, cố định (nộp lại bài không được thêm lượt). Mỗi lần review thành công tốn 1 lượt, kể cả review lại bằng ngôn ngữ khác; hết lượt thì đổi ngôn ngữ không tự review nữa. Lượt lỗi phía AI (`AI_*`) được hoàn lại. Panel gọi `GET /ai/review/{submission_id}/usage` để hiện số lượt và tải lại sau mỗi lần review.
+6. **Accessibility:** panel có `aria-live="polite"`, đang chạy đặt `aria-busy="true"`, nút có nhãn chữ.
 
 ## Ngôn ngữ của nội dung review (VI/EN)
 
@@ -167,13 +170,21 @@ Có hai route AI review:
 |---|---|---|---|
 | 403 | `FORBIDDEN` | Người gọi không phải Student | Không xảy ra trên UI sinh viên |
 | 404 | `NOT_FOUND` | Bài nộp không tồn tại hoặc của người khác | Thông báo lỗi |
-| 409 | `SUBMISSION_NOT_ACCEPTED` | Bài chưa pass hết testcase | Không xảy ra nếu UI ẩn nút đúng điều kiện |
+| 409 | `SUBMISSION_NOT_ACCEPTED` | Bài chưa pass hết testcase (không tốn lượt) | Không xảy ra nếu UI ẩn nút đúng điều kiện |
+| 429 | `AI_REVIEW_LIMIT_REACHED` | Đã dùng hết lượt review cho bài tập này | Thông báo lỗi, không có nút Thử lại |
 | 422 | `CODE_TOO_LONG` | Code đã nộp dài hơn 15.000 ký tự | Thông báo lỗi, không có nút Thử lại |
-| 502/503/504 | `AI_*` | Lỗi phía AI (bảng ở mục trên) | Thông báo + nút Thử lại |
+| 502/503/504 | `AI_*` | Lỗi phía AI (bảng ở mục trên); lượt đã giữ được hoàn lại | Thông báo + nút Thử lại |
+
+**Giới hạn lượt:** bài đủ điều kiện thì backend giữ một lượt (bảng `ai_review_usage`, unique `(student_id, problem_id, attempt_no)` với `attempt_no` trong 1..giới hạn) **trước** khi gọi Ollama, nên bấm liên tục hoặc nhiều tab cùng lúc cũng không vượt giới hạn. Gọi AI lỗi thì xoá lượt vừa giữ.
+
+### `GET /ai/review/{submission_id}/usage` — số lượt còn lại
+
+- **Quyền:** chỉ Student, chỉ bài nộp của chính mình (bài người khác trả 404).
+- **Response 200:** `{"limit": 3, "used": 1, "remaining": 2}` — tính cho bài tập (problem) của bài nộp, không phụ thuộc bài nộp nào.
 
 ### 2. `POST /ai/review` — review code tuỳ ý (admin/teacher, có sẵn ở develop)
 
-- **Quyền:** `ADMIN`, `TEACHER`, `STUDENT` (role khác bị chặn 403 `FORBIDDEN`).
+- **Quyền:** chỉ `ADMIN`, `TEACHER` (Student và role khác bị chặn 403 `FORBIDDEN`). Sinh viên gửi code tuỳ ý vào đây sẽ vượt qua điều kiện "pass hết testcase" và giới hạn lượt, nên bị chặn. Admin/Teacher không bị giới hạn lượt.
 - **Request body:** `{"code": "...", "language": "python"}` — giữ đúng shape như develop.
 - **Prompt:** dùng `SYSTEM_PROMPT` trung tính của develop (`prompts.py`), **không** giả định code đã pass testcase (code do client gửi lên, chưa chắc đã được chấm). Luôn trả về tiếng Việt.
 - Route này không nằm trong phạm vi feature sinh viên — giữ lại để không phá chức năng của phần admin.
@@ -217,5 +228,5 @@ Thêm key nhóm `aiReview.*` vào `frontend/src/lib/i18n/dictionary.ts`:
 ## Ngoài phạm vi
 
 - Giao diện cho Giáo viên/Admin.
-- Lưu lịch sử review, giới hạn số lần review theo sinh viên.
+- Lưu nội dung lịch sử review (bảng `ai_review_usage` chỉ đếm lượt, không lưu kết quả).
 - Tắt review theo bài hoặc khi đang thi.

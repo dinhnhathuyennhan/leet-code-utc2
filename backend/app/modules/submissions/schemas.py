@@ -1,7 +1,9 @@
 from datetime import datetime
 from typing import Any
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
+
+from app.core.exceptions import InvalidFormatError
 
 
 class PendingSubmissionResponse(BaseModel):
@@ -81,9 +83,21 @@ class SubmissionDetailResponse(BaseModel):
 
 
 class SubmissionUpdateRequest(BaseModel):
+    """Giáo viên chỉ được nhận xét và ghi đè điểm; trạng thái chấm do máy chấm quyết định."""
+
     feedback: str | None = Field(default=None, max_length=10000)
-    status: str | None = Field(default=None, max_length=50)
     manual_score: float | None = Field(default=None, ge=0, le=10)
+
+    @model_validator(mode="before")
+    @classmethod
+    def reject_status(cls, data):
+        # Báo lỗi rõ ràng thay vì lặng lẽ bỏ qua field lạ: client cũ gửi `status`
+        # phải biết thao tác không có tác dụng. Muốn chấm lại dùng POST .../regrade.
+        if isinstance(data, dict) and data.get("status") is not None:
+            raise InvalidFormatError(
+                "Không thể sửa trạng thái bài nộp: trạng thái do máy chấm quyết định"
+            )
+        return data
 
 
 # ─── Sinh viên: xem lịch sử nộp bài và kết quả chấm ─────────────────────────────

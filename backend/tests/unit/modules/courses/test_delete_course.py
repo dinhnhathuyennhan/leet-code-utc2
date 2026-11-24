@@ -8,7 +8,7 @@ from sqlmodel import Session, select
 
 from app.core.dependencies import Role
 from app.core.exceptions import ConflictError, ForbiddenError, NotFoundError
-from app.models import Course, Enrollment, Lesson, Problem, Submission, User
+from app.models import AIReviewUsage, Course, Enrollment, Lesson, Problem, Submission, User
 from app.models import entities
 from app.modules.courses import service as course_service
 from app.modules.courses.service import CourseHasSubmissionsError, delete_course
@@ -140,6 +140,23 @@ def test_admin_force_deletes_course_and_its_submissions_only(session: Session, c
     assert session.get(Problem, bank_problem.problem_id) is not None
     assert session.get(User, student.user_id) is not None
     assert session.get(User, other_student.user_id) is not None
+
+
+def test_admin_force_delete_also_removes_ai_review_usage(session: Session, course_with_content):
+    _, _, problem, student, _ = course_with_content
+    submission = make_submission(session, problem, student)
+    session.add(AIReviewUsage(
+        student_id=student.user_id, problem_id=problem.problem_id,
+        submission_id=submission.submission_id, attempt_no=1,
+        created_at=submission.submitted_datetime,
+    ))
+    admin = make_user(session, "admin_x", Role.ADMIN)
+    session.commit()
+
+    delete_course("DELC1", session, admin, force=True)
+
+    assert session.get(Course, "DELC1") is None
+    assert session.exec(select(AIReviewUsage)).all() == []
 
 
 def test_admin_force_without_submissions_deletes_normally(session: Session, course_with_content):

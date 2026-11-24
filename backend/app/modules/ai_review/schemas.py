@@ -91,6 +91,14 @@ class AdminPreviewReviewRequest(AIReviewRequest):
     preview_token: str = Field(min_length=1)
 
 
+class AIReviewUsageResponse(BaseModel):
+    """Số lượt AI review của sinh viên cho bài tập của một bài nộp."""
+
+    limit: int
+    used: int
+    remaining: int
+
+
 class AIConnectionResponse(BaseModel):
     connected: bool
     model: str

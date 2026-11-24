@@ -429,6 +429,29 @@ class TestEnrollmentListStatusFields:
 # ============================== CONCURRENT ENROLLMENT ==============================
 
 
+class TestStudentCountSync:
+    """Sĩ số được đếm lại từ bảng enrollment, nên giá trị cache đã lệch tự đúng lại."""
+
+    def test_add_student_recounts_drifted_counter(self, session, course, owner_teacher, student):
+        course.total_number_student = 134
+        session.add(course)
+        session.commit()
+
+        add_student_to_course(student.user_id, course.course_id, session, owner_teacher)
+
+        assert counter_of(session, course) == 1
+
+    def test_delete_student_recounts_drifted_counter(self, session, course, owner_teacher, student):
+        enroll_directly(session, course, student)
+        course.total_number_student = 134
+        session.add(course)
+        session.commit()
+
+        delete_student_from_course(student.user_id, course.course_id, session, owner_teacher)
+
+        assert counter_of(session, course) == 0
+
+
 class TestConcurrentEnrollment:
     """Hai request ghi danh cùng lúc: cả hai qua bước kiểm tra trùng, ràng buộc
     unique (course_id, student_id) chặn request sau. Phải trả 409, không phải 500."""

@@ -68,6 +68,16 @@ def _selectin_user_selects(statements: list[str]) -> list[str]:
     return [s for s in _user_selects(statements) if "user.user_id IN" in s]
 
 
+class TestBuildCourseResponseStudentCount:
+    def test_detail_uses_live_enrollment_count_not_cached_counter(self, session, course):
+        # Cột cache bị lệch (vd 134) nhưng lớp chỉ có 1 enrollment thật
+        course.total_number_student = 134
+        session.add(course)
+        session.commit()
+
+        assert build_course_response(course, session).total_number_student == 1
+
+
 class TestBuildCourseResponseQueries:
     def test_student_view_skips_participant_query(
         self, engine, session, course, problem, student

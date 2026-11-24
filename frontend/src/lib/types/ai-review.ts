@@ -18,7 +18,6 @@ export interface AiReviewResult {
   summary: string;
 }
 
-/** Mã lỗi backend trả về cho endpoint AI review. */
 /** Response của `GET /ai/review/{submission_id}/usage`: số lượt review của SV cho bài tập. */
 export interface AiReviewUsage {
   limit: number;
@@ -26,6 +25,7 @@ export interface AiReviewUsage {
   remaining: number;
 }
 
+/** Mã lỗi backend trả về cho endpoint AI review. */
 export type AiReviewErrorCode =
   | "AI_BUSY"
   | "AI_UNAVAILABLE"

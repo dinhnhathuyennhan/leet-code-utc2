@@ -25,12 +25,16 @@ export function useAiReview(submissionId: number | string, locale: Locale) {
     mutationFn: () => reviewSubmission(submissionId, locale),
     retry: false,
     // Thành công thì tốn một lượt, lỗi thì backend hoàn lượt: đều tải lại số lượt.
-    onSettled: () => queryClient.invalidateQueries({ queryKey: aiReviewUsageKey(submissionId) }),
+    // Lượt tính theo (sinh viên, bài tập) chứ không theo bài nộp, nên làm mới số lượt
+    // của mọi bài nộp đang cache (các bài nộp khác của cùng bài tập dùng chung lượt).
+    onSettled: () => queryClient.invalidateQueries({ queryKey: aiReviewUsageKeys.all }),
   });
 }
 
+export const aiReviewUsageKeys = { all: ["ai", "review-usage"] as const };
+
 export const aiReviewUsageKey = (submissionId: number | string) =>
-  ["ai", "review-usage", String(submissionId)] as const;
+  [...aiReviewUsageKeys.all, String(submissionId)] as const;
 
 /** Số lượt AI review còn lại của sinh viên cho bài tập của bài nộp. */
 export function useAiReviewUsage(submissionId: number | string) {

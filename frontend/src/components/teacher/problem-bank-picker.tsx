@@ -65,6 +65,18 @@ function LoadMoreSentinel({ onVisible, root, disabled }: { onVisible: () => void
   return <div ref={ref} aria-hidden className="h-px" />;
 }
 
+/** Lỗi tải của một nhóm bài, kèm nút thử lại ngay tại nhóm đó. */
+function GroupError({ label, retrying, onRetry }: { label: string; retrying: boolean; onRetry: () => void }) {
+  return (
+    <div role="alert" className="flex flex-wrap items-center justify-between gap-2 rounded-lg bg-red-50 px-3 py-2 text-xs text-red-700">
+      <span>Không tải được {label}.</span>
+      <Button type="button" variant="ghost" size="sm" className="h-7 text-red-700" disabled={retrying} onClick={onRetry}>
+        {retrying && <Loader2 className="size-3.5 animate-spin" />} Thử lại
+      </Button>
+    </div>
+  );
+}
+
 export function ProblemBankPicker({
   courseId,
   enabled,
@@ -99,16 +111,23 @@ export function ProblemBankPicker({
   const bankTotal = bankProblems.data?.pages[0]?.total ?? 0;
   const hasFilter = Boolean(filters.q || filters.level || filters.grading_mode);
 
+  // Tải lỗi (kể cả lỗi ở trang kế tiếp) thì `hasNextPage` vẫn là true. Coi nhóm đó như đã
+  // dừng để nhóm còn lại vẫn hiện và tải tiếp được; nhóm lỗi có nút "Thử lại" riêng.
+  const courseFailed = courseProblems.isError;
+  const bankFailed = bankProblems.isError;
+  const courseHasMore = Boolean(courseProblems.hasNextPage) && !courseFailed;
+  const bankHasMore = Boolean(bankProblems.hasNextPage) && !bankFailed;
+
   // Tải hết bài của lớp trước rồi mới tới ngân hàng, vì hai nhóm nằm nối tiếp nhau trong cùng khung cuộn.
-  const courseDone = !courseProblems.hasNextPage;
+  const courseDone = !courseHasMore;
   function loadMore() {
     if (!courseDone) {
       if (!courseProblems.isFetchingNextPage) void courseProblems.fetchNextPage();
-    } else if (bankProblems.hasNextPage && !bankProblems.isFetchingNextPage) {
+    } else if (bankHasMore && !bankProblems.isFetchingNextPage) {
       void bankProblems.fetchNextPage();
     }
   }
-  const canLoadMore = Boolean(courseProblems.hasNextPage || bankProblems.hasNextPage);
+  const canLoadMore = courseHasMore || bankHasMore;
   const fetchingMore = courseProblems.isFetchingNextPage || bankProblems.isFetchingNextPage;
   const initialLoading = courseProblems.isPending || bankProblems.isPending;
 
@@ -151,7 +170,12 @@ export function ProblemBankPicker({
     );
   }
 
-  const failed = courseProblems.isError || bankProblems.isError;
+  /** Thử lại đúng request bị lỗi: trang kế tiếp nếu đã có dữ liệu, ngược lại tải lại từ đầu. */
+  function retry(list: typeof courseProblems) {
+    void (list.data ? list.fetchNextPage() : list.refetch());
+  }
+
+  const failed = courseFailed || bankFailed;
 
   return (
     <div className="space-y-3">
@@ -178,9 +202,7 @@ export function ProblemBankPicker({
       <div ref={setScrollRoot} className={cn("max-h-[30vh] space-y-2 overflow-y-auto rounded-xl bg-indigo-50/70 p-3 sm:max-h-[360px]", listClassName)}>
         {initialLoading ? (
           <p className="py-6 text-center text-sm text-muted-foreground">Đang tải bài từ ngân hàng...</p>
-        ) : failed && !courseItems.length && !bankItems.length ? (
-          <p className="py-6 text-center text-sm text-red-600">Không tải được danh sách bài tập.</p>
-        ) : !courseItems.length && !bankItems.length ? (
+        ) : !courseItems.length && !bankItems.length && !failed ? (
           <p className="py-6 text-center text-sm text-muted-foreground">{hasFilter ? "Không có bài tập phù hợp bộ lọc." : "Chưa có bài tập trong ngân hàng."}</p>
         ) : (
           <>
@@ -190,12 +212,14 @@ export function ProblemBankPicker({
                 {courseItems.map(renderItem)}
               </>
             )}
+            {courseFailed && <GroupError label="bài trong lớp học này" retrying={courseProblems.isFetching} onRetry={() => retry(courseProblems)} />}
             {courseDone && bankItems.length > 0 && (
               <>
                 <p className="px-1 pt-1 text-xs font-semibold text-muted-foreground uppercase">Ngân hàng bài ({bankTotal})</p>
                 {bankItems.map(renderItem)}
               </>
             )}
+            {courseDone && bankFailed && <GroupError label="bài trong ngân hàng" retrying={bankProblems.isFetching} onRetry={() => retry(bankProblems)} />}
             {canLoadMore && (
               <>
                 <LoadMoreSentinel onVisible={loadMore} root={scrollRoot} disabled={fetchingMore} />

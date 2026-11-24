@@ -6,6 +6,7 @@ import { describe, expect, it, vi } from "vitest";
 import { screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { http, HttpResponse } from "msw";
+import { QueryClient } from "@tanstack/react-query";
 
 import { ProblemBankPicker } from "./problem-bank-picker";
 import { server } from "@/test/mocks/server";
@@ -118,5 +119,79 @@ describe("ProblemBankPicker", () => {
     expect(screen.getByText("No tests").closest("button")).toBeDisabled();
     expect(screen.getByText("Current lesson").closest("button")).toBeDisabled();
     expect(screen.getByText("Bank 2").closest("button")).toBeEnabled();
+  });
+
+  it("still shows the bank group when loading more course problems fails, and retries that page", async () => {
+    let failCoursePage2 = true;
+    const coursePage = (page: number) => [item(100 + page, { title: `Course p${page}`, lesson_id: 1 })];
+    server.use(
+      http.get(PROBLEMS_URL, ({ request }) => {
+        const params = new URL(request.url).searchParams;
+        const page = Number(params.get("page"));
+        if (params.get("course_id")) {
+          if (page === 2 && failCoursePage2) return HttpResponse.json({ message: "boom" }, { status: 500 });
+          return HttpResponse.json({ items: coursePage(page), total: 2, page, page_size: 1 });
+        }
+        return HttpResponse.json({ items: [item(2)], total: 1, page, page_size: 20 });
+      }),
+    );
+    renderWithProviders(<ProblemBankPicker courseId="CS101" enabled selected={[]} onToggle={vi.fn()} />);
+
+    expect(await screen.findByText("Course p1")).toBeInTheDocument();
+    expect(screen.queryByText("Bank 2")).not.toBeInTheDocument();
+
+    await userEvent.click(screen.getByRole("button", { name: "Xem thêm" }));
+
+    expect(await screen.findByText("Không tải được bài trong lớp học này.")).toBeInTheDocument();
+    expect(screen.getByText("Bank 2")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Xem thêm" })).not.toBeInTheDocument();
+
+    failCoursePage2 = false;
+    await userEvent.click(screen.getByRole("button", { name: /Thử lại/ }));
+
+    expect(await screen.findByText("Course p2")).toBeInTheDocument();
+    await waitFor(() => expect(screen.queryByRole("alert")).not.toBeInTheDocument());
+  });
+
+  it("shows a retryable error when the first bank page fails", async () => {
+    let failBank = true;
+    server.use(
+      http.get(PROBLEMS_URL, ({ request }) => {
+        const params = new URL(request.url).searchParams;
+        if (params.get("course_id")) return HttpResponse.json({ items: [], total: 0, page: 1, page_size: 20 });
+        if (failBank) return HttpResponse.json({ message: "boom" }, { status: 500 });
+        return HttpResponse.json({ items: [item(2)], total: 1, page: 1, page_size: 20 });
+      }),
+    );
+    renderWithProviders(<ProblemBankPicker courseId="CS101" enabled selected={[]} onToggle={vi.fn()} />);
+
+    expect(await screen.findByText("Không tải được bài trong ngân hàng.")).toBeInTheDocument();
+    failBank = false;
+    await userEvent.click(screen.getByRole("button", { name: /Thử lại/ }));
+    expect(await screen.findByText("Bank 2")).toBeInTheDocument();
+  });
+
+  it("refetches problems every time the picker is opened again", async () => {
+    let courseItems = [item(50, { title: "Course Sum", lesson_id: 1 })];
+    server.use(
+      http.get(PROBLEMS_URL, ({ request }) => {
+        const params = new URL(request.url).searchParams;
+        const items = params.get("course_id") ? courseItems : [item(2)];
+        return HttpResponse.json({ items, total: items.length, page: 1, page_size: 20 });
+      }),
+    );
+    // Cache dùng chung giữa hai lần mở, staleTime mặc định 30 giây như app thật
+    const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false, staleTime: 30_000 } } });
+    const picker = <ProblemBankPicker courseId="CS101" enabled selected={[]} onToggle={vi.fn()} />;
+
+    const first = renderWithProviders(picker, { queryClient });
+    expect(await screen.findByText("Course Sum")).toBeInTheDocument();
+    first.unmount();
+
+    // Vừa gắn thêm một bài vào lớp ở buổi khác
+    courseItems = [...courseItems, item(51, { title: "Copied just now", lesson_id: 2 })];
+    renderWithProviders(picker, { queryClient });
+
+    expect(await screen.findByText("Copied just now")).toBeInTheDocument();
   });
 });

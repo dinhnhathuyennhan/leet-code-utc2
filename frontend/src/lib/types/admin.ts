@@ -1,5 +1,4 @@
 import type { CourseApiRecord, LessonMutationRequest } from "@/lib/types/course";
-import type { SubmissionDetail } from "@/lib/types/dashboard";
 
 export interface AdminClass {
   class_id: string;
@@ -142,15 +141,6 @@ export interface JudgeResult {
   time?: string | null;
   memory?: number | null;
 }
-
-export type AdminSubmissionDetail = Omit<SubmissionDetail, "testcases"> & {
-  problem_id: number;
-  problem_description: string;
-  problem_constraints: string;
-  problem_level: string;
-  problem_function_name: string | null;
-  testcases: AdminTestcase[];
-};
 
 export type AdminCourse = CourseApiRecord;
 export type AdminLessonPayload = LessonMutationRequest;

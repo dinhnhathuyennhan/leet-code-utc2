@@ -10,11 +10,10 @@
  *
  * Dữ liệu tạo ra mang mã theo timestamp và KHÔNG tự xoá hết được (hệ thống không
  * có API xoá tài khoản/lớp học phần). Chỉ chạy trên DB local.
- * Bài nộp seed bị sửa ở bước đánh giá được khôi phục ngay trong `finally`.
  */
 
 import { chromium } from "playwright";
-import { mkdirSync, readFileSync } from "node:fs";
+import { mkdirSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
 
@@ -272,12 +271,10 @@ async function main() {
       const users = await api("GET", "/users?page=1&page_size=1", { token: adminToken });
       const courses = await api("GET", "/courses", { token: adminToken });
       const classes = await api("GET", "/classes", { token: adminToken });
-      const pending = await api("GET", "/submissions/pending?filter=all&limit=6", { token: adminToken });
       for (const [label, expected] of [
         ["Tài khoản", countOf(users.data)],
         ["Lớp học phần", countOf(courses.data)],
         ["Lớp hành chính", countOf(classes.data)],
-        ["Bài cần xử lý", pending.data?.total],
       ]) {
         const shown = await adminMetric(label);
         check(`so lieu '${label}' khop API`, shown === String(expected), `UI=${shown} API=${expected}`);
@@ -288,7 +285,6 @@ async function main() {
         ["/admin/courses", "Lớp học phần"],
         ["/admin/classes", "Lớp hành chính"],
         ["/admin/accounts", "Quản lý tài khoản người dùng"],
-        ["/admin/submissions", "Quản lý bài nộp"],
         ["/admin/problem-bank", "Ngân hàng đề"],
         ["/admin/settings", "Cấu hình & bảo mật"],
         ["/admin/dashboard", "Tổng quan quản trị"],
@@ -714,84 +710,7 @@ async function main() {
       check("de nguon bien mat khoi danh sach", left === 0);
     });
 
-    // ── 8. Bài nộp ────────────────────────────────────────────────────
-    await section("Bai nop", async () => {
-      await open("/admin/submissions");
-      await page.locator("tbody tr").first().waitFor({ timeout: 20_000 });
-      const all = (await api("GET", "/submissions/pending?filter=all&limit=500&include_graded=true", { token: adminToken })).data;
-      const shownAll = await adminMetric("Tổng bài nộp khớp tìm kiếm");
-      check("tong bai nop khop API", shownAll === String(all?.counts?.all), `UI=${shownAll} API=${all?.counts?.all}`);
-      await shot("14-submissions");
-
-      await page.getByRole("button", { name: "Đã chấp nhận" }).click();
-      await page.waitForTimeout(1200);
-      const accepted = await page.locator("tbody tr").allInnerTexts();
-      check("loc Da chap nhan chi con bai dat", accepted.length > 0 && accepted.every((row) => row.includes("Đã chấm") || row.includes("Đã chấp nhận")), `${accepted.length} dong`);
-      await page.getByRole("button", { name: "Tất cả" }).click();
-      await page.waitForTimeout(800);
-
-      await page.getByLabel("Tìm bài nộp").fill(SEED_PROBLEM_TITLE);
-      await page.waitForTimeout(1200);
-      const matched = await page.locator("tbody tr").allInnerTexts();
-      check("tim theo ten bai", matched.length > 0 && matched.every((row) => row.includes(SEED_PROBLEM_TITLE)), `${matched.length} dong`);
-      await page.getByLabel("Tìm bài nộp").fill("");
-      await page.getByLabel("Lọc lớp học phần").selectOption(SEED_COURSE_ID);
-      await page.waitForTimeout(1200);
-      check("loc theo lop hoc phan khong loi", !ERROR_TEXT.test(await body()) && (await page.locator("tbody tr").count()) > 0);
-      await page.getByLabel("Lọc lớp học phần").selectOption("");
-      await page.waitForTimeout(800);
-
-      // Xuất kết quả: downloadCsv cố ý xuất .xls dạng bảng HTML để Excel mở được.
-      const [download] = await Promise.all([
-        page.waitForEvent("download", { timeout: 15_000 }),
-        page.getByRole("button", { name: "Xuất kết quả đang lọc" }).click(),
-      ]);
-      check("xuat ket qua dung ten file", download.suggestedFilename() === "bai-nop.xls", download.suggestedFilename());
-      const exported = readFileSync(await download.path(), "utf8");
-      const exportedRows = (exported.match(/<tr>/g) ?? []).length;
-      check("file xuat co tieu de + du dong du lieu",
-        exported.includes("Mã bài nộp") && exportedRows === all.items.length + 1, `${exportedRows} dong, API ${all.items.length} bai`);
-
-      // Đánh giá bài nộp: sửa rồi khôi phục để không làm bẩn dữ liệu seed.
-      const graded = (await api("GET", "/submissions/pending?filter=graded&limit=50&include_graded=true", { token: adminToken })).data?.items ?? [];
-      const target = graded[0];
-      if (!target) {
-        skip("danh gia bai nop", "khong co bai da chap nhan");
-        return;
-      }
-      const original = (await api("GET", `/submissions/${target.id}`, { token: adminToken })).data;
-      try {
-        await open(`/admin/submissions/${target.id}`);
-        check("chi tiet bai nop co tieu de", (await heading()).includes(`#${target.id}`), await heading());
-        check("chi tiet co ma nguon", (await page.locator("pre code").innerText()).trim().length > 0);
-        const scoreInput = page.getByLabel("Điểm chốt (0–10)");
-        const save = page.getByRole("button", { name: "Lưu đánh giá" });
-        await scoreInput.fill("11");
-        check("diem 11 -> khong goi API", (await writesDuring(() => save.click())) === 0);
-
-        const marker = `Nhan xet test ${stamp}`;
-        await scoreInput.fill("9.5");
-        await page.getByLabel("Nhận xét").fill(marker);
-        const saved = await submitAndStatus(new RegExp(`/submissions/${target.id}$`), "PATCH", () => save.click());
-        check("luu danh gia -> 200", saved === 200, String(saved));
-        check("luu danh gia -> co toast", await toast("Đã lưu đánh giá bài nộp."));
-        await open(`/admin/submissions/${target.id}`);
-        check("sau tai lai: giu nhan xet", (await page.getByLabel("Nhận xét").inputValue()) === marker);
-        check("sau tai lai: giu diem chot", (await page.getByLabel("Điểm chốt (0–10)").inputValue()) === "9.5");
-        await shot("15-submission-detail");
-      } finally {
-        const restored = await api("PATCH", `/submissions/${target.id}`, {
-          token: adminToken,
-          body: { feedback: original.feedback ?? "", status: original.status, manual_score: original.manual_score },
-        });
-        const after = (await api("GET", `/submissions/${target.id}`, { token: adminToken })).data;
-        check("khoi phuc bai nop seed sau test",
-          restored.status === 200 && after.status === original.status && after.manual_score === original.manual_score && after.feedback === original.feedback,
-          `#${target.id}`);
-      }
-    });
-
-    // ── 9. Cấu hình ───────────────────────────────────────────────────
+    // ── 8. Cấu hình ───────────────────────────────────────────────────
     await section("Cau hinh", async () => {
       await open("/admin/settings");
       await page.getByText(ADMIN_EMAIL).first().waitFor({ timeout: 15_000 });
@@ -834,7 +753,7 @@ async function main() {
       await dialog().getByRole("button", { name: "Hủy" }).click();
     });
 
-    // ── 10. Đổi ngôn ngữ ──────────────────────────────────────────────
+    // ── 9. Đổi ngôn ngữ ──────────────────────────────────────────────
     await section("Ngon ngu", async () => {
       await open("/admin/dashboard");
       const en = page.locator('button:has-text("EN"), [role="radio"]:has-text("EN")').first();
@@ -850,12 +769,12 @@ async function main() {
       check("VI: quay lai tieng Viet", (await page.locator("html").getAttribute("lang")) === "vi");
     });
 
-    // ── 11. Màn hình điện thoại ───────────────────────────────────────
+    // ── 10. Màn hình điện thoại ───────────────────────────────────────
     await section("Mobile", async () => {
       await page.setViewportSize({ width: 390, height: 844 });
       for (const path of [
         "/admin/dashboard", "/admin/courses", "/admin/classes", "/admin/accounts",
-        "/admin/submissions", "/admin/problem-bank", "/admin/settings",
+        "/admin/problem-bank", "/admin/settings",
       ]) {
         await open(path);
         await page.waitForTimeout(800);
@@ -866,7 +785,7 @@ async function main() {
       await page.setViewportSize({ width: 1440, height: 900 });
     });
 
-    // ── 12. Đăng xuất (luôn để cuối) ──────────────────────────────────
+    // ── 11. Đăng xuất (luôn để cuối) ──────────────────────────────────
     await section("Dang xuat", async () => {
       await open("/admin/dashboard");
       await page.getByRole("button", { name: "Đăng xuất" }).first().click();

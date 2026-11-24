@@ -28,7 +28,6 @@ export function AdminLessonDetail({ courseId, lessonId }: { courseId: string; le
   if (query.error || !query.data) return <ErrorState error={query.error} onRetry={() => void query.refetch()} />;
   const data = query.data;
   const session = course.data?.sessions?.find((item) => String(item.id) === lessonId);
-  const submissionLink = `/admin/submissions?${new URLSearchParams({ course: courseId, lesson_id: lessonId })}`;
   return <div className="space-y-6">
     <Link href={`/admin/courses/${encodeURIComponent(courseId)}`} className="inline-flex items-center gap-2 text-sm text-indigo-700 dark:text-indigo-300"><ArrowLeft className="size-4" />Quay lại lớp học phần</Link>
     <AdminHeading title={`Buổi ${data.order}: ${data.title}`} description={`${data.course_code} · ${data.course_name}`}
@@ -41,12 +40,11 @@ export function AdminLessonDetail({ courseId, lessonId }: { courseId: string; le
     </div>
     {course.error && <ErrorState error={course.error} onRetry={() => void course.refetch()} />}
     <section className="space-y-4">
-      <div className="flex flex-wrap items-center justify-between gap-3"><h2 className="text-lg font-semibold">Bài tập thực hành ({data.exercises.length})</h2><Button asChild variant="outline"><Link href={submissionLink}>Xem bài nộp buổi này</Link></Button></div>
+      <h2 className="text-lg font-semibold">Bài tập thực hành ({data.exercises.length})</h2>
       {!data.exercises.length ? <EmptyState title="Buổi học chưa có bài tập" description="Chọn bài từ ngân hàng đề để giao cho sinh viên." /> : data.exercises.map((problem) => <article key={problem.id} className="flex flex-wrap items-center justify-between gap-4 rounded-xl border bg-card p-5 shadow-sm">
         <div className="min-w-0 flex-1 space-y-2"><div className="flex flex-wrap items-center gap-2"><h3 className="font-semibold">{problem.order}. {problem.title}</h3><span className="rounded bg-indigo-50 px-2 py-1 text-xs text-indigo-700 dark:bg-indigo-500/20 dark:text-indigo-300">{adminLevelLabel(problem.level)}</span></div>
           <p className="line-clamp-2 text-sm text-muted-foreground">{problem.description}</p><p className="text-xs text-muted-foreground">{problem.time_limit_seconds}s · {problem.total_number_testcase} testcase · {problem.submitted_count ?? "—"} bài nộp</p></div>
-        <div className="flex flex-wrap gap-2"><Button asChild variant="outline" size="sm"><Link href={`/admin/courses/${encodeURIComponent(courseId)}/sessions/${lessonId}/problems/${problem.id}`}>Nội dung & testcase</Link></Button>
-          <Button asChild size="sm" className={ADMIN_PRIMARY}><Link href={`${submissionLink}&problem_id=${problem.id}`}>Xem bài nộp</Link></Button></div>
+        <Button asChild variant="outline" size="sm"><Link href={`/admin/courses/${encodeURIComponent(courseId)}/sessions/${lessonId}/problems/${problem.id}`}>Nội dung & testcase</Link></Button>
       </article>)}
     </section>
     {editing && course.data && session && <AdminLessonForm course={course.data} session={session} onClose={() => setEditing(false)} />}

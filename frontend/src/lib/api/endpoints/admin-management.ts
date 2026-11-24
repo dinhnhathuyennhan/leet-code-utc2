@@ -4,7 +4,7 @@ import type { AxiosRequestConfig } from "axios";
 import type { AccountResponse } from "@/lib/api/types";
 import type {
   AdminClass, AdminCourse, AdminEnrollment, AdminLesson, AdminLessonPayload,
-  AdminAIConnection, AdminAIReview, AdminPreviewResult, AdminProblem, AdminProblemList, AdminProblemPayload, AdminSubmissionDetail, AdminTestcasePayload, JudgeResult,
+  AdminAIConnection, AdminAIReview, AdminPreviewResult, AdminProblem, AdminProblemList, AdminProblemPayload, AdminTestcasePayload, JudgeResult,
 } from "@/lib/types/admin";
 
 const segment = encodeURIComponent;
@@ -82,7 +82,3 @@ export const uploadAdminTestcases = (id: string, lessonId: string, problemId: st
 export const testAdminJudge = () => request<JudgeResult>({ method: "POST", url: "/judge0/test", timeout: 60000 });
 export const runAdminJudge = (data: { source_code: string; language_id: number; stdin: string }) =>
   request<JudgeResult>({ method: "POST", url: "/judge0/run", data, timeout: 60000 });
-
-export const getAdminSubmission = (id: string) => request<AdminSubmissionDetail>({ url: `/submissions/${segment(id)}` });
-export const saveAdminSubmission = (id: string, data: { feedback: string; status: string; manual_score: number | null }) =>
-  request<AdminSubmissionDetail>({ method: "PATCH", url: `/submissions/${segment(id)}`, data });

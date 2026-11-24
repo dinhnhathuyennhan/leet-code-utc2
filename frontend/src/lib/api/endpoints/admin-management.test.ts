@@ -5,7 +5,7 @@ import { setAccessToken } from "@/lib/auth/token-store";
 import axiosInstance from "@/lib/axios";
 import {
   addAdminClassEnrollment, adminCourseUrl, adminProblemUrl, deleteAdminEnrollment,
-  getAdminCourses, getAdminProblems, saveAdminLesson, saveAdminSubmission, uploadAdminTestcases,
+  getAdminCourses, getAdminProblems, saveAdminLesson, uploadAdminTestcases,
 } from "./admin-management";
 
 const API = "http://localhost:8000";
@@ -69,14 +69,6 @@ describe("Admin API contracts", () => {
     } finally {
       axiosInstance.defaults.adapter = previousAdapter;
     }
-  });
-
-  it("preserves null to remove a manual grade override", async () => {
-    server.use(http.patch(`${API}/submissions/42`, async ({ request }) => {
-      expect(await request.json()).toEqual({ feedback: "Đã kiểm tra", status: "accepted", manual_score: null });
-      return HttpResponse.json({ id: 42, manual_score: null });
-    }));
-    expect(await saveAdminSubmission("42", { feedback: "Đã kiểm tra", status: "accepted", manual_score: null })).toMatchObject({ id: 42, manual_score: null });
   });
 
   it("passes problem search and pagination to the existing endpoint", async () => {

@@ -10,7 +10,6 @@ export const adminKeys = {
   course: (id: string) => ["admin", "course", id] as const,
   classes: ["admin", "classes"] as const,
   profile: ["admin", "profile"] as const,
-  submissions: ["admin", "submissions"] as const,
   problems: ["admin", "problems"] as const,
 };
 

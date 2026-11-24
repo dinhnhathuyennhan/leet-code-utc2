@@ -51,20 +51,28 @@ function FormMessage({ name }: { name: keyof ChangePasswordFormValues }) {
 interface PasswordChecklistProps {
   newPassword: string;
   currentPassword: string;
+  /** Email tài khoản; phần trước @ của Sinh viên chính là MSSV. */
+  email?: string;
 }
 
-function PasswordChecklist({ newPassword, currentPassword }: PasswordChecklistProps) {
+function PasswordChecklist({ newPassword, currentPassword, email }: PasswordChecklistProps) {
+  // Khớp backend: không chứa phần trước @ của email (>= 4 ký tự), không phân biệt hoa thường
+  const emailLocal = (email ?? "").split("@")[0].toLowerCase();
+  const isNotPersonal =
+    newPassword.length > 0 &&
+    (emailLocal.length < 4 || !newPassword.toLowerCase().includes(emailLocal));
   const isDifferentFromCurrent = newPassword.length > 0 && newPassword !== currentPassword;
   const isMinLength = newPassword.length >= 8;
   const hasComplexChars =
     /[A-Z]/.test(newPassword) &&
     /[0-9]/.test(newPassword) &&
-    /[!@#$%^&*]/.test(newPassword);
+    /[^\p{L}\p{N}\s]/u.test(newPassword);
 
   const rules = [
     { label: "Khác mật khẩu hiện tại", valid: isDifferentFromCurrent },
     { label: "Tối thiểu 8 ký tự", valid: isMinLength },
-    { label: "Chứa ít nhất 1 chữ hoa, 1 số và 1 ký tự đặc biệt (!@#$%^&*)", valid: hasComplexChars },
+    { label: "Chứa ít nhất 1 chữ hoa, 1 số và 1 ký tự đặc biệt (ví dụ !@#$%^&*)", valid: hasComplexChars },
+    { label: "Không chứa mã sinh viên hoặc email", valid: isNotPersonal },
   ];
 
   return (
@@ -270,7 +278,7 @@ export function ChangePasswordForm({ onSuccess }: ChangePasswordFormProps) {
                   />
 
                   {/* Password Checklist */}
-                  <PasswordChecklist newPassword={newPassword} currentPassword={currentPassword} />
+                  <PasswordChecklist newPassword={newPassword} currentPassword={currentPassword} email={user?.email} />
                 </div>
 
                 {/* Xác nhận mật khẩu mới */}

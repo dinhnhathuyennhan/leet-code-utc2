@@ -44,8 +44,15 @@ class ChangePasswordRequest(BaseModel):
     @field_validator("new_password")
     @classmethod
     def validate_strength(cls, v: str) -> str:
+        # Khớp với changePasswordSchema ở frontend (validate-field-form.ts)
         if len(v) < 8:
             raise WeakPasswordError("Mật khẩu mới phải có ít nhất 8 ký tự")
+        if not any(c.isupper() for c in v):
+            raise WeakPasswordError("Mật khẩu mới cần ít nhất 1 chữ cái viết hoa")
+        if not any(c.isdigit() for c in v):
+            raise WeakPasswordError("Mật khẩu mới cần ít nhất 1 chữ số")
+        if not any(not c.isalnum() and not c.isspace() for c in v):
+            raise WeakPasswordError("Mật khẩu mới cần ít nhất 1 ký tự đặc biệt")
         return v
 
     @field_validator("confirm_password")

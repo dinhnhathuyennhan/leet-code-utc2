@@ -109,7 +109,7 @@ function AdminPasswordDialog({ onClose }: { onClose: () => void }) {
       toast.success("Đã đổi mật khẩu quản trị."); onClose();
     } catch (error) { toast.error(getErrorMessage(error)); } finally { setBusy(false); }
   }
-  return <AdminDialog open title="Đổi mật khẩu quản trị" description="Mật khẩu mới cần ít nhất 8 ký tự, có chữ hoa, chữ số và ký tự đặc biệt (!@#$%^&*)." onClose={onClose} busy={busy}>
+  return <AdminDialog open title="Đổi mật khẩu quản trị" description="Mật khẩu mới cần ít nhất 8 ký tự, có chữ hoa, chữ số, ký tự đặc biệt (ví dụ !@#$%^&*) và không chứa email." onClose={onClose} busy={busy}>
     <form onSubmit={(event) => void submit(event)} className="space-y-4">
       <label className="block space-y-2 text-sm font-medium">Mật khẩu hiện tại<PasswordInput autoComplete="current-password" value={currentPassword} onChange={(event) => setCurrentPassword(event.target.value)} disabled={busy} required /></label>
       <label className="block space-y-2 text-sm font-medium">Mật khẩu mới<PasswordInput autoComplete="new-password" value={newPassword} onChange={(event) => setNewPassword(event.target.value)} disabled={busy} required /></label>

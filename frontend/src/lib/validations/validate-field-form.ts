@@ -27,7 +27,8 @@ export const changePasswordSchema = z
       .min(8, { message: "Mật khẩu mới phải có ít nhất 8 ký tự" })
       .regex(/[A-Z]/, { message: "Cần ít nhất 1 chữ cái viết hoa" })
       .regex(/[0-9]/, { message: "Cần ít nhất 1 chữ số" })
-      .regex(/[!@#$%^&*]/, { message: "Cần ít nhất 1 ký tự đặc biệt (!@#$%^&*)" }),
+      // Khớp backend: mọi ký tự không phải chữ, số hay khoảng trắng đều tính là ký tự đặc biệt
+      .regex(/[^\p{L}\p{N}\s]/u, { message: "Cần ít nhất 1 ký tự đặc biệt (ví dụ !@#$%^&*)" }),
     confirmPassword: z
       .string()
       .min(1, { message: "Vui lòng xác nhận mật khẩu mới" }),

@@ -19,6 +19,7 @@ rectangle "Quản lý lớp hành chính" {
   usecase "Tạo lớp hành chính" as Create
   usecase "Xem danh sách lớp hành chính" as List
   usecase "Xem chi tiết lớp hành chính" as Detail
+  usecase "Đổi mã lớp hành chính" as Rename
   usecase "Xoá lớp hành chính" as Delete
   usecase "Kiểm tra lớp không còn Sinh viên" as CheckEmpty
 }
@@ -27,6 +28,7 @@ Teacher --> Create
 Teacher --> List
 Teacher --> Detail
 Admin --> Delete
+Admin --> Rename
 
 Detail .> List : <<extend>>
 Delete ..> CheckEmpty : <<include>>
@@ -34,5 +36,9 @@ Delete ..> CheckEmpty : <<include>>
 note bottom of Create
   Nhập hệ, khoá, ngành;
   server tự ghép class_id (vd: CQ.67.CNTT)
+end note
+note bottom of Rename
+  Đổi hệ/khoá/ngành thành mã mới; toàn bộ
+  Sinh viên chuyển sang mã mới cùng lúc
 end note
 @enduml

@@ -41,3 +41,23 @@ def test_matchers():
     assert harness.text_outputs_match("a b\n", " a b")
     assert harness.extract_result("noise") is None
     assert json.loads(harness.extract_result("x" + harness.RESULT_MARKER + "5")) == 5
+
+def test_json_matcher_float_tolerance():
+    assert harness.json_outputs_match("0.3", "0.30000000000000004")
+    assert harness.json_outputs_match("[0.0,1.0]", "[0.0,1.0000000001]")
+    assert harness.json_outputs_match("2.0", "2")
+    assert harness.json_outputs_match('{"a":1.0,"b":[2]}', '{"b":[2],"a":1.0}')
+    assert not harness.json_outputs_match("0.3", "0.31")
+    assert not harness.json_outputs_match("[1.0]", "[1.0,2.0]")
+    assert not harness.json_outputs_match("[1,2]", "[2,1]")
+    assert not harness.json_outputs_match('{"a":1.0}', '{"b":1.0}')
+
+
+def test_json_matcher_keeps_exact_for_non_floats():
+    big = 10**30
+    assert harness.json_outputs_match(str(big), str(big))
+    assert not harness.json_outputs_match(str(big), str(big + 1))
+    assert not harness.json_outputs_match("1", "2")
+    assert not harness.json_outputs_match('"1.0"', "1.0")
+    assert not harness.json_outputs_match("null", "0")
+    assert not harness.json_outputs_match("[", "[")

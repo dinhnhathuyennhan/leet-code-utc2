@@ -40,7 +40,7 @@ export function AdminClasses() {
         <Table className="min-w-[680px]"><TableHeader><TableRow className="bg-[#352078] hover:bg-[#352078]">{["Mã lớp", "Hệ", "Khóa", "Ngành", "Sinh viên", "Thao tác"].map((label) => <TableHead key={label} className="text-white">{label}</TableHead>)}</TableRow></TableHeader>
           <TableBody>{rows.map((item) => <TableRow key={item.class_id}>
             <TableCell className="font-semibold">{item.class_id}</TableCell><TableCell>{item.type}</TableCell><TableCell>{item.course_number}</TableCell><TableCell>{item.department}</TableCell><TableCell>{item.student_count}</TableCell>
-            <TableCell><div className="flex gap-2"><Button variant="outline" size="sm" onClick={() => setSelected(item.class_id)}>Xem sinh viên</Button>
+            <TableCell><div className="flex flex-wrap gap-2"><Button variant="outline" size="sm" onClick={() => setSelected(item.class_id)}>Xem sinh viên</Button>
               <AdminConfirm label="Xóa lớp" title={`Xóa lớp ${item.class_id}?`} description="Chỉ lớp không có sinh viên mới được xóa." disabled={item.student_count > 0} onConfirm={() => remove(item.class_id)} /></div>
               {item.student_count > 0 && <p className="mt-1 text-xs text-muted-foreground">Không thể xóa: lớp còn {item.student_count} sinh viên.</p>}</TableCell>
           </TableRow>)}</TableBody></Table>}

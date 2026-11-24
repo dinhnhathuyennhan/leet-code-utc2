@@ -45,6 +45,20 @@ export interface StudentSubmissionTestcase {
   input: unknown;
   expected_output: unknown;
   is_sample: boolean;
+  /** Kết quả chấm của test mẫu này; null với bài nộp cũ. */
+  status?: string | null;
+  time?: number | null;
+}
+
+/**
+ * Kết quả thật của một testcase (cả test ẩn), theo thứ tự chấm, không kèm dữ liệu test.
+ * `status` = "skipped" khi hệ thống dừng chấm sớm sau một test quá thời gian.
+ */
+export interface TestcaseResult {
+  index: number;
+  is_sample: boolean;
+  status: string;
+  time: number | null;
 }
 
 export interface StudentSubmissionDetail {
@@ -65,6 +79,8 @@ export interface StudentSubmissionDetail {
   total_testcases: number;
   submitted_datetime: string;
   testcases: StudentSubmissionTestcase[];
+  /** Rỗng với bài nộp chấm trước khi hệ thống lưu kết quả từng test. */
+  testcase_results?: TestcaseResult[];
 }
 
 /**
@@ -94,7 +110,14 @@ export type GradingResultView = Pick<
   Partial<
     Pick<
       StudentSubmissionDetail,
-      "feedback" | "language" | "submitted_datetime" | "problem_code" | "problem_title" | "problem_id" | "testcases"
+      | "feedback"
+      | "language"
+      | "submitted_datetime"
+      | "problem_code"
+      | "problem_title"
+      | "problem_id"
+      | "testcases"
+      | "testcase_results"
     >
   >;
 

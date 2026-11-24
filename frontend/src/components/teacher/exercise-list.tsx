@@ -24,7 +24,7 @@ export function ExerciseList({ exercises, courseId, sessionId, editHref }: Props
 
   return (
     <section className="space-y-4">
-      <div className="flex items-center justify-between">
+      <div className="flex flex-wrap items-center justify-between gap-2">
         <h2 className="text-base font-bold uppercase tracking-wider text-slate-900 dark:text-slate-100">
           Danh sách bài tập thực hành ({String(exercises.length).padStart(2, "0")})
         </h2>
@@ -71,8 +71,8 @@ export function ExerciseList({ exercises, courseId, sessionId, editHref }: Props
                 </div>
               </div>
 
-              <div className="flex items-center gap-3">
-                <Button asChild variant="outline" className="h-10 gap-1.5 border-slate-300 font-medium">
+              <div className="flex min-w-0 flex-wrap items-center gap-3">
+                <Button asChild variant="outline" className="h-10 shrink-0 gap-1.5 border-slate-300 font-medium">
                   <Link href={`/teacher/courses/${courseId}/sessions/${sessionId}/problems/${item.id}`}>
                     <Eye className="size-4" /> Xem chi tiết
                   </Link>

@@ -15,7 +15,9 @@ import type { GradingResultView } from "@/lib/types/submission";
  * Gồm 3 phần:
  *  1. Tóm tắt: trạng thái, điểm thang 10, số testcase đạt, thời gian nộp.
  *  2. Output lỗi (biên dịch / runtime) nếu có.
- *  3. Bảng từng testcase: testcase đầu `passed_count` là đạt, phần còn lại sai.
+ *  3. Bảng từng testcase theo kết quả chấm thật (`testcase_results`, gồm cả test
+ *     ẩn nhưng không kèm dữ liệu). Bài nộp cũ không có dữ liệu này thì ẩn bảng,
+ *     chỉ hiện tổng số test đạt ở phần tóm tắt.
  *
  * Chấp nhận cả bản rút gọn (`SubmissionResult`, dùng khi poll) lẫn bản đầy đủ
  * (`StudentSubmissionDetail`, dùng khi mở trang chi tiết bài nộp).
@@ -31,7 +33,7 @@ export function GradingResultPanel({
   const score = scoreOutOfTen(submission.passed_count, submission.total_testcases);
   const errorOutput = submission.compile_output?.trim();
   const { t } = useLocale();
-  const testcases = submission.testcases ?? [];
+  const results = submission.testcase_results ?? [];
 
   return (
     <div className={cn("space-y-4", className)}>
@@ -117,47 +119,51 @@ export function GradingResultPanel({
       )}
 
       {/* ─── Bảng chi tiết testcase ────────────────────────────────────── */}
-      {testcases.length > 0 && (
+      {results.length > 0 && (
         <div className="rounded-2xl border bg-card p-5">
           <h3 className="mb-3 text-sm font-bold text-slate-900 dark:text-slate-100">
             {t("result.testcaseDetails")}
           </h3>
           <div className="grid gap-2 sm:grid-cols-2">
-            {testcases.map((testcase, index) => {
-              // Backend chỉ trả về số testcase đạt (passed_count) theo thứ tự,
-              // nên testcase đầu tiên trong danh sách là các testcase đã đạt.
-              const passed = index < submission.passed_count;
+            {results.map((result) => {
+              const passed = result.status === "accepted";
+              const skipped = result.status === "skipped";
               return (
                 <div
-                  key={testcase.id}
+                  key={result.index}
                   className={cn(
                     "flex items-center justify-between gap-2 rounded-lg border px-3 py-2 text-xs",
-                    passed
-                      ? "bg-emerald-50/60 dark:bg-emerald-500/10"
-                      : "border-red-200 bg-red-50/60 dark:border-red-500/30 dark:bg-red-500/10",
+                    passed && "bg-emerald-50/60 dark:bg-emerald-500/10",
+                    skipped && "bg-muted/50 text-muted-foreground",
+                    !passed &&
+                      !skipped &&
+                      "border-red-200 bg-red-50/60 dark:border-red-500/30 dark:bg-red-500/10",
                   )}
                 >
                   <span className="font-medium">
-                    Test #{index + 1}
-                    {testcase.is_sample && (
+                    Test #{result.index}
+                    {result.is_sample && (
                       <span className="ml-1.5 text-[10px] text-muted-foreground">({t("result.sample")})</span>
                     )}
                   </span>
                   <span
                     className={cn(
                       "flex items-center gap-1 font-semibold",
-                      passed
-                        ? "text-emerald-600 dark:text-emerald-400"
-                        : "text-red-600 dark:text-red-400",
+                      passed && "text-emerald-600 dark:text-emerald-400",
+                      !passed && !skipped && "text-red-600 dark:text-red-400",
                     )}
                   >
                     {passed ? (
                       <>
                         <CheckCircle2 className="size-3.5" /> {t("result.correct")}
                       </>
+                    ) : skipped ? (
+                      <>
+                        <CircleSlash className="size-3.5" /> {t("result.skipped")}
+                      </>
                     ) : (
                       <>
-                        <XCircle className="size-3.5" /> {t("result.incorrect")}
+                        <XCircle className="size-3.5" /> {t(submissionStatusMeta(result.status).labelKey)}
                       </>
                     )}
                   </span>
@@ -165,6 +171,9 @@ export function GradingResultPanel({
               );
             })}
           </div>
+          {results.some((result) => result.status === "skipped") && (
+            <p className="mt-3 text-xs text-muted-foreground">{t("result.skippedHint")}</p>
+          )}
         </div>
       )}
     </div>

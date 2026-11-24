@@ -130,6 +130,14 @@ class CreateClassRequest(BaseModel):
         return build_class_id(self.type, self.course_number, self.department)
 
 
+class UpdateClassRequest(CreateClassRequest):
+    """Body của ``PATCH /classes/{class_id}``: đổi mã lớp.
+
+    Bắt buộc đủ cả 3 phần (hệ, khoá, ngành), kiểm tra y hệt ``CreateClassRequest``;
+    ``class_id`` (property) là mã lớp mới do server ghép.
+    """
+
+
 class ClassResponse(BaseModel):
     class_id: str
     type: str
@@ -139,7 +147,14 @@ class ClassResponse(BaseModel):
 
 
 class ClassStudentResponse(BaseModel):
+    """Một sinh viên thuộc lớp hành chính.
+
+    ``user_id`` là UUID (khoá/gọi API), ``student_code`` là MSSV (hiển thị cho
+    người dùng). Hai trường này KHÔNG được dùng lẫn nhau.
+    """
+
     user_id: str
+    student_code: str | None = None
     full_name: str
     email: AppEmailStr
     class_id: str | None

@@ -3,7 +3,7 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { ArrowLeft, LogOut } from "lucide-react";
+import { ArrowLeft, Loader2, LogOut } from "lucide-react";
 import { LoginForm } from "@/components/shared/login-form";
 import type { UserResponse } from "@/lib/api/types";
 import { AuthLayout } from "@/components/shared/auth-layout";
@@ -15,8 +15,15 @@ export default function LoginPage() {
   const router = useRouter();
   const auth = useAuth();
   const [isLoggingOut, setIsLoggingOut] = useState(false);
+  const [isRedirecting, setIsRedirecting] = useState(false);
+  const [isSubmittingLogin, setIsSubmittingLogin] = useState(false);
+
+  const handleSubmittingChange = (isSubmitting: boolean) => {
+    setIsSubmittingLogin(isSubmitting);
+  };
 
   const handleLoginSuccess = (user: UserResponse) => {
+    setIsRedirecting(true);
     router.replace(getHomePath(user));
   };
 
@@ -26,7 +33,18 @@ export default function LoginPage() {
     setIsLoggingOut(false);
   };
 
-  if (auth.status === "authenticated") {
+  if (isRedirecting) {
+    return (
+      <div className="flex h-[100dvh] w-full items-center justify-center bg-slate-900" aria-busy="true">
+        <Loader2 className="size-8 animate-spin text-white" />
+      </div>
+    );
+  }
+
+  if (
+    auth.status === "authenticated" &&
+    !isSubmittingLogin
+  ) {
     return (
       <AuthLayout>
         <div className="w-full max-w-md rounded-3xl bg-white p-8 text-center shadow-2xl">
@@ -52,7 +70,10 @@ export default function LoginPage() {
 
   return (
     <AuthLayout>
-      <LoginForm onSuccess={handleLoginSuccess} />
+      <LoginForm
+        onSuccess={handleLoginSuccess}
+        onSubmittingChange={handleSubmittingChange}
+      />
     </AuthLayout>
   );
 }

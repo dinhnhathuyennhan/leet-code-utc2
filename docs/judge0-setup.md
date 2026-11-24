@@ -61,6 +61,27 @@ openssl rand -hex 16   # dùng cho REDIS_PASSWORD và POSTGRES_PASSWORD
 openssl rand -hex 24   # dùng cho AUTHN_TOKEN
 ```
 
+### Năng lực chấm: số worker và chấm theo lô
+
+Kết quả review production `1.0.0-rc.1` (19/11/2026): Judge0 chạy testcase **gần như tuần tự**. Một bài lặp vô hạn trên đề 50 test chiếm máy chấm khoảng 237 s, nên bài của sinh viên khác phải xếp hàng (và "Kiểm tra đáp án" với `RUN_TIMEOUT_SECONDS=10` bị quá giờ).
+
+- **Tăng số worker:** đặt `COUNT=<số worker>` trong `judge0.conf` (biến của Judge0 cho số tiến trình worker chạy song song), rồi chạy `docker compose restart workers`. Chọn bằng số vCPU của máy Judge0. EC2 1–2 vCPU chỉ đủ cho nhóm nhỏ, nên nâng lên loại 4 vCPU trước buổi thi hoặc demo. Cũng đặt `GRADING_WORKERS` ở backend bằng số này.
+- **Kiểm tra:** gửi 2 bài lặp vô hạn cùng lúc (Admin, `POST /problems/{id}/run-preview` ở 2 tab). Nếu tổng thời gian vẫn gấp đôi một bài, các worker chưa chạy song song.
+- **Backend chấm theo lô** `GRADING_CHUNK_SIZE` (mặc định 10 test). Lô có test quá thời gian thì không gửi các lô sau (test còn lại có trạng thái `skipped`), và lô lỗi biên dịch cũng dừng. Xem docs/api-design-submission.md, mục "Chấm theo lô và dừng sớm".
+- **Không chấm trùng:** mỗi bài chỉ một worker giữ quyền chấm (lease `GRADING_LEASE_SECONDS`, mặc định 120 s, gia hạn trong lúc chờ Judge0). Backend restart giữa chừng thì sau tối đa một lease bài được chấm lại. Xem docs/api-design-submission.md, mục "Nhận bài chấm và chống chấm trùng".
+
+### Phiên bản ngôn ngữ (image `judge0/judge0:1.13.1`)
+
+| Ngôn ngữ | `judge0_id` | Phiên bản | Hệ quả cho sinh viên |
+|---|---|---|---|
+| Python | 71 | 3.8.1 | Không có `match`, `X | Y` trong type hint lúc chạy |
+| JavaScript | 63 | Node 12.14.0 | `?.`, `??` bị báo **lỗi biên dịch** |
+| C++ | 54 | GCC, `-std=c++17` | Không có C++20 (`requires`, concepts) |
+| C | 50 | GCC | — |
+| Java | 62 | OpenJDK 13 | Lớp phải tên `Main` |
+
+Muốn dùng phiên bản mới (Node ≥ 18, C++20, Python ≥ 3.10), cần chuyển sang image Judge0 bản mới hơn hoặc `judge0/judge0-extra`, tra lại `language_id` (`GET /languages`) và ghi đè bằng `JUDGE_LANGUAGES` trong `.env`, ví dụ `{"javascript":{"judge0_id":93}}`. Chỉ các ngôn ngữ python, javascript, c, cpp, java được hỗ trợ; khoá khác (vd `go`) trong `JUDGE_LANGUAGES` bị bỏ qua.
+
 ### Bước 2: khai báo token trong `.env`
 
 Backend đọc `JUDGE0_AUTH_TOKEN` (header `X-Auth-Token` gửi kèm mỗi request)

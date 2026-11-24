@@ -55,6 +55,21 @@ def testcase_to_storage(item: dict[str, Any]) -> dict[str, Any]:
     }
 
 
+def problem_testcase_to_storage(item: dict[str, Any], function_name: str | None) -> dict[str, Any]:
+    """Persist a testcase according to its owning problem's grading mode."""
+    if function_name is None:
+        return testcase_to_storage({
+            **item,
+            "input_type": LEGACY_INPUT,
+            "expected_output_type": LEGACY_OUTPUT,
+        })
+    return testcase_to_storage({
+        **item,
+        "input_type": JSON_ARGUMENTS,
+        "expected_output_type": JSON_VALUE,
+    })
+
+
 def testcase_to_api_values(testcase: Any) -> dict[str, Any]:
     return {
         "input": decode_testcase_value(testcase.input, testcase.input_type),

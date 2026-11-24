@@ -42,7 +42,7 @@ async def test_ai_connection(
 async def review_admin_preview(
     problem_id: int,
     data: AdminPreviewReviewRequest,
-    current_user: User = Depends(require_role(Role.ADMIN)),
+    current_user: User = Depends(require_role(Role.ADMIN, Role.TEACHER)),
 ) -> AIReviewResponse:
     verdict = verify_preview_receipt(
         data.preview_token, user_id=current_user.user_id, problem_id=problem_id,

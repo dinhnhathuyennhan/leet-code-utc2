@@ -6,8 +6,10 @@ import { useParams, useRouter, useSearchParams } from "next/navigation";
 import {
   ArrowLeft,
   CheckCircle2,
+  CircleSlash,
   Clock,
   Code2,
+  RefreshCw,
   Save,
   XCircle,
 } from "lucide-react";
@@ -17,8 +19,9 @@ import { ErrorState } from "@/components/shared/page-state";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
-import { getSubmissionDetail, updateSubmission } from "@/lib/api/endpoints/dashboard";
+import { getSubmissionDetail, regradeSubmission, updateSubmission } from "@/lib/api/endpoints/dashboard";
 import type { SubmissionDetail } from "@/lib/types/dashboard";
+import { testcaseVerdict } from "@/lib/helpers/submission-status";
 
 /**
  * Giữ lại `returnTo` khi đó là đường dẫn nội bộ (`/...`), bỏ qua mọi URL tuyệt đối
@@ -43,6 +46,7 @@ export default function SubmissionDetailPage() {
   const [manualScore, setManualScore] = useState("");
   const [saved, setSaved] = useState(false);
   const [status, setStatus] = useState("pending");
+  const [regrading, setRegrading] = useState(false);
 
   /** Chỉ nhận đường dẫn nội bộ, tránh bị lợi dụng để điều hướng ra ngoài hệ thống. */
   const returnTo = safeReturnTo(searchParams.get("returnTo"));
@@ -62,6 +66,30 @@ export default function SubmissionDetailPage() {
       .catch(setError);
   }, [id]);
 
+  useEffect(() => {
+    if (data?.status !== "pending" && data?.status !== "processing") return;
+    let consecutiveErrors = 0;
+    const timer = window.setInterval(() => {
+      void getSubmissionDetail(id)
+        .then((submission) => {
+          consecutiveErrors = 0;
+          setSaveError(null);
+          setData(submission);
+          setStatus(submission.status);
+        })
+        .catch((error) => {
+          consecutiveErrors += 1;
+          setSaveError(
+            error instanceof Error
+              ? error.message
+              : "Không thể tải trạng thái bài nộp.",
+          );
+          if (consecutiveErrors >= 3) window.clearInterval(timer);
+        });
+    }, 1_500);
+    return () => window.clearInterval(timer);
+  }, [data?.status, id]);
+
   if (error) return <ErrorState error={error} />;
   if (!data) return <div className="rounded-xl border bg-card p-6 text-sm text-muted-foreground">Đang tải bài nộp...</div>;
 
@@ -76,7 +104,6 @@ export default function SubmissionDetailPage() {
       const submission = await updateSubmission(id, {
         feedback,
         manual_score: parsedScore,
-        status,
       });
       setData(submission);
       setStatus(submission.status);
@@ -88,7 +115,19 @@ export default function SubmissionDetailPage() {
     }
   }
 
-  const statusLabel = data.status === "compile_error" ? "Lỗi biên dịch" : data.status === "accepted" ? "Đã chấp nhận" : data.status === "pending" ? "Đang chờ" : "Sai kết quả";
+  async function regrade() {
+    setRegrading(true);
+    setSaveError(null);
+    try {
+      await regradeSubmission(id);
+      setData((current) => current ? { ...current, status: "pending" } : current);
+      setStatus("pending");
+    } catch (requestError) {
+      setSaveError(requestError instanceof Error ? requestError.message : "Không thể chấm lại bài nộp.");
+    } finally { setRegrading(false); }
+  }
+
+  const statusLabel = data.status === "compile_error" ? "Lỗi biên dịch" : data.status === "accepted" ? "Đã chấp nhận" : data.status === "pending" ? "Đang chờ" : data.status === "internal_error" ? "Lỗi hệ thống chấm" : "Sai kết quả";
 
   return (
     <div className="space-y-6">
@@ -111,6 +150,7 @@ export default function SubmissionDetailPage() {
         </div>
 
         <div className="flex items-center gap-3">
+          {data.status === "internal_error" && <Button variant="outline" onClick={() => void regrade()} disabled={regrading}><RefreshCw className={`size-4 ${regrading ? "animate-spin" : ""}`} /> Chấm lại</Button>}
           <Button
             onClick={() => void saveSubmission()}
             className="h-10 bg-[#2f226b] gap-2 font-semibold text-white shadow-sm hover:bg-[#251b56]"
@@ -164,17 +204,23 @@ export default function SubmissionDetailPage() {
             <h3 className="mb-3 text-sm font-bold text-slate-900 dark:text-slate-100">
               Kết quả chi tiết các Test Cases ({data.passed_count}/{data.total_testcases} Đúng)
             </h3>
-            <div className="grid gap-2 sm:grid-cols-2">
-              {data.testcases.map((testcase, index) => {
-                const passed = index < data.passed_count;
-                return <div key={testcase.id} className={`flex items-center justify-between rounded-lg border px-3 py-2 text-xs ${passed ? "bg-muted/30" : "border-red-200 bg-red-50/50 dark:bg-red-500/10"}`}>
-                  <span className="font-medium">Test #{index + 1}</span>
-                  <span className={`flex items-center gap-1 font-semibold ${passed ? "text-emerald-600 dark:text-emerald-400" : "text-red-600 dark:text-red-400"}`}>
-                    {passed ? <><CheckCircle2 className="size-3.5" /> Đúng</> : <><XCircle className="size-3.5" /> Sai kết quả</>}
-                  </span>
-                </div>;
-              })}
-            </div>
+            {data.testcases.every((testcase) => !testcase.status) ? (
+              <p className="text-xs text-muted-foreground">
+                Bài nộp này được chấm trước khi hệ thống lưu kết quả từng test, chỉ có tổng số test đạt.
+              </p>
+            ) : (
+              <div className="grid gap-2 sm:grid-cols-2">
+                {data.testcases.map((testcase, index) => {
+                  const verdict = testcaseVerdict(testcase.status);
+                  return <div key={testcase.id} className={`flex items-center justify-between rounded-lg border px-3 py-2 text-xs ${verdict.tone === "pass" ? "bg-muted/30" : verdict.tone === "fail" ? "border-red-200 bg-red-50/50 dark:bg-red-500/10" : "bg-muted/50 text-muted-foreground"}`}>
+                    <span className="font-medium">Test #{index + 1}{testcase.is_sample && <span className="ml-1.5 text-[10px] text-muted-foreground">(mẫu)</span>}</span>
+                    <span className={`flex items-center gap-1 font-semibold ${verdict.tone === "pass" ? "text-emerald-600 dark:text-emerald-400" : verdict.tone === "fail" ? "text-red-600 dark:text-red-400" : ""}`}>
+                      {verdict.tone === "pass" ? <CheckCircle2 className="size-3.5" /> : verdict.tone === "fail" ? <XCircle className="size-3.5" /> : <CircleSlash className="size-3.5" />} {verdict.label}
+                    </span>
+                  </div>;
+                })}
+              </div>
+            )}
           </div>
         </div>
 
@@ -193,11 +239,8 @@ export default function SubmissionDetailPage() {
 
             <div>
               <label className="text-xs font-semibold text-slate-700 dark:text-slate-300">Trạng thái</label>
-              <select value={status} onChange={(event) => setStatus(event.target.value)} className="mt-1 h-11 w-full rounded-md border bg-background px-3 text-sm">
-                <option value="pending">Đang chờ</option>
-                <option value="accepted">Đã chấp nhận</option>
-                <option value="wrong_answer">Sai kết quả</option>
-                <option value="compile_error">Lỗi biên dịch</option>
+              <select value={status} disabled className="mt-1 h-11 w-full rounded-md border bg-muted px-3 text-sm opacity-80">
+                <option value={status}>{statusLabel}</option>
               </select>
             </div>
 

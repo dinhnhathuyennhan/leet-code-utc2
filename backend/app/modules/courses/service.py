@@ -1,7 +1,12 @@
+import logging
 import re
+from io import BytesIO
 from datetime import timedelta
 from uuid import UUID
-from sqlmodel import Session, func, or_, select
+from sqlalchemy.exc import IntegrityError
+from sqlalchemy.orm import load_only, selectinload
+from sqlmodel import Session, delete, func, or_, select
+from openpyxl import Workbook
 
 from app.core.exceptions import (
     ConflictError,
@@ -23,6 +28,7 @@ from app.modules.courses.access import (
     get_manageable_course,
     get_viewable_course,
 )
+from app.modules.courses import grade_service
 from app.modules.courses.view import build_course_response
 from app.models import (
     Course,
@@ -30,8 +36,82 @@ from app.models import (
     Lesson,
     Problem,
     Submission,
+    Testcase,
     User,
 )
+
+logger = logging.getLogger(__name__)
+
+
+def _excel_text(value: object) -> object:
+    """Keep text cells safe from Excel formula injection."""
+    if isinstance(value, str) and value.startswith(("=", "+", "-", "@")):
+        return f"'{value}"
+    return value
+
+
+def export_course_grades(session: Session, course_id: str, current_user: User) -> bytes:
+    """Build the teacher/admin grade view as a real XLSX without schema changes."""
+    get_manageable_course(
+        course_id, session, current_user, "Bạn không có quyền xuất bảng điểm này"
+    )
+    lessons = session.exec(
+        select(Lesson).where(Lesson.course_id == course_id).order_by(Lesson.lesson_number)
+    ).all()
+    lesson_ids = [lesson.lesson_id for lesson in lessons]
+    problems = session.exec(
+        select(Problem).where(Problem.lesson_id.in_(lesson_ids)).order_by(Problem.problem_id)
+    ).all() if lesson_ids else []
+    problems_by_lesson = {lesson_id: [] for lesson_id in lesson_ids}
+    for problem in problems:
+        problems_by_lesson[problem.lesson_id].append(problem)
+    enrollments = session.exec(
+        select(Enrollment, User).join(User, Enrollment.student_id == User.user_id).where(
+            Enrollment.course_id == course_id
+        ).order_by(User.student_code, User.full_name)
+    ).all()
+    best = grade_service.best_grade_scores(
+        session, [problem.problem_id for problem in problems], [student.user_id for _, student in enrollments]
+    )
+    rows = grade_service.build_grade_rows(lessons, problems_by_lesson, enrollments, best)
+
+    workbook = Workbook()
+    sheet = workbook.active
+    sheet.title = "Bảng điểm"
+    columns = ["STT", "MSSV", "Họ tên", "Lớp"]
+    for lesson in lessons:
+        columns.extend([f"Buổi {lesson.lesson_number}: {problem.report or problem.title}" for problem in problems_by_lesson[lesson.lesson_id]])
+        columns.append(f"Buổi {lesson.lesson_number}: TỔNG")
+    columns.append("ĐIỂM TỔNG")
+    sheet.append([_excel_text(value) for value in columns])
+
+    for index, row in enumerate(rows, start=1):
+        values: list[object] = [index, _excel_text(row["student_code"] or ""), _excel_text(row["full_name"]), _excel_text(row["class_id"] or "")]
+        session_totals: list[float] = []
+        for lesson in lessons:
+            scores = row["session_scores"][str(lesson.lesson_id)]
+            numeric_scores = []
+            for score in scores:
+                value = score["value"]
+                numeric = float(value) if value is not None else 0.0
+                numeric_scores.append(numeric)
+                values.append(round(numeric, 1))
+            total = round(sum(numeric_scores) / len(numeric_scores), 1) if numeric_scores else 0.0
+            session_totals.append(total)
+            values.append(total)
+        values.append(round(sum(session_totals) / len(session_totals), 1) if session_totals else 0.0)
+        sheet.append(values)
+
+    sheet.freeze_panes = "A2"
+    sheet.auto_filter.ref = sheet.dimensions
+    for cell in sheet[1]:
+        cell.font = cell.font.copy(bold=True)
+    for column in sheet.columns:
+        width = min(max(max(len(str(cell.value or "")) for cell in column) + 2, 10), 32)
+        sheet.column_dimensions[column[0].column_letter].width = width
+    buffer = BytesIO()
+    workbook.save(buffer)
+    return buffer.getvalue()
 
 
 def get_course(session: Session, course_id: str, current_user: User) -> CourseResponse:
@@ -124,6 +204,83 @@ def update_course(
     return build_course_response(course)
 
 
+class CourseHasSubmissionsError(ConflictError):
+    """Lớp học đã có bài nộp của sinh viên nên không xoá thường được (409)."""
+
+    error_code = "COURSE_HAS_SUBMISSIONS"
+
+
+def _count_submissions(session: Session, problem_ids: list[int]) -> int:
+    if not problem_ids:
+        return 0
+    return session.exec(
+        select(func.count()).select_from(Submission).where(Submission.problem_id.in_(problem_ids))
+    ).one()
+
+
+def delete_course(
+    course_id: str, session: Session, current_user: User, force: bool = False
+) -> None:
+    """Xoá lớp học phần cùng buổi học, bài tập (bản sao trong lớp), testcase và ghi danh.
+
+    - Quyền: Admin mọi lớp, hoặc Teacher là chủ lớp.
+    - Lớp đã có bài nộp: mặc định KHÔNG xoá (giữ lịch sử chấm của sinh viên),
+      raise `CourseHasSubmissionsError` kèm số bài nộp.
+    - `force=True` (chỉ Admin): xoá vĩnh viễn cả bài nộp của lớp đó. Teacher
+      hay role khác dùng `force` đều bị `ForbiddenError`, kiểm tra trước mọi truy vấn.
+    - Nếu có bài nộp mới chen vào sau lúc kiểm tra (đường không force), FK chặn
+      xoá -> rollback và báo `CourseHasSubmissionsError` để thử lại.
+    - Đề nguồn trong ngân hàng (problem.lesson_id = NULL) và tài khoản sinh
+      viên không bị ảnh hưởng.
+    """
+    if force and current_user.role_id != Role.ADMIN:
+        raise ForbiddenError("Chỉ Admin mới được xoá lớp học đã có bài nộp")
+    course = get_manageable_course(
+        course_id, session, current_user, "Bạn không có quyền xoá lớp học này"
+    )
+    lesson_ids = list(session.exec(select(Lesson.lesson_id).where(Lesson.course_id == course_id)).all())
+    problem_ids = (
+        list(session.exec(select(Problem.problem_id).where(Problem.lesson_id.in_(lesson_ids))).all())
+        if lesson_ids
+        else []
+    )
+    submission_count = _count_submissions(session, problem_ids)
+    if submission_count and not force:
+        raise CourseHasSubmissionsError(
+            f"Không thể xoá lớp học đã có bài nộp của sinh viên ({submission_count} bài nộp)"
+        )
+
+    try:
+        if force and problem_ids:
+            session.exec(delete(Submission).where(Submission.problem_id.in_(problem_ids)))
+        for model, column, ids in (
+            (Testcase, Testcase.problem_id, problem_ids),
+            (Problem, Problem.problem_id, problem_ids),
+            (Lesson, Lesson.lesson_id, lesson_ids),
+        ):
+            if ids:
+                for row in session.exec(select(model).where(column.in_(ids))).all():
+                    session.delete(row)
+                session.flush()
+        for enrollment in session.exec(select(Enrollment).where(Enrollment.course_id == course_id)).all():
+            session.delete(enrollment)
+        session.flush()
+        session.delete(course)
+        session.commit()
+    except IntegrityError as exc:
+        session.rollback()
+        raise CourseHasSubmissionsError(
+            "Lớp học vừa có bài nộp mới của sinh viên, vui lòng thử lại"
+        ) from exc
+    if force:
+        logger.info(
+            "Admin %s đã xoá cưỡng bức lớp %s cùng %s bài nộp",
+            current_user.user_id,
+            course_id,
+            submission_count,
+        )
+
+
 def _parse_term(term: str) -> tuple[int, str]:
     """Tách học kỳ + năm học từ chuỗi term như 'HK1 - 2024'."""
     match = re.match(r"^HK(\d)\s*[- ]\s*(.+)$", term, re.IGNORECASE)
@@ -169,7 +326,7 @@ def get_courses(
         - ``term``: LIKE %%term%% trên cột ``Course.term``.
         - ``search``: LIKE %%search%% trên ``course_id`` HOẶC ``course_name``.
     """
-    statement = select(Course)
+    statement = select(Course).options(selectinload(Course.creator))
 
     if current_user.role_id == Role.ADMIN:
         pass
@@ -272,6 +429,7 @@ def get_student_courses(
 
     statement = (
         select(Course)
+        .options(selectinload(Course.creator))
         .join(Enrollment, Enrollment.course_id == Course.course_id)
         .where(Enrollment.student_id == student_uuid)
         .distinct()
@@ -328,6 +486,7 @@ def get_student_dashboard(
 
     course_statement = (
         select(Course)
+        .options(selectinload(Course.creator))
         .join(Enrollment, Enrollment.course_id == Course.course_id)
         .where(Enrollment.student_id == student_uuid)
         .distinct()
@@ -389,23 +548,7 @@ def get_student_dashboard(
         )
     completed_problems = session.exec(completed_statement).one() or 0
 
-    average_statement = (
-        select(
-            func.sum(Submission.passed_count),
-            func.count(Submission.submission_id),
-        )
-        .join(Problem, Problem.problem_id == Submission.problem_id)
-        .where(
-            Submission.student_id == student_uuid,
-            Problem.total_number_testcase > 0,
-        )
-    )
-    passed_sum, total_subs = session.exec(average_statement).one()
-    if not total_subs:
-        average_score: float | None = None
-    else:
-        ratio = (passed_sum or 0) / float(total_subs)
-        average_score = round(ratio, 2)
+    average_score = _student_average_score(session, student_uuid, current_user)
 
     return StudentDashboardResponse(
         total_classes=total_classes,
@@ -415,6 +558,36 @@ def get_student_dashboard(
         due_this_week=_count_due_this_week(session, student_uuid, current_user),
         courses=course_responses,
     )
+
+
+def _student_average_score(
+    session: Session, student_uuid: UUID, current_user: User
+) -> float | None:
+    """Điểm trung bình (thang 10) trên các bài sinh viên đã nộp, cùng phạm vi khoá học với
+    ``total_problems`` (khoá đang ghi danh; giáo viên chỉ thấy khoá mình tạo).
+
+    Mỗi bài lấy bài nộp được chấm điểm như bảng điểm (``grade_service.best_grade_scores``):
+    điểm tay ưu tiên, sau đó passed_count cao nhất. ``None`` khi chưa có bài nào có điểm.
+    """
+    problem_statement = (
+        select(Problem)
+        .options(load_only(Problem.problem_id, Problem.total_number_testcase, raiseload=True))
+        .join(Lesson, Lesson.lesson_id == Problem.lesson_id)
+        .join(Course, Course.course_id == Lesson.course_id)
+        .join(Enrollment, Enrollment.course_id == Course.course_id)
+        .where(Enrollment.student_id == student_uuid)
+        .distinct()
+    )
+    if current_user.role_id == Role.TEACHER:
+        problem_statement = problem_statement.where(Course.created_by == current_user.user_id)
+    problems = {problem.problem_id: problem for problem in session.exec(problem_statement).all()}
+    best = grade_service.best_grade_scores(session, list(problems), [student_uuid])
+    scores = [
+        score
+        for (_student_id, problem_id), row in best.items()
+        if (score := grade_service.graded_score(problems[problem_id], row)) is not None
+    ]
+    return round(sum(scores) / len(scores), 2) if scores else None
 
 
 def _count_due_this_week(session: Session, student_uuid: UUID, current_user: User) -> int:
@@ -443,6 +616,6 @@ def _count_due_this_week(session: Session, student_uuid: UUID, current_user: Use
             Submission.student_id == student_uuid,
             Submission.status == "accepted",
             Submission.problem_id.in_([p.problem_id for p in problems]),
-        )
+        ).distinct()
     ).all())
     return sum(1 for p in problems if p.problem_id not in solved)

@@ -26,27 +26,90 @@ export interface NavItem {
 }
 
 export const TEACHER_NAV: NavItem[] = [
-  { label: "Tổng quan", labelKey: "nav.overview", href: "/teacher", icon: LayoutDashboard, exact: true },
-  { label: "Lớp học phần", labelKey: "nav.courses", href: "/teacher/courses", icon: GraduationCap },
-  { label: "Bài nộp", labelKey: "nav.submissions", href: "/teacher/submissions", icon: FileCheck2 },
-  { label: "Ngân hàng đề", labelKey: "nav.problemBank", href: "/teacher/problem-bank", icon: BookOpenCheck },
+  {
+    label: "Tổng quan",
+    labelKey: "nav.overview",
+    href: "/teacher",
+    icon: LayoutDashboard,
+    exact: true,
+  },
+  {
+    label: "Lớp học phần",
+    labelKey: "nav.courses",
+    href: "/teacher/courses",
+    icon: GraduationCap,
+  },
+  {
+    label: "Bài nộp",
+    labelKey: "nav.submissions",
+    href: "/teacher/submissions",
+    icon: FileCheck2,
+  },
+  {
+    label: "Ngân hàng đề",
+    labelKey: "nav.problemBank",
+    href: "/teacher/problem-bank",
+    icon: BookOpenCheck,
+  },
 ];
 
 export const STUDENT_NAV: NavItem[] = [
   // SV: "Tổng quan" = trang chủ /student/dashboard
   //     "Lớp học phần" = danh sách + chi tiết lớp
   //     "Bài tập" = danh sách bài tập gom từ mọi lớp + chi tiết bài tập
-  { label: "Tổng quan", labelKey: "nav.overview", href: "/student/dashboard", icon: LayoutDashboard, exact: true },
-  { label: "Lớp học phần", labelKey: "nav.courses", href: "/student/classes", icon: GraduationCap },
-  { label: "Bài tập", labelKey: "nav.assignments", href: "/student/assignments", icon: BookOpenCheck },
-  { label: "Lịch sử nộp bài", labelKey: "nav.history", href: "/student/history", icon: History },
+  {
+    label: "Tổng quan",
+    labelKey: "nav.overview",
+    href: "/student/dashboard",
+    icon: LayoutDashboard,
+    exact: true,
+  },
+  {
+    label: "Lớp học phần",
+    labelKey: "nav.courses",
+    href: "/student/classes",
+    icon: GraduationCap,
+  },
+  {
+    label: "Bài tập",
+    labelKey: "nav.assignments",
+    href: "/student/assignments",
+    icon: BookOpenCheck,
+  },
+  {
+    label: "Lịch sử nộp bài",
+    labelKey: "nav.history",
+    href: "/student/history",
+    icon: History,
+  },
 ];
 
 export const ADMIN_NAV: NavItem[] = [
-  { label: "Tổng quan", labelKey: "nav.overview", href: "/admin/dashboard", icon: LayoutDashboard, exact: true },
-  { label: "Lớp học phần", labelKey: "nav.courses", href: "/admin/courses", icon: GraduationCap },
+  {
+    label: "Tổng quan",
+    labelKey: "nav.overview",
+    href: "/admin/dashboard",
+    icon: LayoutDashboard,
+    exact: true,
+  },
+  {
+    label: "Lớp học phần",
+    labelKey: "nav.courses",
+    href: "/admin/courses",
+    icon: GraduationCap,
+  },
   { label: "Lớp hành chính", href: "/admin/classes", icon: BookOpen },
-  { label: "Quản lý tài khoản", labelKey: "nav.accounts", href: "/admin/accounts", icon: Users },
+  {
+    label: "Quản lý tài khoản",
+    labelKey: "nav.accounts",
+    href: "/admin/accounts",
+    icon: Users,
+  },
   { label: "Ngân hàng đề", href: "/admin/problem-bank", icon: BookOpenCheck },
-  { label: "Cấu hình", labelKey: "nav.settings", href: "/admin/settings", icon: Settings },
+  {
+    label: "Cấu hình",
+    labelKey: "nav.settings",
+    href: "/admin/settings",
+    icon: Settings,
+  },
 ];

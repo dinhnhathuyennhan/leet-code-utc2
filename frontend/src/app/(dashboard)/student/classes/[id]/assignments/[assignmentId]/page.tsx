@@ -18,7 +18,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { findLanguageOption } from "@/lib/helpers/languages";
 import { formatDeadline } from "@/lib/helpers/datetime";
 import { getErrorMessage } from "@/lib/helpers/error-message";
-import { useLocale } from "@/lib/i18n";
+import { useLocale, type TranslationKey } from "@/lib/i18n";
 import {
   useCourseWithProblem,
   useProblemDetail,
@@ -36,6 +36,17 @@ import type { StudentSubmissionDetail } from "@/lib/types/submission";
  * Vì chấm chạy nền nên sau khi nộp, trang tự poll `GET /submissions/{id}/result`
  * cho tới khi có trạng thái cuối rồi hiển thị kết quả.
  */
+const LEVEL_KEYS: Record<string, TranslationKey> = {
+  easy: "level.easy",
+  medium: "level.medium",
+  hard: "level.hard",
+};
+
+/** Chuỗi (stdin/stdout) giữ nguyên; giá trị JSON hiển thị đúng dạng, vd `[]` thay vì chuỗi rỗng. */
+function formatSampleValue(value: unknown): string {
+  return typeof value === "string" ? value : JSON.stringify(value);
+}
+
 export default function StudentAssignmentDetailPage() {
   const { id, assignmentId } = useParams<{ id: string; assignmentId: string }>();
   const courseId = Array.isArray(id) ? id[0] : id;
@@ -201,7 +212,7 @@ export default function StudentAssignmentDetailPage() {
           label={t("student.assignment.stat.testcases")}
           value={String(problem.total_number_testcase)}
         />
-        <Stat icon={<FileCode2 />} label={t("student.assignment.stat.level")} value={problem.level} />
+        <Stat icon={<FileCode2 />} label={t("student.assignment.stat.level")} value={LEVEL_KEYS[problem.level] ? t(LEVEL_KEYS[problem.level]) : problem.level} />
         <Stat icon={<FileCode2 />} label={t("student.assignment.stat.language")} value={languageLabel} />
       </div>
 
@@ -231,9 +242,9 @@ export default function StudentAssignmentDetailPage() {
                   <div key={testcase.id} className="rounded-lg border bg-indigo-50/60 p-3 text-sm dark:bg-indigo-500/10">
                     <strong>Test #{index + 1}</strong>
                     <pre className="mt-2 whitespace-pre-wrap">
-                      {t("student.assignment.sampleInput")}: {String(testcase.input)}
+                      {t("student.assignment.sampleInput")}: {formatSampleValue(testcase.input)}
                       {"\n"}
-                      {t("student.assignment.sampleOutput")}: {String(testcase.expected_output)}
+                      {t("student.assignment.sampleOutput")}: {formatSampleValue(testcase.expected_output)}
                     </pre>
                   </div>
                 ))}
@@ -252,6 +263,8 @@ export default function StudentAssignmentDetailPage() {
             fallbackCode={problem.starter_code}
             language={language}
             onLanguageChange={setLanguage}
+            supportedLanguages={problem.supported_languages}
+            functionName={problem.function_name}
             disabled={isGrading}
           />
 

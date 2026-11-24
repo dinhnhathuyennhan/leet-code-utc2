@@ -38,8 +38,8 @@ export function AdminDashboard() {
     </div>
     {(accounts.error || students.error || teachers.error) && <ErrorState error={accounts.error || students.error || teachers.error} onRetry={() => { void accounts.refetch(); void students.refetch(); void teachers.refetch(); }} />}
     {classes.error && <ErrorState error={classes.error} onRetry={() => void classes.refetch()} />}
-    <section className="space-y-4">
-      <div className="flex items-center justify-between gap-3"><h2 className="font-bold">Lớp học phần trong hệ thống</h2><Link className="text-sm text-indigo-700 dark:text-indigo-300" href="/admin/courses">Xem tất cả →</Link></div>
+    <section className="min-w-0 space-y-4">
+      <div className="flex min-w-0 flex-wrap items-center justify-between gap-3"><h2 className="min-w-0 font-bold">Lớp học phần trong hệ thống</h2><Link className="shrink-0 text-sm text-indigo-700 dark:text-indigo-300" href="/admin/courses">Xem tất cả →</Link></div>
       {courses.error ? <ErrorState error={courses.error} onRetry={() => void courses.refetch()} /> : courses.isPending ? <p className="py-8 text-sm text-muted-foreground">Đang tải lớp học phần...</p> : summaries.length ? <CourseGrid view="grid" courses={summaries.slice(0, 4)} hrefFor={(course) => `/admin/courses/${encodeURIComponent(course.code)}`} /> : <EmptyState title="Chưa có lớp học phần" description="Tạo lớp học phần đầu tiên để bắt đầu." />}
     </section>
   </div>;

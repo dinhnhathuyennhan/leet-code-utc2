@@ -56,19 +56,44 @@ describe("GradingResultPanel", () => {
     expect(screen.getByText(/Đạt 1\/3 test/)).toBeInTheDocument();
   });
 
-  it("marks passed testcases as correct and the rest as wrong", () => {
+  it("shows the real per-testcase verdict, not the first N as passed", () => {
+    // Test #1 sai nhưng test #3 đúng: không được suy ra từ passed_count theo thứ tự
     renderPanel({
+      status: "wrong_answer",
       passed_count: 1,
       total_testcases: 3,
-      testcases: [
-        { id: 1, input: "1 2", expected_output: "3", is_sample: true },
-        { id: 2, input: "-5 5", expected_output: "0", is_sample: false },
-        { id: 3, input: "1 1", expected_output: "2", is_sample: false },
+      testcase_results: [
+        { index: 1, is_sample: true, status: "wrong_answer", time: 0.1 },
+        { index: 2, is_sample: false, status: "runtime_error", time: 0.1 },
+        { index: 3, is_sample: false, status: "accepted", time: 0.1 },
       ],
     });
 
-    expect(screen.getAllByText("Đúng")).toHaveLength(1);
-    expect(screen.getAllByText("Sai")).toHaveLength(2);
+    const items = screen.getAllByText(/^Test #\d/).map((node) => node.closest("div")?.textContent ?? "");
+    expect(items[0]).toContain("Sai kết quả");
+    expect(items[1]).toContain("Lỗi khi chạy");
+    expect(items[2]).toContain("Đúng");
+  });
+
+  it("labels skipped testcases and explains early stop", () => {
+    renderPanel({
+      status: "time_limit_exceeded",
+      passed_count: 0,
+      total_testcases: 2,
+      testcase_results: [
+        { index: 1, is_sample: true, status: "time_limit_exceeded", time: null },
+        { index: 2, is_sample: false, status: "skipped", time: null },
+      ],
+    });
+
+    expect(screen.getByText("Bỏ qua")).toBeInTheDocument();
+    expect(screen.getByText(/dừng chấm sớm/)).toBeInTheDocument();
+  });
+
+  it("hides the per-testcase table for old submissions without results", () => {
+    renderPanel({ testcase_results: [] });
+
+    expect(screen.queryByText("Chi tiết từng test case")).not.toBeInTheDocument();
   });
 
   it("renders the compile error output when present", () => {

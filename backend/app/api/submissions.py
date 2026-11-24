@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, Query, status
 from sqlmodel import Session
 
 from app.core.database import get_session
@@ -20,7 +20,10 @@ from app.modules.submissions.student_service import (
     list_student_submissions,
 )
 from app.models import User
-from app.modules.submissions.judge0.schemas import SubmissionResultResponse
+from app.modules.submissions.judge0.schemas import (
+    SubmissionResultResponse,
+    SubmitAcceptedResponse,
+)
 from app.modules.submissions.judge0 import service as judge_service
 
 router = APIRouter(prefix="/submissions", tags=["submission"])
@@ -75,6 +78,20 @@ def get_submission_result_route(
 ) -> SubmissionResultResponse:
     """Kết quả chấm (dạng rút gọn) để frontend poll trong lúc chờ chấm nền xong."""
     return judge_service.get_result(session, submission_id, current_user)
+
+
+@router.post(
+    "/{submission_id}/regrade",
+    response_model=SubmitAcceptedResponse,
+    status_code=status.HTTP_202_ACCEPTED,
+)
+def regrade_submission_route(
+    submission_id: int,
+    session: Session = Depends(get_session),
+    current_user: User = Depends(require_role(Role.ADMIN, Role.TEACHER)),
+) -> SubmitAcceptedResponse:
+    submission = judge_service.regrade(session, submission_id, current_user)
+    return SubmitAcceptedResponse(submission_id=submission.submission_id, status=submission.status)
 
 
 @router.get("/{submission_id}", response_model=SubmissionDetailResponse)

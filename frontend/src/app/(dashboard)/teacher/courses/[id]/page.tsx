@@ -8,6 +8,8 @@ import { CourseDetailSkeleton } from "@/components/teacher/course-detail-skeleto
 import { CourseDetailTabs, type CourseTab } from "@/components/teacher/course-detail-tabs";
 import { ApiError } from "@/lib/api/error";
 import { useCourse, useCourseEnrollments } from "@/lib/hooks/use-courses";
+import { deleteCourse } from "@/lib/api/endpoints/courses";
+import { toast } from "sonner";
 import { CourseHeaderCard } from "@/components/teacher/course-header-card";
 import { CourseStudentsTable } from "@/components/teacher/course-students-table";
 import { CourseGradesTable } from "@/components/teacher/course-grades-table";
@@ -41,7 +43,7 @@ export default function TeacherCourseDetailPage() {
 
   return (
     <div className="space-y-6">
-      <CourseHeaderCard course={{ ...course, updated_at: course.updated_at || (dataUpdatedAt ? new Date(dataUpdatedAt).toISOString() : null) }} onCreateSession={() => setEditorOpen(true)} onEditCourse={() => setCourseEditorOpen(true)} />
+      <CourseHeaderCard course={{ ...course, updated_at: course.updated_at || (dataUpdatedAt ? new Date(dataUpdatedAt).toISOString() : null) }} onCreateSession={() => setEditorOpen(true)} onEditCourse={() => setCourseEditorOpen(true)} onDeleteCourse={async () => { await deleteCourse(course.code); toast.success("Đã xoá lớp học phần."); router.push("/teacher/courses"); }} />
       <CourseDetailTabs
         value={tab}
         onValueChange={(next) => { setTab(next); router.replace(`${pathname}?tab=${next}`, { scroll: false }); }}
@@ -49,7 +51,7 @@ export default function TeacherCourseDetailPage() {
           <SessionList key={course.sessions.map((session) => `${session.id}:${session.order}:${session.status}`).join(",")} sessions={course.sessions} studentCount={course.student_count} courseId={course.code || id} onChanged={() => void refetch()} />
         }
         students={enrollments.isPending ? <CourseDetailSkeleton /> : enrollments.error ? <ErrorState error={enrollments.error} onRetry={() => void enrollments.refetch()} /> : <CourseStudentsTable students={enrollments.data ?? []} courseId={course.code} onChanged={() => void enrollments.refetch()} />}
-        grades={<CourseGradesTable onUpdated={() => void refetch()} sessions={course.sessions.map((session) => ({ id: session.id, order: session.order, title: session.title, status: session.status, problems: session.problems.map((problem) => ({ id: problem.id, code: problem.report ?? problem.title, title: problem.title })) }))} rows={course.grades ?? []} />}
+        grades={<CourseGradesTable courseId={course.code || id} onUpdated={() => void refetch()} sessions={course.sessions.map((session) => ({ id: session.id, order: session.order, title: session.title, status: session.status, problems: session.problems.map((problem) => ({ id: problem.id, code: problem.report ?? problem.title, title: problem.title })) }))} rows={course.grades ?? []} />}
       />
       <SessionEditorDialog key={`${editorOpen}-new`} course={course} session={null} open={editorOpen} onOpenChange={setEditorOpen} onSaved={() => void refetch()} />
       <CourseEditDialog key={`${courseEditorOpen}-${dataUpdatedAt}`} course={course} open={courseEditorOpen} onOpenChange={setCourseEditorOpen} onSaved={() => void refetch()} />

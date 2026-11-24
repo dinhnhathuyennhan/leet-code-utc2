@@ -80,8 +80,8 @@ export function CheckAnswerPanel({
               )}
               data-testid={`check-answer-case-${item.index}`}
             >
-              <summary className="flex cursor-pointer items-center justify-between gap-3 text-sm font-medium">
-                <span className="inline-flex items-center gap-2">
+              <summary className="flex min-w-0 cursor-pointer items-center justify-between gap-3 text-sm font-medium">
+                <span className="inline-flex min-w-0 flex-1 items-center gap-2 break-words">
                   {passed ? (
                     <CheckCircle2 className="size-4 text-emerald-600 dark:text-emerald-400" />
                   ) : (
@@ -89,7 +89,7 @@ export function CheckAnswerPanel({
                   )}
                   Test #{item.index + 1}
                 </span>
-                <span className="text-xs text-muted-foreground">
+                <span className="shrink-0 text-xs text-muted-foreground">
                   {passed ? t("result.correct") : item.status}
                   {item.time != null ? ` · ${item.time}s` : ""}
                 </span>

@@ -1,8 +1,11 @@
-from sqlmodel import Session, select
+from sqlalchemy import update
+from sqlalchemy.orm import load_only
+from sqlmodel import Session, func, select
 
 from app.core.exceptions import InvalidFormatError, NotFoundError
 from app.core.dependencies import Role
 from app.modules.testcases.testcase_format import testcase_to_api_values
+from app.modules.submissions.testcase_results import build_testcase_results, result_by_testcase
 from app.modules.submissions.schemas import (
     PendingSubmissionListResponse,
     PendingSubmissionResponse,
@@ -11,40 +14,50 @@ from app.modules.submissions.schemas import (
     SubmissionUpdateRequest,
 )
 from app.models import Course, Lesson, Problem, Submission, Testcase, User
+from app.modules.submissions.judge0 import grading_queue
 
 
 _NEW_STATUSES = {"processing", "time_limit_exceeded", "runtime_error", "internal_error"}
 _VISIBLE_STATUSES = {"pending", "wrong_answer", "compile_error"} | _NEW_STATUSES
 _ALLOWED_UPDATE_STATUSES = {"pending", "accepted", "wrong_answer", "compile_error"} | _NEW_STATUSES
+# Giáo viên đặt về trạng thái chờ chấm thì bài phải được máy chấm lại.
+_REQUEUE_STATUSES = {"pending", "processing"}
 # Các giá trị `filter` lọc theo nhóm judge_kind mà frontend hiển thị thành chip.
 _JUDGE_KIND_FILTERS = {"pending", "wrong_answer", "compile_error", "accepted"}
 
 
-def _teacher_course_ids(session: Session, current_user: User) -> set[str] | None:
-    if current_user.role_id == Role.ADMIN:
-        return None
-    return set(
-        session.exec(
-            select(Course.course_id).where(Course.created_by == current_user.user_id)
-        ).all()
-    )
-
-
-def _submission_rows(session: Session, current_user: User) -> list[tuple[Submission, Problem, Lesson, Course, User]]:
-    statement = (
-        select(Submission, Problem, Lesson, Course, User)
+def _submission_query(*entities):
+    return (
+        select(*entities)
+        .select_from(Submission)
         .join(Problem, Submission.problem_id == Problem.problem_id)
         .join(Lesson, Problem.lesson_id == Lesson.lesson_id)
         .join(Course, Lesson.course_id == Course.course_id)
         .join(User, Submission.student_id == User.user_id)
-        .order_by(Submission.submitted_datetime.desc(), Submission.submission_id.desc())
     )
-    course_ids = _teacher_course_ids(session, current_user)
-    if course_ids is not None:
-        if not course_ids:
-            return []
-        statement = statement.where(Course.course_id.in_(course_ids))
-    return list(session.exec(statement).all())
+
+
+def _scope_to_viewer(statement, current_user: User):
+    """Chỉ ADMIN thấy hết; vai trò khác bị giới hạn trong các khoá do chính mình tạo."""
+    if current_user.role_id == Role.ADMIN:
+        return statement
+    return statement.where(Course.created_by == current_user.user_id)
+
+
+def get_visible_submission(
+    session: Session, submission_id: int, current_user: User
+) -> tuple[Submission, Problem, Lesson, Course, User]:
+    """Một bài nộp (đủ cột) mà người gọi được phép thấy, hoặc NotFoundError."""
+    statement = _scope_to_viewer(
+        _submission_query(Submission, Problem, Lesson, Course, User).where(
+            Submission.submission_id == submission_id
+        ),
+        current_user,
+    )
+    row = session.exec(statement).first()
+    if row is None:
+        raise NotFoundError("Không tìm thấy bài nộp")
+    return tuple(row)
 
 
 def _judge_kind(status: str) -> str:
@@ -95,15 +108,46 @@ def list_pending_submissions(
     problem_id: int | None = None,
     include_graded: bool = False,
 ) -> PendingSubmissionListResponse:
-    rows = _submission_rows(session, current_user)
     visible_statuses = _VISIBLE_STATUSES | {"accepted"} if include_graded else _VISIBLE_STATUSES
-    rows = [row for row in rows if row[0].status.lower() in visible_statuses]
+    statement = (
+        _submission_query(Submission, Problem, Lesson, Course, User)
+        .options(
+            load_only(
+                Submission.submission_id,
+                Submission.status,
+                Submission.manual_score,
+                Submission.passed_count,
+                Submission.compile_output,
+                Submission.submitted_datetime,
+                raiseload=True,
+            ),
+            load_only(
+                Problem.problem_id,
+                Problem.title,
+                Problem.report,
+                Problem.total_number_testcase,
+                raiseload=True,
+            ),
+            load_only(
+                Lesson.lesson_id,
+                Lesson.lesson_number,
+                Lesson.lesson_name,
+                Lesson.course_id,
+                raiseload=True,
+            ),
+            load_only(Course.course_id, Course.course_name, raiseload=True),
+            load_only(User.full_name, User.student_code, raiseload=True),
+        )
+        .where(func.lower(Submission.status).in_(visible_statuses))
+        .order_by(Submission.submitted_datetime.desc(), Submission.submission_id.desc())
+    )
     if course_id:
-        rows = [row for row in rows if row[3].course_id == course_id]
+        statement = statement.where(Course.course_id == course_id)
     if lesson_id is not None:
-        rows = [row for row in rows if row[2].lesson_id == lesson_id]
+        statement = statement.where(Lesson.lesson_id == lesson_id)
     if problem_id is not None:
-        rows = [row for row in rows if row[1].problem_id == problem_id]
+        statement = statement.where(Problem.problem_id == problem_id)
+    rows = list(session.exec(_scope_to_viewer(statement, current_user)).all())
 
     if search:
         query = search.strip().lower()
@@ -170,16 +214,15 @@ def list_pending_submissions(
 def get_submission_detail(
     session: Session, submission_id: int, current_user: User
 ) -> SubmissionDetailResponse:
-    rows = [row for row in _submission_rows(session, current_user) if row[0].submission_id == submission_id]
-    if not rows:
-        raise NotFoundError("Không tìm thấy bài nộp")
-
-    submission, problem, lesson, course, student = rows[0]
+    submission, problem, lesson, course, student = get_visible_submission(
+        session, submission_id, current_user
+    )
     testcases = session.exec(
         select(Testcase)
         .where(Testcase.problem_id == problem.problem_id)
         .order_by(Testcase.testcase_id)
     ).all()
+    results = result_by_testcase(submission)
     return SubmissionDetailResponse(
         id=submission.submission_id,
         problem_id=problem.problem_id,
@@ -209,9 +252,12 @@ def get_submission_detail(
                 id=testcase.testcase_id,
                 **testcase_to_api_values(testcase),
                 is_sample=testcase.is_sample,
+                status=results.get(testcase.testcase_id, {}).get("status"),
+                time=results.get(testcase.testcase_id, {}).get("time"),
             )
             for testcase in testcases
         ],
+        testcase_results=build_testcase_results(submission, list(testcases)),
     )
 
 
@@ -221,20 +267,38 @@ def update_submission(
     data: SubmissionUpdateRequest,
     current_user: User,
 ) -> SubmissionDetailResponse:
-    rows = [row for row in _submission_rows(session, current_user) if row[0].submission_id == submission_id]
-    if not rows:
-        raise NotFoundError("Không tìm thấy bài nộp")
+    submission = get_visible_submission(session, submission_id, current_user)[0]
     if data.status is not None and data.status not in _ALLOWED_UPDATE_STATUSES:
         raise InvalidFormatError("Trạng thái bài nộp không hợp lệ")
 
-    submission = rows[0][0]
     if data.feedback is not None:
         submission.feedback = data.feedback.strip() or None
-    if data.status is not None:
-        submission.status = data.status
     # An explicit null clears the override; an omitted field leaves it unchanged.
     if "manual_score" in data.model_fields_set:
         submission.manual_score = data.manual_score
     session.add(submission)
+    if data.status is not None:
+        # Ghi status kèm thu hồi quyền chấm của worker đang chấm dở (nếu có): mọi lần
+        # ghi của worker đều kèm điều kiện grading_claimed_at, nên kết quả máy chấm
+        # không còn ghi đè trạng thái giáo viên vừa sửa. Dùng UPDATE tường minh thay vì
+        # gán thuộc tính, vì ORM bỏ qua phép gán trùng với bản đã đọc (vd lease còn NULL
+        # lúc đọc nhưng worker vừa nhận bài, hay status trùng giá trị cũ nhưng worker
+        # vừa ghi kết quả khác).
+        values: dict = {"status": data.status, "grading_claimed_at": None}
+        if data.status in _REQUEUE_STATUSES:
+            # Chấm lại từ đầu như regrade: bỏ token Judge0 và kết quả cũ, nếu không
+            # worker mới sẽ poll lại token cũ (chạy với testcase cũ) thay vì nộp mới.
+            values.update(
+                judge_tokens=None, testcase_results=None, passed_count=0, compile_output=None
+            )
+        session.exec(
+            update(Submission)
+            .where(Submission.submission_id == submission.submission_id)
+            .values(**values)
+        )
     session.commit()
+    if data.status in _REQUEUE_STATUSES:
+        # Lease đã bị thu hồi nên phải đưa bài vào hàng đợi lại, nếu không bài sẽ nằm
+        # ở pending/processing tới lần khởi động lại backend.
+        grading_queue.enqueue(submission.submission_id)
     return get_submission_detail(session, submission_id, current_user)

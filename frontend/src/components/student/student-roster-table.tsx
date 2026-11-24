@@ -26,23 +26,23 @@ export function StudentRosterTable({ students, isLoading, error, onRetry }: Stud
   }
 
   return (
-    <div className="rounded-xl border bg-card">
+    <div className="overflow-hidden rounded-xl border bg-card">
       <Table>
         <TableHeader>
           <TableRow>
-            <TableHead className="w-16">#</TableHead>
-            <TableHead>{t("student.roster.col.id")}</TableHead>
-            <TableHead>{t("student.roster.col.name")}</TableHead>
-            <TableHead>{t("student.roster.col.email")}</TableHead>
+            <TableHead className="w-16">STT</TableHead>
+            <TableHead className="whitespace-nowrap">MSSV</TableHead>
+            <TableHead className="min-w-32">Họ tên</TableHead>
+            <TableHead className="min-w-40">{t("student.roster.col.email")}</TableHead>
           </TableRow>
         </TableHeader>
         <TableBody>
           {students.map((student, index) => (
             <TableRow key={student.enrollment_id}>
               <TableCell className="text-muted-foreground">{index + 1}</TableCell>
-              <TableCell className="font-medium">{student.student_id}</TableCell>
-              <TableCell>{student.full_name || "—"}</TableCell>
-              <TableCell className="text-muted-foreground">{student.email}</TableCell>
+              <TableCell className="whitespace-nowrap font-medium">{student.student_code || "—"}</TableCell>
+              <TableCell className="min-w-32 break-words">{student.full_name || "—"}</TableCell>
+              <TableCell className="min-w-40 break-all text-muted-foreground">{student.email}</TableCell>
             </TableRow>
           ))}
         </TableBody>

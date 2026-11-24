@@ -62,6 +62,11 @@ class ForbiddenError(AppError):
     status_code = 403
     error_code = "FORBIDDEN"
 
+class AccountLockedError(AppError):
+    """Tài khoản đã bị khoá bởi quản trị viên."""
+    status_code = 403
+    error_code = "ACCOUNT_LOCKED"
+
 class TokenError(AppError):
     status_code = 401
     error_code = "INVALID_TOKEN"

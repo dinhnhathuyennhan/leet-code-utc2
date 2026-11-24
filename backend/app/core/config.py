@@ -1,4 +1,5 @@
 import json
+import logging
 import os
 from dataclasses import dataclass
 
@@ -23,19 +24,35 @@ _DEFAULT_LANGUAGES: dict[str, dict] = {
     "python": {"judge0_id": 71, "cpu_time_factor": 2},
     "javascript": {"judge0_id": 63, "cpu_time_factor": 2, "memory_limit_kb": 2_048_000},
     "c": {"judge0_id": 50, "cpu_time_factor": 1},
-    "cpp": {"judge0_id": 54, "cpu_time_factor": 1},
+    "cpp": {
+        "judge0_id": 54,
+        "cpu_time_factor": 1,
+        "compiler_options": "-std=c++17",
+    },
     "java": {
         "judge0_id": 62,
         "cpu_time_factor": 2,
+        # JVM cần reserve code cache + metaspace (~245 MB) trước khi chạy.
+        # Nếu để mặc định của Judge0 (128 MB) thì Java luôn NZEC
+        # ("Could not reserve enough space for code cache").
+        # Trần trong judge0.conf: MAX_MEMORY_LIMIT=6144000.
+        "memory_limit_kb": 6_144_000,
         "compiler_options": "-J-XX:CompressedClassSpaceSize=64m -J-XX:ReservedCodeCacheSize=64m -J-Xmx256m",
     },
 }
+
+
+# Chỉ hỗ trợ các ngôn ngữ có harness, mã khởi tạo và giao diện chọn ngôn ngữ.
+# Go đã bị loại bỏ (không có mã khởi tạo, chưa có trên giao diện).
+SUPPORTED_LANGUAGES: tuple[str, ...] = tuple(_DEFAULT_LANGUAGES)
 
 
 def parse_languages(raw: str | None) -> dict[str, LanguageConfig]:
     """Gộp cấu hình ngôn ngữ mặc định với JUDGE_LANGUAGES (JSON).
 
     Mỗi khoá là tên ngôn ngữ; giá trị là object ghi đè từng trường, hoặc null để gỡ ngôn ngữ đó.
+    Khoá ngoài ``SUPPORTED_LANGUAGES`` (vd ``go`` còn sót trong .env cũ) bị bỏ qua và ghi cảnh
+    báo, không làm backend lỗi khi khởi động.
     """
     merged = {name: dict(values) for name, values in _DEFAULT_LANGUAGES.items()}
     if raw and raw.strip():
@@ -44,6 +61,11 @@ def parse_languages(raw: str | None) -> dict[str, LanguageConfig]:
             if not isinstance(overrides, dict):
                 raise ValueError("phải là một object")
             for name, values in overrides.items():
+                if name not in SUPPORTED_LANGUAGES:
+                    logging.getLogger(__name__).warning(
+                        "JUDGE_LANGUAGES: bỏ qua ngôn ngữ không hỗ trợ '%s'", name
+                    )
+                    continue
                 if values is None:
                     merged.pop(name, None)
                 elif isinstance(values, dict):
@@ -94,9 +116,21 @@ JUDGE0_WALL_TIME_EXTRA_SECONDS = _env_float("JUDGE0_WALL_TIME_EXTRA_SECONDS", 1)
 # ===== Chạy thử và chấm bài =====
 RUN_TIMEOUT_SECONDS = _env_float("RUN_TIMEOUT_SECONDS", 10)
 GRADING_TIMEOUT_SECONDS = _env_float("GRADING_TIMEOUT_SECONDS", 300)
+# Swagger UI (/docs, /redoc) và /openapi.json. Nên đặt false trên production để
+# không công khai toàn bộ danh sách endpoint.
+API_DOCS_ENABLED = os.getenv("API_DOCS_ENABLED", "true").strip().lower() not in ("0", "false", "no", "off")
+# Chấm bài theo từng lô testcase. Lô nào có test vượt thời gian (TLE) thì không gửi
+# các lô sau: Judge0 chạy test gần như tuần tự, một bài lặp vô hạn trên 50 test chiếm
+# máy chấm ~4 phút và làm nghẽn bài của sinh viên khác. Đặt <= 0 để chấm hết một lần.
+GRADING_CHUNK_SIZE = _env_int("GRADING_CHUNK_SIZE", 10)
+# Thời gian chờ thêm (ngoài wall time) cho mỗi lô, gồm cả lúc xếp hàng trên Judge0
+GRADING_CHUNK_EXTRA_SECONDS = _env_float("GRADING_CHUNK_EXTRA_SECONDS", 60)
 GRADE_RETRY_DELAY_SECONDS = _env_float("GRADE_RETRY_DELAY_SECONDS", 15)
 # Bài đang pending/processing quá hạn này bị coi là hỏng
 PENDING_TTL_MINUTES = _env_float("PENDING_TTL_MINUTES", 10)
+# Lease giữ quyền chấm một bài. Worker gia hạn trong lúc chờ Judge0 (mỗi 1/4 lease), nên
+# worker chết (backend restart) thì sau tối đa chừng này giây bài được worker khác nhận lại.
+GRADING_LEASE_SECONDS = _env_float("GRADING_LEASE_SECONDS", 120)
 # Số bài nộp chấm song song trong backend, nên xấp xỉ số worker Judge0
 GRADING_WORKERS = _env_int("GRADING_WORKERS", 4)
 # Số lượt Run đang chạy đồng thời tối đa, để không chiếm hết thread của API

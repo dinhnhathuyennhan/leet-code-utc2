@@ -6,6 +6,7 @@ import {
   useContext,
   useEffect,
   useMemo,
+  useRef,
   useState,
   type ReactNode,
 } from "react";
@@ -36,6 +37,7 @@ type AuthState =
   | { status: "authenticated"; user: UserResponse };
 
 type AuthContextValue = AuthState & {
+  loginInProgress: boolean;
   login: (data: LoginRequest) => Promise<UserResponse>;
   changePassword: (data: ChangePasswordRequest) => Promise<UserResponse>;
   logout: () => Promise<void>;
@@ -111,6 +113,7 @@ function buildUserFromAccessToken(accessToken: string): UserResponse | null {
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [state, setState] = useState<AuthState>({ status: "loading" });
+  const [loginInProgress, setLoginInProgress] = useState(false);
   const queryClient = useQueryClient();
 
   const handleSessionExpired = useCallback(() => {
@@ -152,11 +155,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const login = useCallback(async (data: LoginRequest) => {
     // Không cho phép dữ liệu của tài khoản trước tồn tại trong màn hình mới.
     queryClient.clear();
-    const result: LoginResponse = await loginRequest(data);
-    setAccessToken(result.access_token);
-    cacheProfile(result.user);
-    setState({ status: "authenticated", user: result.user });
-    return result.user;
+    setLoginInProgress(true);
+    try {
+      const result: LoginResponse = await loginRequest(data);
+      setAccessToken(result.access_token);
+      cacheProfile(result.user);
+      setState({ status: "authenticated", user: result.user });
+      return result.user;
+    } finally {
+      setLoginInProgress(false);
+    }
   }, [queryClient]);
 
   const changePassword = useCallback(async (data: ChangePasswordRequest) => {
@@ -167,23 +175,32 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return result.user;
   }, []);
 
-  const logout = useCallback(async () => {
-    try {
-      await logoutRequest();
-    } catch {
-      // Best-effort: local session must clear even if the backend call fails
-      // (e.g. the endpoint isn't implemented yet — see docs/api-design.md).
-    } finally {
-      queryClient.clear();
-      setAccessToken(null);
-      clearCachedProfile();
-      setState({ status: "unauthenticated" });
-    }
+  // Đăng xuất đang chạy: bấm lại (hoặc nhiều nơi cùng gọi) dùng chung một request,
+  // không gửi POST /auth/logout lần thứ hai.
+  const logoutInFlight = useRef<Promise<void> | null>(null);
+  const logout = useCallback(() => {
+    if (logoutInFlight.current) return logoutInFlight.current;
+    logoutInFlight.current = (async () => {
+      try {
+        await logoutRequest();
+      } catch {
+        // Best-effort: local session must clear even if the backend call fails
+        // (e.g. the endpoint isn't implemented yet — see docs/api-design.md).
+      } finally {
+        queryClient.clear();
+        setAccessToken(null);
+        clearCachedProfile();
+        setLoginInProgress(false);
+        setState({ status: "unauthenticated" });
+        logoutInFlight.current = null;
+      }
+    })();
+    return logoutInFlight.current;
   }, [queryClient]);
 
   const value = useMemo<AuthContextValue>(
-    () => ({ ...state, login, changePassword, logout, retryConnection: bootstrap }),
-    [state, login, changePassword, logout, bootstrap],
+    () => ({ ...state, loginInProgress, login, changePassword, logout, retryConnection: bootstrap }),
+    [state, loginInProgress, login, changePassword, logout, bootstrap],
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

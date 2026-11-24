@@ -3,17 +3,19 @@ import logging
 import threading
 from collections.abc import Callable
 from contextlib import contextmanager
-from datetime import timedelta
+from datetime import datetime, timedelta
 from typing import Any
 
+from sqlalchemy import and_, or_, update
 from sqlmodel import Session, func, select
 
 from app.core import config
+from app.core.dependencies import Role
 from app.modules.ai_review.preview_receipt import create_preview_receipt
 from app.core.database import engine
 from app.core.exceptions import ConflictError, ForbiddenError, InvalidFormatError, NotFoundError
 from app.core.utils.datetime_utils import as_utc, now_utc
-from app.models import Problem, Submission, Testcase, User
+from app.models import Course, Lesson, Problem, Submission, Testcase, User
 from app.modules.courses.access import (
     find_enrollment,
     get_lesson_in_course,
@@ -24,7 +26,8 @@ from app.modules.submissions.judge0.harness import (
     build_source,
     extract_result,
     json_outputs_match,
-    supports_function_harness,
+    starter_codes_of,
+    supported_languages,
     text_outputs_match,
 )
 from app.modules.submissions.judge0.judge0_client import (
@@ -32,14 +35,16 @@ from app.modules.submissions.judge0.judge0_client import (
     Judge0Client,
     Judge0Error,
     Judge0Result,
+    compute_limits,
 )
 from app.modules.submissions.judge0.schemas import (
+    AdminPreviewRequest,
     CodeRequest,
     RunCaseResponse,
     RunResponse,
     SubmissionResultResponse,
 )
-from app.modules.submissions.service import get_submission_detail
+from app.modules.submissions.service import get_visible_submission
 from app.modules.testcases.testcase_format import decode_testcase_value
 
 logger = logging.getLogger(__name__)
@@ -50,6 +55,10 @@ GRADE_RETRY_DELAY_SECONDS = config.GRADE_RETRY_DELAY_SECONDS
 # Bài active quá hạn này bị coi là hỏng: không còn chặn sinh viên nộp lại, và thôi chấm thử lại
 PENDING_TTL = timedelta(minutes=config.PENDING_TTL_MINUTES)
 _ACTIVE_STATUSES = ("pending", "processing")
+# Thời hạn giữ quyền chấm một bài: worker gia hạn trong lúc chờ Judge0 (heartbeat). Quá hạn
+# mà chưa gia hạn thì coi worker đã chết (backend bị dừng giữa chừng) và worker khác được nhận.
+GRADING_LEASE = timedelta(seconds=config.GRADING_LEASE_SECONDS)
+GRADING_HEARTBEAT = GRADING_LEASE / 4
 
 
 class SubmissionClosedError(ForbiddenError):
@@ -63,6 +72,15 @@ class UnsupportedLanguageError(InvalidFormatError):
 class JudgeBusyError(Judge0Error):
     error_code = "JUDGE_BUSY"
 
+
+def _build_source(problem: Problem, language: str, code: str) -> str:
+    if problem.function_name is None:
+        return code
+    if language not in supported_languages(problem):
+        raise UnsupportedLanguageError(f"Bài tập này chưa hỗ trợ chấm bằng {language}")
+    return build_source(
+        language, code, problem.function_name, starter_codes_of(problem).get(language)
+    )
 
 _run_slots = threading.BoundedSemaphore(config.RUN_CONCURRENCY)
 _running_users: set[str] = set()
@@ -97,15 +115,6 @@ def _get_student_problem(
         raise NotFoundError("Không tìm thấy bài tập trong buổi học")
     return problem
 
-
-def _build_source(problem: Problem, language: str, code: str) -> str:
-    if problem.function_name is None:
-        return code
-    if not supports_function_harness(language):
-        raise UnsupportedLanguageError(f"Bài tập này chưa hỗ trợ chấm bằng {language}")
-    return build_source(language, code, problem.function_name)
-
-
 def _judge_case(result: Judge0Result, testcase: Testcase, uses_harness: bool) -> tuple[str, Any]:
     """Trả về (status nội bộ, actual_output đã giải mã)."""
     if not result.finished:
@@ -122,6 +131,17 @@ def _judge_case(result: Judge0Result, testcase: Testcase, uses_harness: bool) ->
     return ("accepted" if matched else "wrong_answer"), (result.stdout or "").strip()
 
 
+def _case_time(result: Judge0Result | None, status: str, problem: Problem, language: str) -> float | None:
+    """Thời gian hiển thị của một test.
+
+    Test bị dừng vì quá thời gian (wall clock) thì Judge0 trả `time` gần 0 (chỉ tính
+    CPU), nên hiển thị giới hạn wall time để sinh viên hiểu vì sao bị dừng.
+    """
+    if status == "time_limit_exceeded":
+        return compute_limits(problem.time_limit_seconds, language)[1]
+    return result.time if result is not None else None
+
+
 def _overall_status(statuses: list[str]) -> str:
     return next((s for s in statuses if s != "accepted"), "accepted")
 
@@ -133,6 +153,7 @@ def _run_judge(
     timeout: float,
     tokens: list[str] | None = None,
     on_tokens: Callable[[list[str]], None] | None = None,
+    heartbeat: Callable[[], None] | None = None,
 ) -> list[tuple[Judge0Result, str, Any]]:
     source = _build_source(problem, data.language, data.code)
     client = Judge0Client()
@@ -143,7 +164,7 @@ def _run_judge(
             )
             if on_tokens is not None:
                 on_tokens(tokens)
-        results = client.wait_for_results(tokens, timeout)
+        results = client.wait_for_results(tokens, timeout, heartbeat)
     finally:
         client.close()
     uses_harness = problem.function_name is not None
@@ -182,7 +203,7 @@ def run(
             expected_output=decode_testcase_value(tc.expected_output, tc.expected_output_type),
             actual_output=actual,
             stderr=result.stderr or result.message,
-            time=result.time,
+            time=_case_time(result, status, problem, data.language),
         )
         for index, (tc, (result, status, actual)) in enumerate(zip(samples, judged, strict=True))
     ]
@@ -195,12 +216,17 @@ def run(
 
 
 def run_admin_preview(
-    session: Session, problem_id: int, data: CodeRequest, current_user: User,
+    session: Session, problem_id: int, data: AdminPreviewRequest, current_user: User,
 ) -> RunResponse:
     """Grade all current testcases without creating a student submission."""
     problem = session.get(Problem, problem_id)
     if problem is None:
         raise NotFoundError("Không tìm thấy bài tập")
+    if current_user.role_id == Role.TEACHER and problem.lesson_id is not None:
+        lesson = session.get(Lesson, problem.lesson_id)
+        course = session.get(Course, lesson.course_id) if lesson else None
+        if course is None or course.created_by != current_user.user_id:
+            raise ForbiddenError("Teacher chỉ được chạy thử bài thuộc lớp mình phụ trách")
     testcases = list(session.exec(
         select(Testcase)
         .where(Testcase.problem_id == problem_id)
@@ -221,7 +247,7 @@ def run_admin_preview(
             expected_output=decode_testcase_value(testcase.expected_output, testcase.expected_output_type),
             actual_output=actual,
             stderr=result.stderr or result.message,
-            time=result.time,
+            time=_case_time(result, status, problem, data.language),
         )
         for index, (testcase, (result, status, actual)) in enumerate(zip(testcases, judged, strict=True), start=1)
     ]
@@ -236,6 +262,8 @@ def run_admin_preview(
             passed_count=sum(case.status == "accepted" for case in cases), total_count=len(cases),
         ) if all(case.status != "internal_error" for case in cases) else None,
     )
+
+
 def _compile_output_of(judged: list[tuple[Judge0Result, str, Any]]) -> str | None:
     """Lấy output lỗi của testcase đầu tiên bị lỗi biên dịch.
 
@@ -243,7 +271,7 @@ def _compile_output_of(judged: list[tuple[Judge0Result, str, Any]]) -> str | Non
     bước biên dịch nên lỗi cú pháp nằm ở `stderr` -> cần lấy cả hai.
     """
     for result, status, _ in judged:
-        if status != "compile_error":
+        if status != "compile_error" or result is None:
             continue
         return result.compile_output or result.stderr or result.message
     return None
@@ -291,85 +319,269 @@ def submit(
     return submission
 
 
-def _save_tokens(submission_id: int, tokens: list[str]) -> None:
-    with Session(engine) as session:
-        submission = session.get(Submission, submission_id)
-        if submission is not None:
-            submission.judge_tokens = tokens
-            session.add(submission)
+class _SubmissionDeleted(Exception):
+    """Bài nộp bị xoá (admin xoá khoá học) hoặc đã bị worker khác nhận chấm; dừng chấm, không retry."""
+
+
+class _GradingClaim:
+    """Quyền chấm một bài nộp, giữ bằng cột ``grading_claimed_at`` (lease).
+
+    Mọi lần ghi của worker đều kèm điều kiện ``grading_claimed_at`` còn đúng giá trị
+    worker đã ghi, nên worker đã mất quyền (lease hết hạn, worker khác nhận) không ghi
+    đè được kết quả của worker mới.
+    """
+
+    def __init__(self, submission_id: int, claimed_at: datetime):
+        self.submission_id = submission_id
+        self.claimed_at = claimed_at
+
+    def _owned(self):
+        return and_(
+            Submission.submission_id == self.submission_id,
+            Submission.grading_claimed_at == self.claimed_at,
+        )
+
+    def _renew(self, what: str, **values: Any) -> None:
+        renewed_at = now_utc()
+        with Session(engine) as session:
+            result = session.execute(
+                update(Submission)
+                .where(self._owned())
+                .values(**values, grading_claimed_at=renewed_at)
+            )
             session.commit()
+        if result.rowcount == 0:
+            logger.info(
+                "Bài nộp %s đã bị xoá hoặc đã được worker khác nhận chấm trong lúc %s,"
+                " bỏ qua kết quả",
+                self.submission_id,
+                what,
+            )
+            raise _SubmissionDeleted
+        self.claimed_at = renewed_at
+
+    def save_tokens(self, tokens: list[str]) -> None:
+        """Lưu token Judge0 và gia hạn lease; raise ``_SubmissionDeleted`` nếu đã mất quyền chấm."""
+        self._renew("lưu token chấm", judge_tokens=tokens)
+
+    def heartbeat(self) -> None:
+        """Gọi trong vòng poll Judge0: gia hạn lease khi đã qua ``GRADING_HEARTBEAT``."""
+        if now_utc() - self.claimed_at >= GRADING_HEARTBEAT:
+            self._renew("gia hạn quyền chấm")
+
+    def finish(self, **values: Any) -> bool:
+        """Ghi kết quả và trả lại quyền chấm; ``False`` nếu bài đã bị xoá hoặc đã mất quyền."""
+        with Session(engine) as session:
+            result = session.execute(
+                update(Submission)
+                .where(self._owned())
+                .values(**values, grading_claimed_at=None)
+            )
+            session.commit()
+        return result.rowcount == 1
+
+
+def _claim_submission(submission_id: int) -> _GradingClaim | None:
+    """Nhận quyền chấm bằng một UPDATE có điều kiện (an toàn khi nhiều worker/backend cùng chạy).
+
+    Nhận được khi bài đang ``pending``, hoặc ``processing`` mà lease đã hết hạn (worker cũ
+    đã chết). Nếu bài đang được worker khác chấm thì hẹn kiểm tra lại lúc lease hết hạn,
+    để bài không bị bỏ dở nếu worker đó chết trước khi chấm xong.
+    """
+    claimed_at = now_utc()
+    with Session(engine) as session:
+        result = session.execute(
+            update(Submission)
+            .where(
+                Submission.submission_id == submission_id,
+                or_(
+                    Submission.status == "pending",
+                    and_(
+                        Submission.status == "processing",
+                        or_(
+                            Submission.grading_claimed_at.is_(None),
+                            Submission.grading_claimed_at <= claimed_at - GRADING_LEASE,
+                        ),
+                    ),
+                ),
+            )
+            .values(status="processing", grading_claimed_at=claimed_at)
+        )
+        session.commit()
+        if result.rowcount == 1:
+            return _GradingClaim(submission_id, claimed_at)
+        current = session.exec(
+            select(Submission.status, Submission.grading_claimed_at).where(
+                Submission.submission_id == submission_id
+            )
+        ).first()
+    if current is None:
+        logger.info("Bài nộp %s đã bị xoá trước khi bắt đầu chấm, bỏ qua", submission_id)
+    elif current.status == "processing" and current.grading_claimed_at is not None:
+        expires_in = max(
+            (as_utc(current.grading_claimed_at) + GRADING_LEASE - now_utc()).total_seconds(), 0
+        )
+        logger.info(
+            "Bài nộp %s đang được worker khác chấm, kiểm tra lại sau %.0fs",
+            submission_id,
+            expires_in,
+        )
+        grading_queue.enqueue(submission_id, expires_in + 1)
+    return None
+
+
+SKIPPED_STATUS = "skipped"
+_STOP_STATUSES = ("time_limit_exceeded",)
+
+
+def _chunk_timeout(problem: Problem, language: str, size: int) -> float:
+    """Thời gian chờ một lô: đủ cho mọi test TLE chạy tuần tự, không thấp hơn mức mặc định."""
+    _, wall = compute_limits(problem.time_limit_seconds, language)
+    return max(GRADING_TIMEOUT_SECONDS, size * wall + config.GRADING_CHUNK_EXTRA_SECONDS)
+
+
+def _grade_in_chunks(
+    problem: Problem,
+    data: CodeRequest,
+    testcases: list[Testcase],
+    tokens: list[str] | None,
+    on_tokens: Callable[[list[str]], None],
+    heartbeat: Callable[[], None] | None = None,
+) -> list[tuple[Judge0Result | None, str, Any]]:
+    """Chấm theo từng lô; lô có test TLE thì các test còn lại được đánh dấu `skipped`.
+
+    Judge0 CE không huỷ được test đã gửi, nên chỉ có thể dừng ở ranh giới lô. `tokens`
+    là token đã lưu của các lô trước (để chấm tiếp sau khi backend khởi động lại).
+    """
+    size = config.GRADING_CHUNK_SIZE if config.GRADING_CHUNK_SIZE > 0 else len(testcases)
+    saved = list(tokens or [])
+    judged: list[tuple[Judge0Result | None, str, Any]] = []
+    for start in range(0, len(testcases), size):
+        chunk = testcases[start : start + size]
+        chunk_tokens = saved[start : start + len(chunk)]
+
+        def remember(new_tokens: list[str], start: int = start) -> None:
+            saved[start:] = new_tokens
+            on_tokens(list(saved))
+
+        judged += _run_judge(
+            problem,
+            data,
+            chunk,
+            _chunk_timeout(problem, data.language, len(chunk)),
+            chunk_tokens if len(chunk_tokens) == len(chunk) else None,
+            remember,
+            heartbeat=heartbeat,
+        )
+        statuses = [status for _, status, _ in judged]
+        if "compile_error" in statuses or any(s in _STOP_STATUSES for s in statuses):
+            # Lỗi biên dịch thì mọi test đều lỗi như nhau; TLE thì chạy tiếp chỉ làm nghẽn
+            fill = "compile_error" if "compile_error" in statuses else SKIPPED_STATUS
+            judged += [(None, fill, None) for _ in testcases[len(judged):]]
+            break
+    return judged
+
+
+def _testcase_results(
+    problem: Problem,
+    language: str,
+    testcases: list[Testcase],
+    judged: list[tuple[Judge0Result | None, str, Any]],
+) -> list[dict]:
+    return [
+        {
+            "testcase_id": testcase.testcase_id,
+            "status": status,
+            "time": _case_time(result, status, problem, language),
+        }
+        for testcase, (result, status, _) in zip(testcases, judged, strict=True)
+    ]
 
 
 def grade_submission(submission_id: int) -> None:
     """Chạy trong worker nền: mở Session riêng và không giữ kết nối DB trong lúc chờ Judge0."""
-    with Session(engine) as session:
-        submission = session.get(Submission, submission_id)
-        if submission is None or submission.status not in _ACTIVE_STATUSES:
-            return
-        submission.status = "processing"
-        session.add(submission)
-        session.commit()
-        session.refresh(submission)
+    claim = _claim_submission(submission_id)
+    if claim is None:
+        return
 
-        problem = session.get(Problem, submission.problem_id)
-        testcases = list(
-            session.exec(
-                select(Testcase)
-                .where(Testcase.problem_id == submission.problem_id)
-                .order_by(Testcase.testcase_id)
-            ).all()
-        )
-        data = CodeRequest(language=submission.language, code=submission.submitted_code)
-        tokens = submission.judge_tokens
-        submitted_at = as_utc(submission.submitted_datetime)
-        session.close()
-
-        retry = False
-        passed_count = 0
-        compile_output = None
-        try:
-            judged = _run_judge(
-                problem,
-                data,
-                testcases,
-                GRADING_TIMEOUT_SECONDS,
-                tokens,
-                lambda new_tokens: _save_tokens(submission_id, new_tokens),
+    try:
+        with Session(engine) as session:
+            submission = session.get(Submission, submission_id)
+            if submission is None:
+                logger.info(
+                    "Bài nộp %s đã bị xoá trước khi bắt đầu chấm, bỏ qua kết quả", submission_id
+                )
+                return
+            problem = session.get(Problem, submission.problem_id)
+            testcases = list(
+                session.exec(
+                    select(Testcase)
+                    .where(Testcase.problem_id == submission.problem_id)
+                    .order_by(Testcase.testcase_id)
+                ).all()
             )
-            statuses = [status for _, status, _ in judged]
-            status = _overall_status(statuses)
-            passed_count = statuses.count("accepted")
-            compile_output = _compile_output_of(judged)
-        except Judge0Error:
-            logger.warning("Judge0 không khả dụng khi chấm, submission_id=%s", submission_id)
-            if now_utc() - submitted_at > PENDING_TTL:
-                status = "internal_error"
-            else:
-                status, retry = "pending", True
-        except Exception:
-            logger.exception("Chấm bài thất bại, submission_id=%s", submission_id)
-            status = "internal_error"
+            data = CodeRequest(language=submission.language, code=submission.submitted_code)
+            tokens = submission.judge_tokens
+            submitted_at = as_utc(submission.submitted_datetime)
+    except Exception:
+        # Vẫn đang giữ lease: hẹn chấm lại khi lease hết hạn thay vì để bài treo tới lần restart
+        logger.exception("Không đọc được bài nộp để chấm, submission_id=%s", submission_id)
+        grading_queue.enqueue(submission_id, GRADING_LEASE.total_seconds() + 1)
+        return
 
-        submission = session.get(Submission, submission_id)
-        submission.status = status
-        submission.passed_count = passed_count
-        submission.compile_output = compile_output
-        session.add(submission)
-        session.commit()
+    retry = False
+    passed_count = 0
+    compile_output = None
+    results = None
+    try:
+        judged = _grade_in_chunks(
+            problem, data, testcases, tokens, claim.save_tokens, heartbeat=claim.heartbeat
+        )
+        statuses = [status for _, status, _ in judged]
+        status = _overall_status(statuses)
+        passed_count = statuses.count("accepted")
+        compile_output = _compile_output_of(judged)
+        results = _testcase_results(problem, data.language, testcases, judged)
+    except _SubmissionDeleted:
+        return
+    except Judge0Error:
+        logger.warning("Judge0 không khả dụng khi chấm, submission_id=%s", submission_id)
+        if now_utc() - submitted_at > PENDING_TTL:
+            status = "internal_error"
+        else:
+            status, retry = "pending", True
+    except Exception:
+        logger.exception("Chấm bài thất bại, submission_id=%s", submission_id)
+        status = "internal_error"
+
+    saved = claim.finish(
+        status=status,
+        passed_count=passed_count,
+        compile_output=compile_output,
+        testcase_results=results,
+    )
+    if not saved:
+        logger.info(
+            "Bài nộp %s bị xoá hoặc đã được worker khác nhận chấm trong lúc lưu kết quả chấm,"
+            " bỏ qua",
+            submission_id,
+        )
+        return
 
     if retry:
         grading_queue.enqueue(submission_id, GRADE_RETRY_DELAY_SECONDS)
 
 
 def regrade(session: Session, submission_id: int, current_user: User) -> Submission:
-    get_submission_detail(session, submission_id, current_user)  # raise nếu không đủ quyền xem bài nộp
-    submission = session.get(Submission, submission_id)
+    submission = get_visible_submission(session, submission_id, current_user)[0]  # raise nếu không đủ quyền xem
     if submission.status != "internal_error":
         raise ConflictError("Chỉ chấm lại được bài bị lỗi hệ thống chấm")
     submission.status = "pending"
     submission.passed_count = 0
     submission.compile_output = None
     submission.judge_tokens = None
+    submission.testcase_results = None
+    submission.grading_claimed_at = None
     session.add(submission)
     session.commit()
     session.refresh(submission)
@@ -378,7 +590,16 @@ def regrade(session: Session, submission_id: int, current_user: User) -> Submiss
 
 
 def get_result(session: Session, submission_id: int, current_user: User) -> SubmissionResultResponse:
-    submission = session.get(Submission, submission_id)
+    submission = session.exec(
+        select(
+            Submission.submission_id,
+            Submission.student_id,
+            Submission.problem_id,
+            Submission.status,
+            Submission.passed_count,
+            Submission.compile_output,
+        ).where(Submission.submission_id == submission_id)
+    ).first()
     if submission is None or submission.student_id != current_user.user_id:
         raise NotFoundError("Không tìm thấy bài nộp")
     total = session.exec(

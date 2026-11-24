@@ -8,10 +8,13 @@ Tách riêng khỏi ``submissions/service.py`` vốn phục vụ giáo viên
 Việc chấm thật do ``modules/submissions/judge0`` đảm nhiệm (chạy nền qua
 ``grading_queue``), module này chỉ lo phần truy vấn và hiển thị.
 """
+from sqlalchemy.orm import load_only
 from sqlmodel import Session, select
 
 from app.core.dependencies import Role
 from app.core.exceptions import ForbiddenError, NotFoundError
+from app.modules.submissions.testcase_results import build_testcase_results, result_by_testcase
+from app.modules.testcases.testcase_format import testcase_to_api_values
 from app.modules.submissions.schemas import (
     StudentSubmissionDetailResponse,
     StudentSubmissionListResponse,
@@ -27,16 +30,46 @@ def _assert_student(current_user: User) -> None:
 
 
 def _student_rows(
-    session: Session, student_id: str
+    session: Session,
+    student_id: str,
+    *,
+    course_id: str | None = None,
+    problem_id: int | None = None,
 ) -> list[tuple[Submission, Problem, Lesson, Course]]:
+    """Lịch sử bài nộp (chỉ các cột danh sách cần, không có code/testcase_results)."""
     statement = (
         select(Submission, Problem, Lesson, Course)
         .join(Problem, Submission.problem_id == Problem.problem_id)
         .join(Lesson, Problem.lesson_id == Lesson.lesson_id)
         .join(Course, Lesson.course_id == Course.course_id)
+        .options(
+            load_only(
+                Submission.submission_id,
+                Submission.language,
+                Submission.status,
+                Submission.passed_count,
+                Submission.submitted_datetime,
+                raiseload=True,
+            ),
+            load_only(
+                Problem.problem_id,
+                Problem.report,
+                Problem.title,
+                Problem.total_number_testcase,
+                raiseload=True,
+            ),
+            load_only(
+                Lesson.lesson_id, Lesson.lesson_number, Lesson.lesson_name, raiseload=True
+            ),
+            load_only(Course.course_id, Course.course_name, raiseload=True),
+        )
         .where(Submission.student_id == student_id)
         .order_by(Submission.submitted_datetime.desc(), Submission.submission_id.desc())
     )
+    if course_id:
+        statement = statement.where(Course.course_id == course_id)
+    if problem_id is not None:
+        statement = statement.where(Problem.problem_id == problem_id)
     return list(session.exec(statement).all())
 
 
@@ -48,11 +81,9 @@ def list_student_submissions(
 ) -> StudentSubmissionListResponse:
     """Lịch sử bài nộp của chính sinh viên đang đăng nhập."""
     _assert_student(current_user)
-    rows = _student_rows(session, current_user.user_id)
-    if course_id:
-        rows = [row for row in rows if row[3].course_id == course_id]
-    if problem_id is not None:
-        rows = [row for row in rows if row[1].problem_id == problem_id]
+    rows = _student_rows(
+        session, current_user.user_id, course_id=course_id, problem_id=problem_id
+    )
 
     items = [
         StudentSubmissionResponse(
@@ -89,6 +120,7 @@ def _build_student_detail(
     course: Course | None,
     testcases: list[Testcase],
 ) -> StudentSubmissionDetailResponse:
+    results = result_by_testcase(submission)
     return StudentSubmissionDetailResponse(
         id=submission.submission_id,
         problem_id=problem.problem_id,
@@ -109,12 +141,15 @@ def _build_student_detail(
         testcases=[
             StudentSubmissionTestcaseResponse(
                 id=testcase.testcase_id,
-                input=testcase.input,
-                expected_output=testcase.expected_output,
-                is_sample=testcase.is_sample,
+                **testcase_to_api_values(testcase),
+                is_sample=True,
+                status=results.get(testcase.testcase_id, {}).get("status"),
+                time=results.get(testcase.testcase_id, {}).get("time"),
             )
             for testcase in testcases
+            if testcase.is_sample
         ],
+        testcase_results=build_testcase_results(submission, testcases),
     )
 
 
@@ -125,15 +160,20 @@ def get_student_submission_detail(
 ) -> StudentSubmissionDetailResponse:
     """Xem chi tiết kết quả chấm của một bài nộp - chỉ chính chủ bài nộp được xem."""
     _assert_student(current_user)
-    rows = [
-        row
-        for row in _student_rows(session, current_user.user_id)
-        if row[0].submission_id == submission_id
-    ]
-    if not rows:
+    row = session.exec(
+        select(Submission, Problem, Lesson, Course)
+        .join(Problem, Submission.problem_id == Problem.problem_id)
+        .join(Lesson, Problem.lesson_id == Lesson.lesson_id)
+        .join(Course, Lesson.course_id == Course.course_id)
+        .where(
+            Submission.submission_id == submission_id,
+            Submission.student_id == current_user.user_id,
+        )
+    ).first()
+    if row is None:
         # Trả 404 chứ không phải 403 để không lộ sự tồn tại của bài nộp người khác.
         raise NotFoundError("Không tìm thấy bài nộp")
-    submission, problem, lesson, course = rows[0]
+    submission, problem, lesson, course = row
     testcases = session.exec(
         select(Testcase)
         .where(Testcase.problem_id == problem.problem_id)

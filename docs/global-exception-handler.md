@@ -111,9 +111,12 @@ Mọi lỗi trong toàn hệ thống, bất kể route nào, đều trả về �
 # app/core/exception_handlers.py
 import logging
 from fastapi import FastAPI, Request
+from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
-from app.core.exceptions import AppError
+from starlette.exceptions import HTTPException as StarletteHTTPException
+from app.core.exceptions import AccountLockedError, AppError
 from app.core.schemas import ErrorResponse
+from app.modules.auth.service import SessionExpiredError, SessionRevokedError
 
 logger = logging.getLogger(__name__)
 
@@ -126,13 +129,31 @@ async def unhandled_exception_handler(request: Request, exc: Exception) -> JSONR
     body = ErrorResponse(error_code="INTERNAL_ERROR", message="Đã có lỗi xảy ra, vui lòng thử lại sau.")
     return JSONResponse(status_code=500, content=body.model_dump())
 
+# http_exception_handler, request_validation_exception_handler: xem file thật
+
+async def session_ended_handler(request: Request, exc: AppError) -> JSONResponse:
+    body = ErrorResponse(error_code=exc.error_code, message=exc.message)
+    response = JSONResponse(status_code=exc.status_code, content=body.model_dump())
+    response.delete_cookie(key="refresh_token", path="/auth", secure=True, samesite="none")
+    return response
+
 def register_exception_handlers(app: FastAPI) -> None:
+    app.add_exception_handler(SessionRevokedError, session_ended_handler)
+    app.add_exception_handler(SessionExpiredError, session_ended_handler)
+    app.add_exception_handler(AccountLockedError, session_ended_handler)
     app.add_exception_handler(AppError, app_error_handler)
+    app.add_exception_handler(StarletteHTTPException, http_exception_handler)
+    app.add_exception_handler(RequestValidationError, request_validation_exception_handler)
     app.add_exception_handler(Exception, unhandled_exception_handler)
 ```
 
 - `AppError` → mọi lỗi nghiệp vụ đã được định nghĩa (401, 400...) đi qua `app_error_handler`
+- `SessionRevokedError`, `SessionExpiredError` (`modules/auth/service.py`) và `AccountLockedError` (`core/exceptions.py`, 403 `ACCOUNT_LOCKED`) → đi qua `session_ended_handler`: body giống `app_error_handler`, nhưng response kèm `Set-Cookie` xoá cookie `refresh_token`. Cookie phải xoá với đúng `path`/`secure`/`samesite` như lúc set, nếu không trình duyệt bỏ qua lệnh xoá ở ngữ cảnh cross-site. Vì `AccountLockedError` được raise cả trong `get_current_user` (`core/dependencies.py`), mọi API dùng Bearer token của tài khoản bị khoá đều trả 403 `ACCOUNT_LOCKED` và xoá cookie refresh, không chỉ `/auth/login` và `/auth/refresh-access-token`
+- `StarletteHTTPException` → lỗi HTTP do framework raise (404 route không tồn tại, 405, thiếu header `Authorization`...) đi qua `http_exception_handler`, `error_code` lấy theo status (`UNAUTHORIZED`, `FORBIDDEN`, `NOT_FOUND`, `METHOD_NOT_ALLOWED`, `TOO_MANY_REQUESTS`, còn lại `HTTP_ERROR`)
+- `RequestValidationError` → lỗi validate của pydantic (thiếu field, sai kiểu, validator raise `ValueError`) đi qua `request_validation_exception_handler`, luôn trả `422` với `error_code = "VALIDATION_ERROR"` và message của lỗi đầu tiên
 - `Exception` (catch-all) → mọi lỗi **không lường trước** (bug, DB down...) đi qua `unhandled_exception_handler`, luôn trả `500` và **không lộ traceback thật** cho client — traceback chỉ được ghi vào log server qua `logger.exception(...)`
+
+FastAPI chọn handler theo class gần nhất trong cây kế thừa, nên handler riêng của `SessionRevokedError`/`AccountLockedError` được ưu tiên hơn handler chung của `AppError`.
 
 ### Bước 5 — Đăng ký vào app
 
@@ -195,6 +216,7 @@ Nếu `login_service` raise `InvalidCredentialsError`, dòng `_set_refresh_token
 2. **Định nghĩa exception mới** (nếu cần) trong file service tương ứng, kế thừa `AppError`, khai rõ `status_code` và `error_code`.
 3. **Không cần đăng ký handler mới** — vì đã kế thừa `AppError`, exception mới tự động được `app_error_handler` xử lý.
 4. Nếu lỗi dùng chung nhiều domain, thảo luận với team trước khi đưa lên `core/exceptions.py` để tránh trùng lặp `error_code`.
+5. **Validator trong schema cũng raise `AppError` con** (`EmptyFieldError`, `InvalidFormatError`...), không raise `ValueError`. Pydantic chỉ gói `ValueError`/`AssertionError` thành `RequestValidationError` (mất `error_code` riêng, thành `VALIDATION_ERROR` chung); `AppError` thì bay thẳng ra `app_error_handler` và giữ nguyên `error_code`. Validator phải tự kiểm tra kiểu dữ liệu trước khi xử lý chuỗi, để input sai kiểu không thành lỗi 500. Ví dụ `_validate_email` (`core/utils/validation.py`) trả `422 INVALID_FORMAT` "Email không đúng định dạng" khi `email` không phải chuỗi (số, mảng, object...).
 
 ---
 

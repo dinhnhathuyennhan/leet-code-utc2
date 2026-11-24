@@ -4,8 +4,9 @@ from sqlmodel import Session
 from app.core.dependencies import Role
 from app.modules.submissions.schemas import SubmissionUpdateRequest
 from app.modules.submissions.service import list_pending_submissions, update_submission
+from app.modules.submissions.student_service import get_student_submission_detail
 from app.models.entities import Submission, User
-from tests.support.fixtures.builders import make_submission, make_user
+from tests.support.fixtures.builders import make_submission, make_testcase, make_user
 
 pytest_plugins = ("tests.support.fixtures.submission_fixtures",)
 
@@ -26,6 +27,43 @@ class TestListPendingSubmissions:
         assert result.counts["all"] == 1
         assert result.counts["error"] == 1
         assert result.items[0].student_code == submission_student.student_code
+
+
+class TestStudentSubmissionDetail:
+    def test_returns_only_sample_testcases_in_api_format(
+        self,
+        session: Session,
+        submission_problem,
+        submission_student: User,
+        pending_error_submission,
+    ):
+        sample = make_testcase(
+            session,
+            submission_problem,
+            input_value="[1,2]",
+            expected_output="3",
+            is_sample=True,
+        )
+        hidden = make_testcase(
+            session,
+            submission_problem,
+            input_value="[9,9]",
+            expected_output="18",
+            is_sample=False,
+        )
+        submission_problem.total_number_testcase = 2
+        session.add(submission_problem)
+        session.commit()
+
+        result = get_student_submission_detail(
+            session, submission_student, pending_error_submission.submission_id
+        )
+
+        assert result.total_testcases == 2
+        assert [testcase.id for testcase in result.testcases] == [sample.testcase_id]
+        assert result.testcases[0].input == [1, 2]
+        assert result.testcases[0].expected_output == 3
+        assert hidden.testcase_id not in [testcase.id for testcase in result.testcases]
 
 
 class TestUpdateSubmission:

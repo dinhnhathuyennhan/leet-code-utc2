@@ -25,9 +25,12 @@ export interface AdminTestcase {
   is_sample: boolean;
   input_type: "json_args" | "stdin";
   expected_output_type: "json" | "stdout";
+  /** Chỉ có trong chi tiết bài nộp: kết quả chấm thật của test này. */
+  status?: string | null;
+  time?: number | null;
 }
 
-export type AdminTestcasePayload = Omit<AdminTestcase, "id">;
+export type AdminTestcasePayload = Omit<AdminTestcase, "id" | "status" | "time">;
 
 export interface AdminPreviewResult {
   status: string;
@@ -83,6 +86,7 @@ export interface AdminProblem {
   starter_code: string;
   starter_codes: Record<string, string>;
   testcases: AdminTestcase[];
+  supported_languages: string[];
 }
 
 export interface AdminProblemItem {
@@ -103,7 +107,8 @@ export interface AdminProblemList {
 
 export interface AdminProblemPayload {
   title: string;
-  function_name: string;
+  report: string | null;
+  function_name?: string | null;
   description: string;
   constraints: string;
   level: "easy" | "medium" | "hard";
@@ -113,7 +118,7 @@ export interface AdminProblemPayload {
   starter_codes: Record<string, string>;
   hint: string | null;
   complexity: string | null;
-  testcases: Array<{ input: unknown[]; expected_output: unknown; is_sample: boolean }>;
+  testcases: Array<{ input: unknown; expected_output: unknown; is_sample: boolean }>;
 }
 
 export interface AdminLesson {

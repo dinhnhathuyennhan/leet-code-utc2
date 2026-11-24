@@ -15,8 +15,15 @@ from app.modules.ai_review.schemas import (
     AIReviewRequest,
     AIReviewRequestBody,
     AIReviewResponse,
+    AIReviewUsageResponse,
 )
-from app.modules.ai_review.service import AIReviewService, build_review_request
+from app.modules.ai_review.service import (
+    AIReviewService,
+    build_review_request,
+    get_review_usage,
+    release_review_slot,
+    reserve_review_slot,
+)
 
 router = APIRouter(
     prefix="/ai",
@@ -66,9 +73,9 @@ async def review_admin_preview(
 )
 async def review_code(
     data: AIReviewFreeFormRequest,
-    # Whitelist rõ 3 vai trò được phép; role lạ/role thêm sau này bị chặn
-    # thay vì mặc định được gọi endpoint tốn tài nguyên này.
-    _current_user: User = Depends(require_role(Role.ADMIN, Role.TEACHER, Role.STUDENT)),
+    # Chỉ Admin/Teacher: sinh viên gửi code tuỳ ý vào đây sẽ vượt qua điều kiện
+    # "pass hết testcase" và giới hạn lượt review của route theo bài nộp bên dưới.
+    _current_user: User = Depends(require_role(Role.ADMIN, Role.TEACHER)),
 ) -> AIReviewResponse:
     # Endpoint review code tuỳ ý (dùng cho admin/teacher). Sinh viên dùng
     # route `/ai/review/{submission_id}` bên dưới: code lấy từ bài nộp đã pass.
@@ -102,6 +109,24 @@ async def review_submission(
     data = await run_in_threadpool(
         build_review_request, session, submission_id, current_user, locale
     )
-    # Lỗi nghiệp vụ (SubmissionNotAcceptedError, AIReviewTimeoutError...) kế thừa
-    # AppError và bay lên Global Exception Handler, router không tự bắt.
-    return await AIReviewService.review(data)
+    # Bài đủ điều kiện mới giữ lượt; hết lượt thì báo 429 trước khi gọi Ollama.
+    usage_id = await run_in_threadpool(reserve_review_slot, session, submission_id, current_user)
+    # Lỗi nghiệp vụ (AIReviewTimeoutError, AIReviewBusyError...) kế thừa AppError và
+    # bay lên Global Exception Handler; ở đây chỉ hoàn lượt rồi ném tiếp.
+    try:
+        return await AIReviewService.review(data)
+    except Exception:
+        await run_in_threadpool(release_review_slot, session, usage_id)
+        raise
+
+
+@router.get(
+    "/review/{submission_id}/usage",
+    response_model=AIReviewUsageResponse,
+)
+def get_review_usage_route(
+    submission_id: int,
+    session: Session = Depends(get_session),
+    current_user: User = Depends(require_role(Role.STUDENT)),
+) -> AIReviewUsageResponse:
+    return get_review_usage(session, submission_id, current_user)

@@ -5,6 +5,7 @@ Import package này là đủ để ``SQLModel.metadata`` thấy tất cả bả
 """
 
 from app.models.entities import (
+    AIReviewUsage,
     Class,
     Course,
     Enrollment,
@@ -16,6 +17,7 @@ from app.models.entities import (
 )
 
 __all__ = [
+    "AIReviewUsage",
     "Class",
     "Course",
     "Enrollment",

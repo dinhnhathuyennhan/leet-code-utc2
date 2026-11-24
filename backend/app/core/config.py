@@ -137,5 +137,10 @@ GRADING_WORKERS = _env_int("GRADING_WORKERS", 4)
 RUN_CONCURRENCY = _env_int("RUN_CONCURRENCY", 10)
 MAX_CODE_BYTES = _env_int("MAX_CODE_BYTES", 64 * 1024)
 
+# ===== AI review =====
+# Số lượt AI review tối đa của mỗi sinh viên cho mỗi bài tập (cố định, không cộng thêm
+# khi nộp lại). Lượt gọi AI bị lỗi không tính. Admin/Teacher không bị giới hạn.
+AI_REVIEW_MAX_PER_PROBLEM = _env_int("AI_REVIEW_MAX_PER_PROBLEM", 3)
+
 # ===== Ngôn ngữ hỗ trợ =====
 LANGUAGES = parse_languages(os.getenv("JUDGE_LANGUAGES"))

@@ -186,7 +186,7 @@ class LoginAttempt(SQLModel, table=True):
     window_started_at: datetime = Field(sa_type=UTCDateTime)
     locked_until: datetime | None = Field(default=None, sa_type=UTCDateTime)
 
-      
+
 # ==================== AI REVIEW USAGE ====================
 class AIReviewUsage(SQLModel, table=True):
     """Một lượt AI review của sinh viên cho một bài tập (đang chạy hoặc đã thành công).

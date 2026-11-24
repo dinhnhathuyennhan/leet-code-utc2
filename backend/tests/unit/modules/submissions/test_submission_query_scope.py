@@ -6,7 +6,7 @@ import pytest
 from sqlmodel import Session
 
 from app.core.dependencies import Role
-from app.core.exceptions import InvalidFormatError, NotFoundError
+from app.core.exceptions import NotFoundError
 from app.core.utils.datetime_utils import VN_TZ
 from app.models.entities import Course, Lesson, Problem, Submission, User
 from app.modules.submissions.schemas import SubmissionUpdateRequest
@@ -109,32 +109,25 @@ class TestVisibilityScope:
             )
         assert list_pending_submissions(session, admin).total == 2
 
-    def test_update_checks_existence_before_status_validity(
-        self, session: Session, submission_teacher: User, pending_error_submission: Submission
+    def test_update_missing_submission_is_not_found(
+        self, session: Session, submission_teacher: User
     ):
         with pytest.raises(NotFoundError):
             update_submission(
-                session, 999999, SubmissionUpdateRequest(status="bogus"), submission_teacher
-            )
-        with pytest.raises(InvalidFormatError, match="Trạng thái bài nộp không hợp lệ"):
-            update_submission(
-                session,
-                pending_error_submission.submission_id,
-                SubmissionUpdateRequest(status="bogus"),
-                submission_teacher,
+                session, 999999, SubmissionUpdateRequest(feedback="x"), submission_teacher
             )
 
-    def test_update_changes_status_and_returns_full_detail(
+    def test_update_feedback_keeps_status_and_returns_full_detail(
         self, session: Session, submission_teacher: User, pending_error_submission: Submission
     ):
         result = update_submission(
             session,
             pending_error_submission.submission_id,
-            SubmissionUpdateRequest(status="accepted", feedback="  Tốt  "),
+            SubmissionUpdateRequest(feedback="  Tốt  "),
             submission_teacher,
         )
 
-        assert result.status == "accepted"
+        assert result.status == pending_error_submission.status
         assert result.feedback == "Tốt"
         assert result.submitted_code == pending_error_submission.submitted_code
 
@@ -182,7 +175,7 @@ class TestScopeFailsClosedForNonTeacherRoles:
             update_submission(
                 session,
                 foreign_submission.submission_id,
-                SubmissionUpdateRequest(status="accepted", feedback="hack"),
+                SubmissionUpdateRequest(feedback="hack", manual_score=10),
                 outsider,
             )
 

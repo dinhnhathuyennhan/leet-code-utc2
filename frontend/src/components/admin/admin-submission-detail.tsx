@@ -16,7 +16,7 @@ import { formatDeadline } from "@/lib/helpers/datetime";
 import { getErrorMessage } from "@/lib/helpers/error-message";
 import { adminKeys } from "@/lib/hooks/use-admin";
 import type { AdminSubmissionDetail as Submission } from "@/lib/types/admin";
-import { AdminHeading, AdminLoading, AdminMetric, ADMIN_PRIMARY, ADMIN_SELECT } from "./admin-ui";
+import { AdminHeading, AdminLoading, AdminMetric, ADMIN_PRIMARY } from "./admin-ui";
 
 const STATUSES: Record<string, string> = {
   accepted: "Đã chấp nhận", pending: "Đang chờ chấm", wrong_answer: "Sai kết quả", compile_error: "Lỗi biên dịch",
@@ -105,7 +105,8 @@ function SubmissionWorkspace({ submission }: { submission: Submission }) {
       </div>
       <form onSubmit={(event) => void save(event)} className="h-fit space-y-5 rounded-2xl border bg-card p-5 shadow-sm">
         <h2 className="font-bold">Đánh giá & nhận xét</h2>
-        <label className="block space-y-2 text-sm font-medium">Trạng thái<select value={status} disabled className={`${ADMIN_SELECT} w-full bg-muted opacity-80`}><option value={status}>{STATUSES[status] ?? status}</option></select></label>
+        {/* Trạng thái do máy chấm quyết định, không sửa được nên chỉ hiển thị */}
+        <div className="space-y-1 text-sm"><p className="font-medium">Trạng thái</p><p className="font-semibold">{STATUSES[submission.status] ?? submission.status}</p></div>
         <label className="block space-y-2 text-sm font-medium">Điểm chốt (0–10)<Input type="number" min={0} max={10} step="0.1" value={score} onChange={(event) => setScore(event.target.value)} placeholder={automatic} disabled={saving} /></label>
         <p className="text-xs text-muted-foreground">Để trống điểm chốt để sử dụng kết quả chấm tự động.</p>
         <label className="block space-y-2 text-sm font-medium">Nhận xét<Textarea rows={7} maxLength={10000} value={feedback} onChange={(event) => setFeedback(event.target.value)} disabled={saving} placeholder="Nhập nhận xét về bài làm..." /></label>

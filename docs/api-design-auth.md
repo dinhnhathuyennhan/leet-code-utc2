@@ -396,12 +396,19 @@ Các lỗi 422 về định dạng (`EMPTY_FIELD`, `INVALID_FORMAT`) được ki
 | 422 | Thiếu field bắt buộc | `{"error_code": "VALIDATION_ERROR", "message": "..."}` |
 | 401 | Email hoặc mật khẩu sai | `{"error_code": "INVALID_CREDENTIALS", "message": "Email hoặc mật khẩu không đúng"}` (thông báo chung, không tiết lộ sai cái nào) |
 | 403 | Mật khẩu đúng nhưng tài khoản đang bị khoá (`is_active = false`) | `{"error_code": "ACCOUNT_LOCKED", "message": "Tài khoản đã bị khoá"}` |
+| 429 | Email đã đăng nhập sai quá nhiều lần và đang bị tạm chặn (trả cả khi lần này nhập đúng mật khẩu) | `{"error_code": "LOGIN_RATE_LIMITED", "message": "Bạn đã đăng nhập sai quá nhiều lần. Vui lòng thử lại sau {n} phút"}` |
 
 **Quy tắc nghiệp vụ**
 
 - `access_token`/`refresh_token` đều nhúng claim `tv` (token_version hiện tại của tài khoản) và claim `type` (`"access"` hoặc `"refresh"`) để phân biệt 2 loại token — server phải kiểm tra đúng `type` tương ứng ở từng endpoint, không chấp nhận lẫn loại token.
 - Client dựa vào `user.must_change_password` để tự điều hướng sang trang đổi mật khẩu.
 - Trạng thái khoá chỉ được báo **sau khi** mật khẩu đúng. Tài khoản bị khoá mà nhập sai mật khẩu vẫn nhận 401 lỗi chung, để người lạ không dò được tài khoản nào đang bị khoá.
+- **Chống dò mật khẩu** (bảng `login_attempt`): sai `LOGIN_MAX_FAILED_ATTEMPTS` lần (mặc định 5) trong `LOGIN_FAILURE_WINDOW_MINUTES` phút (mặc định 15) thì email bị tạm chặn `LOGIN_LOCKOUT_MINUTES` phút (mặc định 15).
+  - Lần sai chạm ngưỡng trả luôn 429. Trong lúc bị chặn, server không kiểm tra mật khẩu và trả 429 kể cả khi mật khẩu đúng.
+  - Đếm theo email sau khi `strip` (giữ nguyên hoa/thường, khớp cách login tìm tài khoản), không theo IP, vì cả phòng máy thường dùng chung một IP. Email khác hoa/thường không đăng nhập được vào tài khoản thật, nên đếm riêng không giúp lách ngưỡng.
+  - Email chưa có tài khoản cũng bị đếm và chặn giống hệt, để không dò được email nào tồn tại.
+  - Đăng nhập đúng mật khẩu thì xoá bộ đếm (kể cả khi tài khoản đang bị khoá). Hết thời gian chặn hoặc hết cửa sổ đếm thì đếm lại từ đầu.
+  - Đánh đổi: người khác biết email có thể cố tình nhập sai để chặn tạm tài khoản đó tối đa 15 phút.
 - **Yêu cầu quyền**: không (public, ai cũng gọi được).
 
 ## POST /auth/change-password — Đổi mật khẩu
@@ -423,6 +430,13 @@ Các lỗi 422 về định dạng (`EMPTY_FIELD`, `INVALID_FORMAT`) được ki
 | 422 | `new_password` không khớp `confirm_password` hoặc không đủ độ mạnh | `{"error_code": "PASSWORD_MISMATCH" \| "WEAK_PASSWORD", "message": "..."}` |
 | 401 | `current_password` sai | `{"error_code": "WRONG_PASSWORD", "message": "Mật khẩu hiện tại không đúng"}` |
 | 400 | `new_password` trùng `current_password` | `{"error_code": "SAME_PASSWORD", "message": "Mật khẩu mới phải khác mật khẩu hiện tại"}` |
+| 422 | `new_password` chứa MSSV (`student_code`) hoặc phần trước `@` của email (so không phân biệt hoa thường, chỉ xét chuỗi >= 4 ký tự) | `{"error_code": "WEAK_PASSWORD", "message": "Mật khẩu mới không được chứa mã sinh viên hoặc email"}` |
+
+**Độ mạnh của `new_password`** (khớp `changePasswordSchema` ở frontend):
+
+- Ít nhất 8 ký tự, có ít nhất 1 chữ hoa, 1 chữ số và 1 ký tự đặc biệt (ký tự không phải chữ, số hay khoảng trắng).
+- Không chứa MSSV hoặc phần trước `@` của email (mật khẩu tạm của Sinh viên chính là MSSV).
+- Chỉ áp cho mật khẩu mới. Đăng nhập vẫn chấp nhận mật khẩu cũ yếu hơn để không khoá tài khoản sẵn có.
 
 **Quy tắc nghiệp vụ**
 

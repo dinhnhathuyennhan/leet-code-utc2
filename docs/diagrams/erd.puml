@@ -115,6 +115,15 @@ entity "submission\n(Bài nộp)" as e_submission {
   grading_claimed_at : timestamptz
 }
 
+entity "login_attempt
+(Đăng nhập sai)" as e_login_attempt {
+  * <b>email</b> : varchar(255) <<PK>>
+  --
+  * failed_count : int
+  * window_started_at : timestamptz
+  locked_until : timestamptz
+}
+
 e_class |o--o{ e_user : "gồm"
 e_user |o--o{ e_user : "khoá (locked_by)"
 e_user ||--o{ e_course : "tạo (created_by)"
@@ -132,6 +141,7 @@ legend right
   user.class_id chỉ có giá trị với Sinh viên
   user.locked_by: người đã khoá tài khoản (NULL khi đang hoạt động), ON DELETE SET NULL
   submission.grading_claimed_at: lease của worker đang chấm (NULL khi không ai giữ)
+  login_attempt: đếm đăng nhập sai theo email (không FK, email chưa có tài khoản cũng được đếm)
 endlegend
 
 @enduml

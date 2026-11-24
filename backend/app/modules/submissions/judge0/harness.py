@@ -1,6 +1,7 @@
 import math
 import json
 import re
+import secrets
 
 from app.core.exceptions import InvalidFormatError
 from app.core import config
@@ -10,7 +11,12 @@ OPTIONAL_HARNESS_LANGUAGES = ("c", "cpp")
 HARNESS_LANGUAGES = REQUIRED_HARNESS_LANGUAGES + OPTIONAL_HARNESS_LANGUAGES
 ALL_STARTER_LANGUAGES = ("python", "c", "cpp", "java", "javascript")
 
+# Dấu mốc cố định cũ. Chỉ còn dùng để chấm tiếp bài nộp đã gửi lên Judge0 trước khi
+# có dấu mốc ngẫu nhiên (``Submission.result_marker`` NULL nhưng đã có ``judge_tokens``).
 RESULT_MARKER = "\n@@CHAM_CODE_RESULT@@"
+# Phần kết quả sau dấu mốc lớn hơn mức này coi như không hợp lệ (Judge0 mặc định cũng
+# chỉ cho stdout khoảng 1 MB).
+MAX_RESULT_BYTES = 1024 * 1024
 _IDENTIFIER = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
 
 FLOAT_REL_TOL = 1e-9
@@ -83,33 +89,62 @@ def supports_function_harness(language: str) -> bool:
     return language in HARNESS_LANGUAGES
 
 
+def new_result_marker() -> str:
+    """Dấu mốc ngẫu nhiên cho một lần chấm, để code sinh viên không in giả được kết quả.
+
+    Chỉ gồm chữ, số, ``@``, ``_`` và ký tự xuống dòng nên nhúng thẳng được vào literal
+    của mọi ngôn ngữ. Sinh viên vẫn có thể đọc chính file nguồn để lấy dấu mốc: cách
+    này nâng mức khó chứ không chặn tuyệt đối.
+    """
+    return f"\n@@CHAM_CODE_RESULT_{secrets.token_hex(16)}@@"
+
+
 def build_source(
-    language: str, student_code: str, function_name: str, starter_code: str | None = None,
+    language: str,
+    student_code: str,
+    function_name: str,
+    starter_code: str | None = None,
+    marker: str | None = None,
 ) -> str:
+    """Bọc code sinh viên bằng harness in kết quả sau ``marker`` (mặc định: mốc ngẫu nhiên mới)."""
     if not _IDENTIFIER.match(function_name):
         raise ValueError("function_name không hợp lệ")
+    marker = marker or new_result_marker()
     if language == "python":
         driver = _PYTHON_DRIVER.format(
             name=function_name,
-            marker=RESULT_MARKER,
+            marker=marker,
             student_lines=len(student_code.splitlines()),
         )
         return f"{student_code}\n{driver}"
     if language == "javascript":
-        driver = _JS_DRIVER.format(name=function_name, marker=json.dumps(RESULT_MARKER))
+        driver = _JS_DRIVER.format(name=function_name, marker=json.dumps(marker))
         return f"{student_code}\n{driver}"
     if language == "c":
-        return build_c_function_source(student_code, function_name, starter_code or "")
+        return build_c_function_source(student_code, function_name, starter_code or "", marker)
     if language == "cpp":
-        return build_cpp_function_source(student_code, function_name, starter_code or "")
+        return build_cpp_function_source(student_code, function_name, starter_code or "", marker)
     raise ValueError(f"Chưa hỗ trợ function harness cho {language}")
 
 
-def extract_result(stdout: str | None) -> str | None:
-    """Lấy JSON kết quả sau marker; None nếu chương trình không in ra marker."""
-    if not stdout or RESULT_MARKER not in stdout:
+def extract_result(stdout: str | None, marker: str) -> str | None:
+    """Lấy JSON kết quả sau ``marker``; None nếu output không hợp lệ.
+
+    Không hợp lệ khi: không có dấu mốc, dấu mốc xuất hiện nhiều lần (code sinh viên tự
+    in thêm), phần sau dấu mốc lớn hơn ``MAX_RESULT_BYTES``, hoặc không phải đúng một
+    giá trị JSON (có rác in thêm phía sau). Mọi trường hợp đều được chấm Wrong Answer
+    thay vì làm hỏng luồng chấm.
+    """
+    if not stdout or stdout.count(marker) != 1:
         return None
-    return stdout.rsplit(RESULT_MARKER, 1)[1]
+    result = stdout.split(marker, 1)[1]
+    if len(result.encode("utf-8")) > MAX_RESULT_BYTES:
+        return None
+    try:
+        json.loads(result)
+    except ValueError:
+        return None
+    return result
 
 
 def _values_match(expected, actual) -> bool:
@@ -333,6 +368,7 @@ def _build_cpp_size_aware_main(
     function_name: str,
     owner: str | None,
     signature: tuple[str, list[tuple[str, str, bool]]],
+    marker_literal: str,
 ) -> str | None:
     return_type, parameters = signature
     return_size_index: int | None = None
@@ -418,26 +454,29 @@ def _build_cpp_size_aware_main(
         raise InvalidFormatError("Hàm C++ trả về con trỏ mảng cần tham số returnSize cuối để serialize kết quả")
 
     if normalized_return == "void":
-        result_output = f'{call}; cout << "\\n@@CHAM_CODE_RESULT@@null";'
+        result_output = f'{call}; cout << {marker_literal} << "null";'
     elif return_size_var is not None and not char_pointer_return:
         result_output = (
             f"auto __cham_result = {call}; "
             f'if ({return_size_var} < 0) '
             'throw runtime_error("returnSize cannot be negative"); '
-            f'cout << "\\n@@CHAM_CODE_RESULT@@"; '
+            f'cout << {marker_literal}; '
             f'if (!__cham_result && {return_size_var} > 0) '
             'throw runtime_error("null array result with positive returnSize"); '
             'cout << "["; for (int __i = 0; __i < ' + return_size_var + '; ++__i) { if (__i) cout << ","; cout << __cham::to(__cham_result[__i]); } cout << "]";'
         )
     else:
-        result_output = f'auto __cham_result = {call}; cout << "\\n@@CHAM_CODE_RESULT@@" << __cham::to(__cham_result);'
+        result_output = f'auto __cham_result = {call}; cout << {marker_literal} << __cham::to(__cham_result);'
 
     checks = " || ".join(array_checks)
     checks = f" || {checks}" if checks else ""
     return f'''\nint main() {{\n  try {{ __cham::Parser p(string(istreambuf_iterator<char>(cin), {{}})); auto root = p.value();\n    if (root.kind != __cham::J::Array || root.array.size() != {slot}{checks}) throw runtime_error("wrong argument count or array argument type");\n    {object_declaration} {' '.join(declarations)}\n    {result_output}\n  }} catch (const exception& e) {{ cerr << e.what(); return 1; }}\n}}\n'''
 
 
-def build_cpp_function_source(student_code: str, function_name: str, starter_code: str) -> str:
+def build_cpp_function_source(
+    student_code: str, function_name: str, starter_code: str, marker: str = RESULT_MARKER,
+) -> str:
+    marker_literal = json.dumps(marker)  # chuỗi JSON chỉ chứa ASCII cũng là literal C/C++ hợp lệ
     if not starter_code.strip():
         raise InvalidFormatError("Function mode C++ cần starter_codes.cpp để suy ra chữ ký hàm")
     if function_name == "main":
@@ -473,17 +512,17 @@ def build_cpp_function_source(student_code: str, function_name: str, starter_cod
     ):
         raise InvalidFormatError("Không phân tích được chữ ký C++ có tham số độ dài mảng hoặc returnSize")
     if signature is not None:
-        size_aware_main = _build_cpp_size_aware_main(function_name, owner, signature)
+        size_aware_main = _build_cpp_size_aware_main(function_name, owner, signature, marker_literal)
         if size_aware_main is not None:
             return _CPP_RUNTIME + "\n" + student_code + "\n" + size_aware_main
     if owner is not None:
-        main = f'''\nint main() {{\n  try {{ __cham::Parser p(string(istreambuf_iterator<char>(cin), {{}})); auto root = p.value();\n    if (root.kind != __cham::J::Array) throw runtime_error("input must be an argument array");\n    {owner} solution; auto result = __cham::call_method(&{owner}::{function_name}, solution, root.array);\n    cout << "\\n@@CHAM_CODE_RESULT@@" << result;\n  }} catch (const exception& e) {{ cerr << e.what(); return 1; }}\n}}\n'''
+        main = f'''\nint main() {{\n  try {{ __cham::Parser p(string(istreambuf_iterator<char>(cin), {{}})); auto root = p.value();\n    if (root.kind != __cham::J::Array) throw runtime_error("input must be an argument array");\n    {owner} solution; auto result = __cham::call_method(&{owner}::{function_name}, solution, root.array);\n    cout << {marker_literal} << result;\n  }} catch (const exception& e) {{ cerr << e.what(); return 1; }}\n}}\n'''
     else:
         if not re.search(rf"\b{re.escape(function_name)}\s*\(", source_hint):
             raise InvalidFormatError(f"Không tìm thấy chữ ký C++ cho function_name '{function_name}' trong starter_codes.cpp")
         if function_name == "main":
             raise InvalidFormatError("function_name 'main' không dùng được với function harness C++")
-        main = f'''\nint main() {{\n  try {{ __cham::Parser p(string(istreambuf_iterator<char>(cin), {{}})); auto root = p.value();\n    if (root.kind != __cham::J::Array) throw runtime_error("input must be an argument array");\n    auto result = __cham::call_global(&{function_name}, root.array);\n    cout << "\\n@@CHAM_CODE_RESULT@@" << result;\n  }} catch (const exception& e) {{ cerr << e.what(); return 1; }}\n}}\n'''
+        main = f'''\nint main() {{\n  try {{ __cham::Parser p(string(istreambuf_iterator<char>(cin), {{}})); auto root = p.value();\n    if (root.kind != __cham::J::Array) throw runtime_error("input must be an argument array");\n    auto result = __cham::call_global(&{function_name}, root.array);\n    cout << {marker_literal} << result;\n  }} catch (const exception& e) {{ cerr << e.what(); return 1; }}\n}}\n'''
     return _CPP_RUNTIME + "\n" + student_code + "\n" + main
 
 
@@ -572,7 +611,9 @@ def _c_type_kind(type_name: str) -> str:
     raise InvalidFormatError(f"Kiểu C chưa được hỗ trợ trong function harness: {type_name}")
 
 
-def build_c_function_source(student_code: str, function_name: str, starter_code: str) -> str:
+def build_c_function_source(
+    student_code: str, function_name: str, starter_code: str, marker: str = RESULT_MARKER,
+) -> str:
     if not starter_code.strip():
         raise InvalidFormatError("Function mode C cần starter_codes.c để suy ra chữ ký hàm")
     if function_name == "main":
@@ -655,6 +696,8 @@ def build_c_function_source(student_code: str, function_name: str, starter_code:
     if ret_kind == "string_array":
         raise InvalidFormatError("C function harness chưa hỗ trợ trả về mảng chuỗi")
     call = f"{function_name}({', '.join(arguments)})"
+    # Gọi hàm (`compute`) trước rồi mới in dấu mốc và kết quả (`emit`), giống C++: printf
+    # debug của sinh viên nằm trước dấu mốc nên không làm hỏng kết quả.
     if ret_kind == "array":
         if return_size_name is None:
             raise InvalidFormatError("C function trả mảng cần tham số outputSize cuối để serialize kết quả")
@@ -665,22 +708,30 @@ def build_c_function_source(student_code: str, function_name: str, starter_code:
             raise InvalidFormatError(f"Kiểu mảng trả về C chưa được hỗ trợ: {return_type}")
         formatter = "%.17g" if ret_base in {"float", "double"} else "%lld"
         cast = "(double)" if ret_base in {"float", "double"} else "(long long)"
-        output = f"{ret_base} *__result = {call}; putchar('['); for(int __i=0; __i<{return_size_name}; ++__i){{if(__i)putchar(','); printf(\"{formatter}\",{cast}__result[__i]);}} putchar(']');"
+        compute = f"{ret_base} *__result = {call};"
+        emit = f"putchar('['); for(int __i=0; __i<{return_size_name}; ++__i){{if(__i)putchar(','); printf(\"{formatter}\",{cast}__result[__i]);}} putchar(']');"
     elif ret_kind == "string":
-        output = f"char *__result = {call}; qstr(__result ? __result : \"\");"
+        compute = f"char *__result = {call};"
+        emit = "qstr(__result ? __result : \"\");"
     elif ret_kind == "number":
-        output = f"double __result = {call}; printf(\"%.17g\", __result);"
+        compute = f"double __result = {call};"
+        emit = "printf(\"%.17g\", __result);"
     elif ret_kind == "bool":
-        output = f"int __result = {call}; fputs(__result ? \"true\" : \"false\", stdout);"
+        compute = f"int __result = {call};"
+        emit = "fputs(__result ? \"true\" : \"false\", stdout);"
     elif ret_kind == "char":
-        output = f"char __result = {call}; char __text[2]={{__result,0}}; qstr(__text);"
+        compute = f"char __result = {call}; char __text[2]={{__result,0}};"
+        emit = "qstr(__text);"
     elif ret_kind == "void":
-        output = f"{call}; fputs(\"null\", stdout);"
+        compute = f"{call};"
+        emit = "fputs(\"null\", stdout);"
     else:
-        output = f"long long __result = (long long){call}; printf(\"%lld\", __result);"
+        compute = f"long long __result = (long long){call};"
+        emit = "printf(\"%lld\", __result);"
+    marker_literal = json.dumps(marker)  # chuỗi JSON chỉ chứa ASCII cũng là literal C hợp lệ
     array_check = " || ".join(array_slot_checks)
     array_check = f" || __cham_input->n > {consumed}" + (f" || {array_check}" if array_check else "")
-    driver = f'''\nint main(void) {{\n  size_t __cap=4096,__n=0; char *__buffer=(char*)malloc(__cap); int __ch; while((__ch=getchar())!=EOF){{if(__n+1>=__cap){{__cap*=2;__buffer=(char*)realloc(__buffer,__cap);}}__buffer[__n++]=(char)__ch;}} __buffer[__n]=0; cur=__buffer; J *__cham_input=parse();\n  if (__cham_input->type != 4 || __cham_input->n < {consumed}{array_check}) return 2;\n  {''.join(declarations)}\n  fputs("\\n@@CHAM_CODE_RESULT@@",stdout); {output} return 0;\n}}\n'''
+    driver = f'''\nint main(void) {{\n  size_t __cap=4096,__n=0; char *__buffer=(char*)malloc(__cap); int __ch; while((__ch=getchar())!=EOF){{if(__n+1>=__cap){{__cap*=2;__buffer=(char*)realloc(__buffer,__cap);}}__buffer[__n++]=(char)__ch;}} __buffer[__n]=0; cur=__buffer; J *__cham_input=parse();\n  if (__cham_input->type != 4 || __cham_input->n < {consumed}{array_check}) return 2;\n  {''.join(declarations)}\n  {compute} fputs({marker_literal},stdout); {emit} return 0;\n}}\n'''
     return _C_RUNTIME + "\n" + student_code + "\n" + driver
 
 def _builds(language: str, code: str, function_name: str) -> str | None:

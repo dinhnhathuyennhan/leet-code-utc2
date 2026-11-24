@@ -3,6 +3,7 @@ import logging
 import threading
 from collections.abc import Callable
 from contextlib import contextmanager
+from dataclasses import replace
 from datetime import datetime, timedelta
 from typing import Any
 
@@ -23,9 +24,11 @@ from app.modules.courses.access import (
 )
 from app.modules.submissions.judge0 import grading_queue
 from app.modules.submissions.judge0.harness import (
+    RESULT_MARKER,
     build_source,
     extract_result,
     json_outputs_match,
+    new_result_marker,
     starter_codes_of,
     supported_languages,
     text_outputs_match,
@@ -73,13 +76,13 @@ class JudgeBusyError(Judge0Error):
     error_code = "JUDGE_BUSY"
 
 
-def _build_source(problem: Problem, language: str, code: str) -> str:
+def _build_source(problem: Problem, language: str, code: str, marker: str | None = None) -> str:
     if problem.function_name is None:
         return code
     if language not in supported_languages(problem):
         raise UnsupportedLanguageError(f"Bài tập này chưa hỗ trợ chấm bằng {language}")
     return build_source(
-        language, code, problem.function_name, starter_codes_of(problem).get(language)
+        language, code, problem.function_name, starter_codes_of(problem).get(language), marker
     )
 
 _run_slots = threading.BoundedSemaphore(config.RUN_CONCURRENCY)
@@ -115,20 +118,37 @@ def _get_student_problem(
         raise NotFoundError("Không tìm thấy bài tập trong buổi học")
     return problem
 
-def _judge_case(result: Judge0Result, testcase: Testcase, uses_harness: bool) -> tuple[str, Any]:
-    """Trả về (status nội bộ, actual_output đã giải mã)."""
+INVALID_RESULT_NOTE = (
+    "Kết quả trả về của hàm không hợp lệ: chương trình kết thúc trước khi hàm trả về,"
+    " hoặc in thêm dữ liệu sau kết quả."
+)
+
+
+def _judge_case(
+    result: Judge0Result, testcase: Testcase, uses_harness: bool, marker: str,
+) -> tuple[Judge0Result, str, Any]:
+    """Trả về (result, status nội bộ, actual_output đã giải mã).
+
+    Output harness không hợp lệ (xem ``extract_result``) chấm Wrong Answer, kèm ghi chú
+    trong ``stderr`` của result trả về để sinh viên biết lý do.
+    """
     if not result.finished:
-        return "internal_error", None
+        return result, "internal_error", None
     if result.status_id != STATUS_ACCEPTED:
-        return result.system_status, None
+        return result, result.system_status, None
     if uses_harness:
-        actual = extract_result(result.stdout)
+        actual = extract_result(result.stdout, marker)
+        if actual is None:
+            stderr = (
+                f"{result.stderr.rstrip()}\n{INVALID_RESULT_NOTE}"
+                if result.stderr
+                else INVALID_RESULT_NOTE
+            )
+            return replace(result, stderr=stderr), "wrong_answer", None
         matched = json_outputs_match(testcase.expected_output, actual)
-        return ("accepted" if matched else "wrong_answer"), (
-            json.loads(actual) if actual is not None else None
-        )
+        return result, ("accepted" if matched else "wrong_answer"), json.loads(actual)
     matched = text_outputs_match(testcase.expected_output, result.stdout)
-    return ("accepted" if matched else "wrong_answer"), (result.stdout or "").strip()
+    return result, ("accepted" if matched else "wrong_answer"), (result.stdout or "").strip()
 
 
 def _case_time(result: Judge0Result | None, status: str, problem: Problem, language: str) -> float | None:
@@ -154,8 +174,15 @@ def _run_judge(
     tokens: list[str] | None = None,
     on_tokens: Callable[[list[str]], None] | None = None,
     heartbeat: Callable[[], None] | None = None,
+    marker: str | None = None,
 ) -> list[tuple[Judge0Result, str, Any]]:
-    source = _build_source(problem, data.language, data.code)
+    """Chấm ``testcases`` trên Judge0.
+
+    ``marker`` là dấu mốc kết quả của harness, phải trùng dấu mốc đã nhúng vào source lúc
+    tạo ``tokens``. Không truyền thì sinh dấu mốc mới (Run/preview không chấm tiếp).
+    """
+    marker = marker or new_result_marker()
+    source = _build_source(problem, data.language, data.code, marker)
     client = Judge0Client()
     try:
         if not tokens or len(tokens) != len(testcases):
@@ -168,8 +195,9 @@ def _run_judge(
     finally:
         client.close()
     uses_harness = problem.function_name is not None
-    judged = [_judge_case(r, tc, uses_harness) for r, tc in zip(results, testcases, strict=True)]
-    return [(r, status, actual) for r, (status, actual) in zip(results, judged, strict=True)]
+    return [
+        _judge_case(r, tc, uses_harness, marker) for r, tc in zip(results, testcases, strict=True)
+    ]
 
 
 def run(
@@ -360,9 +388,15 @@ class _GradingClaim:
             raise _SubmissionDeleted
         self.claimed_at = renewed_at
 
-    def save_tokens(self, tokens: list[str]) -> None:
-        """Lưu token Judge0 và gia hạn lease; raise ``_SubmissionDeleted`` nếu đã mất quyền chấm."""
-        self._renew("lưu token chấm", judge_tokens=tokens)
+    def save_tokens(self, tokens: list[str], marker: str | None = None) -> None:
+        """Lưu token Judge0 (kèm dấu mốc kết quả đã nhúng vào source) và gia hạn lease.
+
+        Raise ``_SubmissionDeleted`` nếu đã mất quyền chấm.
+        """
+        values: dict[str, Any] = {"judge_tokens": tokens}
+        if marker is not None:
+            values["result_marker"] = marker
+        self._renew("lưu token chấm", **values)
 
     def heartbeat(self) -> None:
         """Gọi trong vòng poll Judge0: gia hạn lease khi đã qua ``GRADING_HEARTBEAT``."""
@@ -447,6 +481,7 @@ def _grade_in_chunks(
     tokens: list[str] | None,
     on_tokens: Callable[[list[str]], None],
     heartbeat: Callable[[], None] | None = None,
+    marker: str | None = None,
 ) -> list[tuple[Judge0Result | None, str, Any]]:
     """Chấm theo từng lô; lô có test TLE thì các test còn lại được đánh dấu `skipped`.
 
@@ -472,6 +507,7 @@ def _grade_in_chunks(
             chunk_tokens if len(chunk_tokens) == len(chunk) else None,
             remember,
             heartbeat=heartbeat,
+            marker=marker,
         )
         statuses = [status for _, status, _ in judged]
         if "compile_error" in statuses or any(s in _STOP_STATUSES for s in statuses):
@@ -522,6 +558,12 @@ def grade_submission(submission_id: int) -> None:
             )
             data = CodeRequest(language=submission.language, code=submission.submitted_code)
             tokens = submission.judge_tokens
+            # Chấm tiếp token cũ thì phải đọc kết quả theo đúng dấu mốc đã nhúng lúc gửi;
+            # bài gửi trước khi có dấu mốc ngẫu nhiên (cột NULL) dùng dấu mốc cố định cũ.
+            if tokens:
+                marker = submission.result_marker or RESULT_MARKER
+            else:
+                marker = new_result_marker()
             submitted_at = as_utc(submission.submitted_datetime)
     except Exception:
         # Vẫn đang giữ lease: hẹn chấm lại khi lease hết hạn thay vì để bài treo tới lần restart
@@ -535,7 +577,13 @@ def grade_submission(submission_id: int) -> None:
     results = None
     try:
         judged = _grade_in_chunks(
-            problem, data, testcases, tokens, claim.save_tokens, heartbeat=claim.heartbeat
+            problem,
+            data,
+            testcases,
+            tokens,
+            lambda saved: claim.save_tokens(saved, marker),
+            heartbeat=claim.heartbeat,
+            marker=marker,
         )
         statuses = [status for _, status, _ in judged]
         status = _overall_status(statuses)

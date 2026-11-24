@@ -4,18 +4,20 @@ import json
 import subprocess
 import sys
 
-from app.modules.submissions.judge0.harness import build_source, extract_result
+from app.modules.submissions.judge0.harness import build_source, extract_result, new_result_marker
+
+MARKER = new_result_marker()
 
 
 def _run(code: str, args: list) -> tuple[int, str | None, str]:
-    source = build_source("python", code, "add")
+    source = build_source("python", code, "add", marker=MARKER)
     proc = subprocess.run(
         [sys.executable, "-c", source],
         input=json.dumps(args).encode(),
         capture_output=True,
         timeout=30,
     )
-    return proc.returncode, extract_result(proc.stdout.decode()), proc.stderr.decode("utf-8")
+    return proc.returncode, extract_result(proc.stdout.decode(), MARKER), proc.stderr.decode("utf-8")
 
 
 def test_correct_function_still_returns_result():

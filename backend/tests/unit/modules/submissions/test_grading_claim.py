@@ -208,7 +208,7 @@ class TestGradeSubmissionClaim:
         submission = _submission(session, submission_problem, submission_student, "pending")
         beats: list = []
 
-        def grade(problem, data, testcases, tokens, save_tokens, heartbeat=None):
+        def grade(problem, data, testcases, tokens, save_tokens, heartbeat=None, marker=None):
             beats.append(heartbeat)
             heartbeat()
             return [(None, "accepted", None)]
@@ -227,7 +227,7 @@ class TestGradeSubmissionClaim:
         submission = _submission(session, submission_problem, submission_student, "pending")
         takeover = now_utc() + timedelta(seconds=5)
 
-        def grade(problem, data, testcases, tokens, save_tokens, heartbeat=None):
+        def grade(problem, data, testcases, tokens, save_tokens, heartbeat=None, marker=None):
             with Session(engine) as other:
                 row = other.get(Submission, submission.submission_id)
                 row.grading_claimed_at = takeover
@@ -283,7 +283,7 @@ class TestGradeSubmissionClaim:
         submission = _submission(session, submission_problem, submission_student, "pending")
         graded: list[int] = []
 
-        def grade(problem, data, testcases, tokens, save_tokens, heartbeat=None):
+        def grade(problem, data, testcases, tokens, save_tokens, heartbeat=None, marker=None):
             graded.append(submission.submission_id)
             # Lượt chấm thứ hai bắt đầu khi lượt đầu còn đang chờ Judge0
             judge_service.grade_submission(submission.submission_id)
@@ -346,7 +346,7 @@ class TestGradeSubmissionClaim:
         submission = _submission(session, submission_problem, submission_student, "pending")
         reached: list[str] = []
 
-        def grade(problem, data, testcases, tokens, save_tokens, heartbeat=None):
+        def grade(problem, data, testcases, tokens, save_tokens, heartbeat=None, marker=None):
             with Session(engine) as other:
                 row = other.get(Submission, submission.submission_id)
                 row.grading_claimed_at = now_utc() + timedelta(seconds=30)

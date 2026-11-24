@@ -1,9 +1,10 @@
 import type { AxiosError } from "axios";
 
 import axiosInstance from "@/lib/axios";
+import { wrapAxiosError } from "@/lib/api/client";
 import { ApiError } from "@/lib/api/error";
 import type { Locale } from "@/lib/i18n";
-import type { AiReviewErrorCode, AiReviewResult } from "@/lib/types/ai-review";
+import type { AiReviewErrorCode, AiReviewResult, AiReviewUsage } from "@/lib/types/ai-review";
 
 /**
  * Backend chờ Ollama tối đa 180s (lần đầu nạp model ~80s), nên nới timeout so
@@ -18,6 +19,7 @@ const KNOWN_CODES: ReadonlySet<string> = new Set<AiReviewErrorCode>([
   "AI_INVALID_RESPONSE",
   "SUBMISSION_NOT_ACCEPTED",
   "CODE_TOO_LONG",
+  "AI_REVIEW_LIMIT_REACHED",
   "NOT_FOUND",
 ]);
 
@@ -93,5 +95,17 @@ export async function reviewSubmission(
     return response.data;
   } catch (error) {
     throw toAiReviewError(error);
+  }
+}
+
+/** Số lượt AI review sinh viên đã dùng / còn lại cho bài tập của bài nộp này. */
+export async function getReviewUsage(submissionId: number | string): Promise<AiReviewUsage> {
+  try {
+    const response = await axiosInstance.get<AiReviewUsage>(
+      `/ai/review/${encodeURIComponent(String(submissionId))}/usage`,
+    );
+    return response.data;
+  } catch (error) {
+    throw wrapAxiosError(error);
   }
 }

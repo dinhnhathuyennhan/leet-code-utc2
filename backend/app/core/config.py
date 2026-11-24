@@ -142,6 +142,10 @@ MAX_CODE_BYTES = _env_int("MAX_CODE_BYTES", 64 * 1024)
 LOGIN_MAX_FAILED_ATTEMPTS = _env_int("LOGIN_MAX_FAILED_ATTEMPTS", 5)
 LOGIN_FAILURE_WINDOW_MINUTES = _env_int("LOGIN_FAILURE_WINDOW_MINUTES", 15)
 LOGIN_LOCKOUT_MINUTES = _env_int("LOGIN_LOCKOUT_MINUTES", 15)
+# ===== AI review =====
+# Số lượt AI review tối đa của mỗi sinh viên cho mỗi bài tập (cố định, không cộng thêm
+# khi nộp lại). Lượt gọi AI bị lỗi không tính. Admin/Teacher không bị giới hạn.
+AI_REVIEW_MAX_PER_PROBLEM = _env_int("AI_REVIEW_MAX_PER_PROBLEM", 3)
 
 # ===== Ngôn ngữ hỗ trợ =====
 LANGUAGES = parse_languages(os.getenv("JUDGE_LANGUAGES"))

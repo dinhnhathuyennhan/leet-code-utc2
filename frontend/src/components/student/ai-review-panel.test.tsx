@@ -620,3 +620,70 @@ describe("AiReviewSection — prompt locale", () => {
     expect(locales).toEqual(["vi"]);
   });
 });
+
+describe("AiReviewSection — review limit per problem", () => {
+  const USAGE_URL = "http://localhost:8000/ai/review/:id/usage";
+
+  function mockUsage(remaining: number, limit = 3) {
+    server.use(http.get(USAGE_URL, () => HttpResponse.json({ limit, used: limit - remaining, remaining })));
+  }
+
+  it("shows how many reviews are left", async () => {
+    mockUsage(2);
+    renderSection();
+
+    expect(await screen.findByTestId("ai-review-usage")).toHaveTextContent("Còn 2/3 lượt AI review cho bài này");
+    expect(reviewButton()).toBeEnabled();
+  });
+
+  it("disables the button and does not call AI when no reviews are left", async () => {
+    mockUsage(0);
+    const calls = mockReview();
+    const user = userEvent.setup();
+    renderSection();
+
+    expect(await screen.findByTestId("ai-review-usage")).toHaveTextContent("Bạn đã dùng hết 3 lượt AI review cho bài này.");
+    expect(reviewButton()).toBeDisabled();
+    await user.click(reviewButton());
+    expect(calls).toHaveLength(0);
+  });
+
+  it("shows the limit error without a retry button", async () => {
+    mockReview(() =>
+      HttpResponse.json(
+        { error_code: "AI_REVIEW_LIMIT_REACHED", message: "Bạn đã dùng hết 3 lượt AI review cho bài tập này" },
+        { status: 429 },
+      ),
+    );
+    const user = userEvent.setup();
+    renderSection();
+
+    await user.click(reviewButton());
+
+    const alert = await screen.findByRole("alert");
+    expect(within(alert).getByText("Bạn đã dùng hết lượt AI review cho bài tập này.")).toBeInTheDocument();
+    expect(within(alert).queryByRole("button", { name: /Thử lại/ })).toBeNull();
+  });
+
+  it("refreshes the remaining count after a review and hides 'review again' when used up", async () => {
+    let remaining = 1;
+    server.use(
+      http.get(USAGE_URL, () => HttpResponse.json({ limit: 3, used: 3 - remaining, remaining })),
+      http.post(URL, () => {
+        remaining = 0;
+        return HttpResponse.json(PRIME_REVIEW);
+      }),
+    );
+    const user = userEvent.setup();
+    renderSection();
+    await screen.findByText(/Còn 1\/3 lượt/);
+
+    await user.click(reviewButton());
+
+    const result = await screen.findByTestId("ai-review-result");
+    await waitFor(() =>
+      expect(within(result).getByTestId("ai-review-usage")).toHaveTextContent("Bạn đã dùng hết 3 lượt"),
+    );
+    expect(within(result).queryByRole("button", { name: /Review lại/ })).toBeNull();
+  });
+});

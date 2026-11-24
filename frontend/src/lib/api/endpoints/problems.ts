@@ -3,9 +3,10 @@ import { wrapAxiosError } from "@/lib/api/client";
 
 const PROBLEM_IMPORT_TIMEOUT_MS = 180_000;
 
-export interface ProblemListItem { id: number; code: string | null; title: string; level: string; lesson_id: number | null; total_number_testcase: number; }
+export type ProblemGradingMode = "harness" | "stdin_stdout";
+export interface ProblemListItem { id: number; code: string | null; title: string; level: string; lesson_id: number | null; total_number_testcase: number; grading_mode: ProblemGradingMode; }
 export interface ProblemListResponse { items: ProblemListItem[]; total: number; page: number; page_size: number; }
-export interface ProblemListParams { q?: string; level?: "easy" | "medium" | "hard"; grading_mode?: "harness" | "stdin_stdout"; course_id?: string; page?: number; page_size?: number; }
+export interface ProblemListParams { q?: string; level?: "easy" | "medium" | "hard"; grading_mode?: ProblemGradingMode; course_id?: string; /** Chỉ lấy bài trong ngân hàng (chưa gắn buổi học). */ bank_only?: boolean; /** Chỉ lấy bài đã có ít nhất một testcase. */ has_testcases?: boolean; page?: number; page_size?: number; }
 export interface ProblemImportResponse {
   created_count: number;
   problems: Array<{ id: number; code: string | null; title: string; total_number_testcase: number }>;

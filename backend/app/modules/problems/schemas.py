@@ -245,6 +245,7 @@ class ProblemListItemResponse(BaseModel):
     level: str
     lesson_id: int | None
     total_number_testcase: int
+    grading_mode: Literal["harness", "stdin_stdout"]
 
 
 class ProblemListResponse(BaseModel):

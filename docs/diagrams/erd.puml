@@ -115,13 +115,24 @@ entity "submission\n(Bài nộp)" as e_submission {
   grading_claimed_at : timestamptz
 }
 
-entity "login_attempt
-(Đăng nhập sai)" as e_login_attempt {
+entity "login_attempt\n(Đăng nhập sai)" as e_login_attempt {
   * <b>email</b> : varchar(255) <<PK>>
   --
   * failed_count : int
   * window_started_at : timestamptz
   locked_until : timestamptz
+}
+
+entity "ai_review_usage\n(Lượt AI review)" as e_ai_review_usage {
+  * <b>usage_id</b> : int <<PK>>
+  --
+  * student_id : uuid <<FK>>
+  * problem_id : int <<FK>>
+  * submission_id : int <<FK>>
+  * attempt_no : int
+  * created_at : timestamptz
+  ..
+  (student_id, problem_id, attempt_no) <<UNIQUE>>
 }
 
 e_class |o--o{ e_user : "gồm"
@@ -134,6 +145,9 @@ e_lesson ||--o{ e_problem : "gồm"
 e_problem ||--o{ e_testcase : "có"
 e_problem ||--o{ e_submission : "nhận"
 e_user ||--o{ e_submission : "nộp"
+e_user ||--o{ e_ai_review_usage : "dùng lượt"
+e_problem ||--o{ e_ai_review_usage : "giới hạn theo"
+e_submission ||--o{ e_ai_review_usage : "review"
 
 legend right
   * : cột NOT NULL
@@ -142,6 +156,7 @@ legend right
   user.locked_by: người đã khoá tài khoản (NULL khi đang hoạt động), ON DELETE SET NULL
   submission.grading_claimed_at: lease của worker đang chấm (NULL khi không ai giữ)
   login_attempt: đếm đăng nhập sai theo email (không FK, email chưa có tài khoản cũng được đếm)
+  ai_review_usage: mỗi SV tối đa AI_REVIEW_MAX_PER_PROBLEM lượt/problem (attempt_no 1..giới hạn)
 endlegend
 
 @enduml

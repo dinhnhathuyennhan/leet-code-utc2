@@ -9,6 +9,12 @@ import { Input } from "@/components/ui/input";
 import { EmptyState, ErrorState } from "@/components/shared/page-state";
 import { ProblemImportDialog } from "@/components/shared/problem-import-dialog";
 import {
+  ProblemGradingModeSelect,
+  ProblemLevelSelect,
+  type ProblemGradingModeFilter,
+  type ProblemLevelFilter,
+} from "@/components/shared/problem-filter-selects";
+import {
   createAdminProblem,
   deleteAdminBankProblem,
   getAdminProblems,
@@ -20,7 +26,6 @@ import {
   AdminDialog,
   AdminHeading,
   ADMIN_PRIMARY,
-  ADMIN_SELECT,
 } from "./admin-ui";
 
 export const adminLevelLabel = (level: string) =>
@@ -29,8 +34,8 @@ export const adminLevelLabel = (level: string) =>
 export function AdminProblemBank() {
   const client = useQueryClient();
   const [search, setSearch] = useState("");
-  const [level, setLevel] = useState("");
-  const [gradingMode, setGradingMode] = useState<"" | "harness" | "stdin_stdout">("");
+  const [level, setLevel] = useState<ProblemLevelFilter>("");
+  const [gradingMode, setGradingMode] = useState<ProblemGradingModeFilter>("");
   const [page, setPage] = useState(1);
   const [creating, setCreating] = useState(false);
   const [importing, setImporting] = useState(false);
@@ -75,37 +80,25 @@ export function AdminProblemBank() {
               setPage(1);
             }}
             className="pl-9"
-            placeholder="Tìm theo tên bài tập..."
+            placeholder="Tìm theo mã hoặc tên bài tập..."
             aria-label="Tìm bài tập nguồn"
           />
         </div>
-        <select
-          className={ADMIN_SELECT}
+        <ProblemLevelSelect
           value={level}
-          onChange={(event) => {
-            setLevel(event.target.value);
+          allLabel="Tất cả độ khó"
+          onChange={(next) => {
+            setLevel(next);
             setPage(1);
           }}
-          aria-label="Lọc độ khó"
-        >
-          <option value="">Tất cả độ khó</option>
-          <option value="easy">Dễ</option>
-          <option value="medium">Trung bình</option>
-          <option value="hard">Khó</option>
-        </select>
-        <select
-          className={ADMIN_SELECT}
+        />
+        <ProblemGradingModeSelect
           value={gradingMode}
-          onChange={(event) => {
-            setGradingMode(event.target.value as typeof gradingMode);
+          onChange={(next) => {
+            setGradingMode(next);
             setPage(1);
           }}
-          aria-label="Lọc cách chấm"
-        >
-          <option value="">Tất cả cách chấm</option>
-          <option value="harness">Function-call (harness)</option>
-          <option value="stdin_stdout">stdin/stdout</option>
-        </select>
+        />
       </div>
       {query.isPending ? (
         <p className="p-10 text-center text-sm text-muted-foreground">

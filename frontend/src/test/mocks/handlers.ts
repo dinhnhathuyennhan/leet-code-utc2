@@ -94,4 +94,9 @@ export const handlers = [
     }
     return HttpResponse.json(course);
   }),
+
+  // Số lượt AI review mặc định: còn đủ lượt. Test cần trạng thái khác thì server.use().
+  http.get(`${API}/ai/review/:id/usage`, () =>
+    HttpResponse.json({ limit: 3, used: 0, remaining: 3 }),
+  ),
 ];

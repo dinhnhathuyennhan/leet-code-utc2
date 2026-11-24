@@ -168,3 +168,21 @@ def test_online_user_locked_by_admin_gets_account_locked_with_old_tokens(
     assert refreshed.status_code == 403
     assert refreshed.json() == LOCKED_BODY
     assert "max-age=0" in refreshed.headers["set-cookie"].lower()
+
+
+# ------------------------------------------------------------ brute-force
+def test_too_many_wrong_logins_return_429_body(client, monkeypatch):
+    from app.core import config
+
+    monkeypatch.setattr(config, "LOGIN_MAX_FAILED_ATTEMPTS", 2)
+    monkeypatch.setattr(config, "LOGIN_LOCKOUT_MINUTES", 15)
+    body = {"email": "ai-do@example.com", "password": "Wrong-Password-999"}
+
+    assert client.post("/auth/login", json=body).status_code == 401
+    response = client.post("/auth/login", json=body)
+
+    assert response.status_code == 429
+    assert response.json() == {
+        "error_code": "LOGIN_RATE_LIMITED",
+        "message": "Bạn đã đăng nhập sai quá nhiều lần. Vui lòng thử lại sau 15 phút",
+    }

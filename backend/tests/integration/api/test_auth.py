@@ -176,7 +176,8 @@ def test_too_many_wrong_logins_return_429_body(client, monkeypatch):
 
     monkeypatch.setattr(config, "LOGIN_MAX_FAILED_ATTEMPTS", 2)
     monkeypatch.setattr(config, "LOGIN_LOCKOUT_MINUTES", 15)
-    body = {"email": "ai-do@example.com", "password": "Wrong-Password-999"}
+    # Email hợp lệ nhưng chưa có tài khoản
+    body = {"email": "0000009999@st.utc2.edu.vn", "password": "Wrong-Password-999"}
 
     assert client.post("/auth/login", json=body).status_code == 401
     response = client.post("/auth/login", json=body)

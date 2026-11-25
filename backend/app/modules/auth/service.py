@@ -63,8 +63,9 @@ def _build_login_response(user: User) -> tuple[LoginResponse, str]:
 
 
 def login(session: Session, data: LoginRequest) -> tuple[LoginResponse, str]:
+    # Giữ chỗ một lượt thử TRƯỚC bcrypt, để request song song không cùng lọt qua ngưỡng.
     # Email đang bị tạm chặn vì sai quá nhiều lần: từ chối ngay, không kiểm tra mật khẩu
-    login_throttle.ensure_not_locked(session, data.email)
+    slot = login_throttle.reserve_attempt(session, data.email)
 
     existing = session.exec(select(User).where(User.email == data.email.strip())).first()
 
@@ -75,15 +76,20 @@ def login(session: Session, data: LoginRequest) -> tuple[LoginResponse, str]:
     password_ok = _safe_verify(data.password, hashed)
 
     if existing is None or not password_ok:
-        # Chạm ngưỡng thì record_failure raise LOGIN_RATE_LIMITED thay cho lỗi chung
-        login_throttle.record_failure(session, data.email)
+        # Lượt này đã được tính lúc giữ chỗ; lượt cuối thì raise LOGIN_RATE_LIMITED thay cho lỗi chung
+        slot.fail()
         raise InvalidCredentialsError("Email hoặc mật khẩu không đúng")
 
-    login_throttle.clear_failures(session, data.email)
-
     # Chỉ báo khoá sau khi mật khẩu đúng, tránh lộ trạng thái tài khoản cho người lạ.
+    # Chủ ý giữ 403 để chủ tài khoản hiểu vì sao không vào được, chấp nhận việc 403 cho
+    # biết mật khẩu đúng (kẻ dò vẫn bị giới hạn số lượt và không đăng nhập được).
+    # Tài khoản bị khoá không đăng nhập được nên lượt này vẫn tính như lượt sai: không
+    # xoá bộ đếm (nếu không, đoán trúng là mở ra cửa sổ thử mới), lượt cuối thì trả 429.
     if not existing.is_active:
+        slot.fail()
         raise AccountLockedError("Tài khoản đã bị khoá")
+
+    login_throttle.clear_failures(session, data.email)
 
     return _build_login_response(existing)
 

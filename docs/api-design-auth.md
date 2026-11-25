@@ -403,11 +403,14 @@ Các lỗi 422 về định dạng (`EMPTY_FIELD`, `INVALID_FORMAT`) được ki
 - `access_token`/`refresh_token` đều nhúng claim `tv` (token_version hiện tại của tài khoản) và claim `type` (`"access"` hoặc `"refresh"`) để phân biệt 2 loại token — server phải kiểm tra đúng `type` tương ứng ở từng endpoint, không chấp nhận lẫn loại token.
 - Client dựa vào `user.must_change_password` để tự điều hướng sang trang đổi mật khẩu.
 - Trạng thái khoá chỉ được báo **sau khi** mật khẩu đúng. Tài khoản bị khoá mà nhập sai mật khẩu vẫn nhận 401 lỗi chung, để người lạ không dò được tài khoản nào đang bị khoá.
+  - Đánh đổi có chủ ý: 403 cho biết mật khẩu vừa nhập là đúng. Nhóm chấp nhận điều này để chủ tài khoản hiểu vì sao không vào được, thay vì tưởng mình quên mật khẩu. Rủi ro thấp vì tài khoản bị khoá không đăng nhập được, việc dò vẫn bị giới hạn số lượt ở dưới, và lượt đoán trúng không xoá bộ đếm.
 - **Chống dò mật khẩu** (bảng `login_attempt`): sai `LOGIN_MAX_FAILED_ATTEMPTS` lần (mặc định 5) trong `LOGIN_FAILURE_WINDOW_MINUTES` phút (mặc định 15) thì email bị tạm chặn `LOGIN_LOCKOUT_MINUTES` phút (mặc định 15).
   - Lần sai chạm ngưỡng trả luôn 429. Trong lúc bị chặn, server không kiểm tra mật khẩu và trả 429 kể cả khi mật khẩu đúng.
   - Đếm theo email sau khi `strip` (giữ nguyên hoa/thường, khớp cách login tìm tài khoản), không theo IP, vì cả phòng máy thường dùng chung một IP. Email khác hoa/thường không đăng nhập được vào tài khoản thật, nên đếm riêng không giúp lách ngưỡng.
   - Email chưa có tài khoản cũng bị đếm và chặn giống hệt, để không dò được email nào tồn tại.
-  - Đăng nhập đúng mật khẩu thì xoá bộ đếm (kể cả khi tài khoản đang bị khoá). Hết thời gian chặn hoặc hết cửa sổ đếm thì đếm lại từ đầu.
+  - Đăng nhập thành công thì xoá bộ đếm. Tài khoản đang bị khoá (`is_active = false`) mà nhập đúng mật khẩu thì vẫn tính là một lượt sai và **không** xoá bộ đếm (vẫn trả 403, riêng lượt chạm ngưỡng trả 429), để đoán trúng không mở ra cửa sổ thử mới. Hết thời gian chặn hoặc hết cửa sổ đếm thì đếm lại từ đầu.
+  - Mỗi lượt đăng nhập được tính vào bộ đếm **trước** khi kiểm tra mật khẩu (dưới khoá dòng), nên một đợt request song song không thử được quá ngưỡng: lượt thứ `LOGIN_MAX_FAILED_ATTEMPTS` đặt luôn mốc chặn, các request đến trong lúc nó đang kiểm tra mật khẩu nhận 429. Nếu chính lượt đó đúng mật khẩu thì vẫn đăng nhập được và bộ đếm bị xoá.
+  - Dòng đã hết cửa sổ đếm và không còn bị chặn được tự dọn định kỳ (mỗi process tối đa 5 phút một lần, chạy kèm lượt đăng nhập), để email sai rồi bỏ đi không nằm lại mãi trong bảng.
   - Đánh đổi: người khác biết email có thể cố tình nhập sai để chặn tạm tài khoản đó tối đa 15 phút.
 - **Yêu cầu quyền**: không (public, ai cũng gọi được).
 

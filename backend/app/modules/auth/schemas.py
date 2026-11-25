@@ -1,3 +1,5 @@
+import string
+
 from pydantic import BaseModel, field_validator
 
 from app.core.exceptions import (
@@ -44,12 +46,13 @@ class ChangePasswordRequest(BaseModel):
     @field_validator("new_password")
     @classmethod
     def validate_strength(cls, v: str) -> str:
-        # Khớp với changePasswordSchema ở frontend (validate-field-form.ts)
+        # Khớp với changePasswordSchema ở frontend (validate-field-form.ts): chữ hoa và
+        # chữ số chỉ tính ASCII ([A-Z], [0-9]); str.isupper/isdigit nhận cả "Đ", "²"
         if len(v) < 8:
             raise WeakPasswordError("Mật khẩu mới phải có ít nhất 8 ký tự")
-        if not any(c.isupper() for c in v):
+        if not any(c in string.ascii_uppercase for c in v):
             raise WeakPasswordError("Mật khẩu mới cần ít nhất 1 chữ cái viết hoa")
-        if not any(c.isdigit() for c in v):
+        if not any(c in string.digits for c in v):
             raise WeakPasswordError("Mật khẩu mới cần ít nhất 1 chữ số")
         if not any(not c.isalnum() and not c.isspace() for c in v):
             raise WeakPasswordError("Mật khẩu mới cần ít nhất 1 ký tự đặc biệt")

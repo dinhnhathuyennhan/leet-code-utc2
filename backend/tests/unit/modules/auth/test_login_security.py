@@ -9,7 +9,8 @@
 from datetime import timedelta
 
 import pytest
-from sqlmodel import Session
+from sqlalchemy import Insert, delete
+from sqlmodel import Session, select
 
 from app.core import config
 from app.core.exceptions import WeakPasswordError
@@ -31,6 +32,8 @@ def thresholds(monkeypatch):
     monkeypatch.setattr(config, "LOGIN_MAX_FAILED_ATTEMPTS", 3)
     monkeypatch.setattr(config, "LOGIN_FAILURE_WINDOW_MINUTES", 15)
     monkeypatch.setattr(config, "LOGIN_LOCKOUT_MINUTES", 10)
+    # Lượt đăng nhập đầu tiên của mỗi test luôn chạy dọn dẹp
+    monkeypatch.setattr(login_throttle, "_last_purge", None)
 
 
 @pytest.fixture
@@ -163,15 +166,112 @@ def test_counter_is_per_email(session, user, clock):
     assert response.user.email == EMAIL
 
 
-def test_locked_account_with_correct_password_still_clears_counter(session, user, clock):
+def test_locked_account_with_correct_password_keeps_counting(session, user, clock):
+    """Đoán trúng mật khẩu của tài khoản bị khoá không được xoá bộ đếm."""
     user.is_active = False
     session.add(user)
     session.commit()
-    _fail(session, 2)
+    _fail(session, 1)
 
     with pytest.raises(svc.AccountLockedError):
         _login(session)
-    assert session.get(LoginAttempt, EMAIL) is None
+    assert session.get(LoginAttempt, EMAIL).failed_count == 2
+
+    # Lượt chạm ngưỡng trả 429 như mọi lượt sai, kể cả khi mật khẩu đúng
+    with pytest.raises(LoginRateLimitedError):
+        _login(session)
+
+
+# ------------------------------------------------------------- concurrency
+def test_counter_is_reread_under_lock_not_taken_from_session_cache(
+    engine, session, user, clock
+):
+    """Object cũ trong identity map không được ghi đè bộ đếm mới hơn của request khác."""
+    _fail(session, 1)
+    cached = session.get(LoginAttempt, EMAIL)
+    assert cached.failed_count == 1
+    with Session(engine) as other:  # một request khác sai thêm lần nữa
+        _fail(other, 1)
+
+    # Đây là lần sai thứ 3 = ngưỡng, không phải "1 + 1" từ giá trị cũ trong cache
+    with pytest.raises(LoginRateLimitedError):
+        _login(session, WRONG)
+    assert session.get(LoginAttempt, EMAIL).failed_count == 3
+
+
+def test_parallel_request_during_last_attempt_is_rejected_without_checking_password(
+    engine, session, user, clock, monkeypatch
+):
+    """Lượt cuối được giữ chỗ trước bcrypt: request song song nhận 429 ngay."""
+    _fail(session, 2)
+    real_verify = svc._safe_verify
+    calls = []
+
+    def verify(password, hashed):
+        calls.append(password)
+        if len(calls) == 1:
+            # Request song song tới đúng lúc lượt cuối đang chạy bcrypt, kể cả đoán đúng
+            with Session(engine) as other, pytest.raises(LoginRateLimitedError):
+                _login(other)
+        return real_verify(password, hashed)
+
+    monkeypatch.setattr(svc, "_safe_verify", verify)
+
+    with pytest.raises(LoginRateLimitedError):
+        _login(session, WRONG)
+    assert calls == [WRONG]
+
+
+def test_attempt_is_never_silently_skipped(session, user, clock, monkeypatch):
+    """Không giữ chỗ được (dòng luôn bị xoá ngay sau khi tạo) thì dừng, không thử mật khẩu."""
+    real_exec = session.exec
+
+    def exec_then_delete(statement, *args, **kwargs):
+        result = real_exec(statement, *args, **kwargs)
+        if isinstance(statement, Insert):
+            real_exec(delete(LoginAttempt))  # đăng nhập đúng ở request khác chen vào
+        return result
+
+    monkeypatch.setattr(session, "exec", exec_then_delete)
+    monkeypatch.setattr(svc, "_safe_verify", lambda *a: pytest.fail("không được kiểm tra mật khẩu"))
+
+    with pytest.raises(RuntimeError):
+        _login(session, WRONG)
+
+
+# ---------------------------------------------------------------- cleanup
+def _stored_emails(session):
+    return sorted(session.exec(select(LoginAttempt.email)).all())
+
+
+def test_expired_rows_are_purged(session, user, clock):
+    abandoned = "bo-di@st.utc2.edu.vn"
+    blocked = "bi-chan@st.utc2.edu.vn"
+    _fail(session, 1, email=abandoned)  # sai một lần rồi không quay lại
+    _fail(session, 2, email=blocked)
+    with pytest.raises(LoginRateLimitedError):
+        _login(session, WRONG, blocked)
+    assert _stored_emails(session) == [blocked, abandoned]
+
+    clock.advance(minutes=15)  # hết cửa sổ đếm và hết thời gian chặn (10 phút)
+    _fail(session, 1)
+
+    assert _stored_emails(session) == [EMAIL]
+
+
+def test_purge_keeps_rows_that_are_still_blocked(session, user, clock, monkeypatch):
+    monkeypatch.setattr(config, "LOGIN_LOCKOUT_MINUTES", 30)
+    _fail(session, 2)
+    with pytest.raises(LoginRateLimitedError):
+        _login(session, WRONG)
+
+    clock.advance(minutes=20)  # hết cửa sổ đếm nhưng vẫn còn bị chặn
+    _fail(session, 1, email="khac@st.utc2.edu.vn")
+
+    assert EMAIL in _stored_emails(session)
+    with pytest.raises(LoginRateLimitedError) as exc:
+        _login(session)
+    assert "thử lại sau 10 phút" in exc.value.message
 
 
 # --------------------------------------------------------- password strength
@@ -183,6 +283,10 @@ def test_locked_account_with_correct_password_still_clears_counter(session, user
         ("Abcdefg!", "Mật khẩu mới cần ít nhất 1 chữ số"),
         ("Abcdefg1", "Mật khẩu mới cần ít nhất 1 ký tự đặc biệt"),
         ("Abcdef1 ", "Mật khẩu mới cần ít nhất 1 ký tự đặc biệt"),
+        # Chỉ tính chữ hoa/chữ số ASCII, giống regex [A-Z], [0-9] ở frontend
+        ("Đàoabcd2!", "Mật khẩu mới cần ít nhất 1 chữ cái viết hoa"),
+        ("Abcdefg²!", "Mật khẩu mới cần ít nhất 1 chữ số"),
+        ("Abcdefg٣!", "Mật khẩu mới cần ít nhất 1 chữ số"),
     ],
 )
 def test_weak_new_password_is_rejected(password, message):
@@ -225,7 +329,7 @@ def test_new_password_containing_student_code_is_rejected(session, user, new):
 def test_new_password_containing_email_name_is_rejected(session):
     teacher = User(
         full_name="Giáo viên B",
-        email="NguyenVanB@utc2.edu.vn",
+        email="NguyenVanB@st.utc2.edu.vn",
         hashed_password=hash_password(PASSWORD),
         role_id=2,
     )

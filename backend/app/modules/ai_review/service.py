@@ -3,10 +3,13 @@ import os
 import secrets
 
 import httpx
-from sqlmodel import Session
+from sqlalchemy.exc import IntegrityError
+from sqlmodel import Session, select
 
+from app.core import config
 from app.core.exceptions import AppError, NotFoundError
-from app.models import Problem, Submission, User
+from app.core.utils.datetime_utils import now_utc
+from app.models import AIReviewUsage, Problem, Submission, User
 from app.modules.ai_review.prompts import (
     OUTPUT_LANGUAGE_INSTRUCTION,
     SYSTEM_PROMPT,
@@ -19,6 +22,7 @@ from app.modules.ai_review.schemas import (
     MAX_REVIEW_CODE_CHARS,
     AIReviewRequest,
     AIReviewResponse,
+    AIReviewUsageResponse,
 )
 
 logger = logging.getLogger(__name__)
@@ -78,6 +82,13 @@ class SubmissionNotAcceptedError(AppError):
 
     status_code = 409
     error_code = "SUBMISSION_NOT_ACCEPTED"
+
+
+class AIReviewLimitReachedError(AppError):
+    """Sinh viên đã dùng hết lượt AI review cho bài tập này."""
+
+    status_code = 429
+    error_code = "AI_REVIEW_LIMIT_REACHED"
 
 
 class ReviewCodeTooLongError(AppError):
@@ -165,10 +176,7 @@ def build_review_request(
     hay code chưa qua chấm. `locale` chỉ quyết định ngôn ngữ của phần văn xuôi
     trong kết quả, không ảnh hưởng nội dung code đem đi review.
     """
-    submission = session.get(Submission, submission_id)
-    # Bài của người khác cũng trả 404 để không lộ sự tồn tại của bài nộp.
-    if submission is None or submission.student_id != current_user.user_id:
-        raise NotFoundError("Không tìm thấy bài nộp")
+    submission = _own_submission(session, submission_id, current_user)
 
     problem = session.get(Problem, submission.problem_id)
     if problem is None:
@@ -191,6 +199,73 @@ def build_review_request(
         constraints=_clip(problem.constraints, MAX_CONSTRAINTS_CHARS),
         locale=locale,
     )
+
+
+def _own_submission(session: Session, submission_id: int, current_user: User) -> Submission:
+    submission = session.get(Submission, submission_id)
+    # Bài của người khác cũng trả 404 để không lộ sự tồn tại của bài nộp.
+    if submission is None or submission.student_id != current_user.user_id:
+        raise NotFoundError("Không tìm thấy bài nộp")
+    return submission
+
+
+def _used_attempts(session: Session, student_id, problem_id: int) -> set[int]:
+    return set(session.exec(
+        select(AIReviewUsage.attempt_no).where(
+            AIReviewUsage.student_id == student_id,
+            AIReviewUsage.problem_id == problem_id,
+        )
+    ).all())
+
+
+def get_review_usage(session: Session, submission_id: int, current_user: User) -> AIReviewUsageResponse:
+    """Số lượt AI review đã dùng / còn lại của sinh viên cho bài tập của bài nộp."""
+    submission = _own_submission(session, submission_id, current_user)
+    limit = config.AI_REVIEW_MAX_PER_PROBLEM
+    used = min(len(_used_attempts(session, current_user.user_id, submission.problem_id)), limit)
+    return AIReviewUsageResponse(limit=limit, used=used, remaining=limit - used)
+
+
+def reserve_review_slot(session: Session, submission_id: int, current_user: User) -> int:
+    """Giữ một lượt AI review trước khi gọi Ollama; trả usage_id để hoàn lượt nếu AI lỗi.
+
+    Lấy số thứ tự lượt nhỏ nhất còn trống trong 1..giới hạn. Hai request đồng thời
+    chọn trùng số thì ràng buộc unique chặn một bên; bên đó thử số kế tiếp, hết số
+    thì báo hết lượt. Nhờ vậy không thể vượt giới hạn dù bấm liên tục.
+    """
+    submission = _own_submission(session, submission_id, current_user)
+    limit = config.AI_REVIEW_MAX_PER_PROBLEM
+    exhausted = AIReviewLimitReachedError(
+        f"Bạn đã dùng hết {limit} lượt AI review cho bài tập này"
+    )
+    for _ in range(limit):
+        used = _used_attempts(session, current_user.user_id, submission.problem_id)
+        free = [number for number in range(1, limit + 1) if number not in used]
+        if not free:
+            raise exhausted
+        usage = AIReviewUsage(
+            student_id=current_user.user_id,
+            problem_id=submission.problem_id,
+            submission_id=submission.submission_id,
+            attempt_no=free[0],
+            created_at=now_utc(),
+        )
+        session.add(usage)
+        try:
+            session.commit()
+        except IntegrityError:
+            session.rollback()
+            continue
+        return usage.usage_id
+    raise exhausted
+
+
+def release_review_slot(session: Session, usage_id: int) -> None:
+    """Hoàn lượt khi gọi AI thất bại (AI bận, timeout, mất kết nối...): lỗi do server."""
+    usage = session.get(AIReviewUsage, usage_id)
+    if usage is not None:
+        session.delete(usage)
+        session.commit()
 
 
 class AIReviewService:

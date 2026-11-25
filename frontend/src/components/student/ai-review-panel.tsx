@@ -18,7 +18,7 @@ import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { AiReviewError } from "@/lib/api/endpoints/ai-review";
 import { canReviewCode } from "@/lib/helpers/submission-status";
-import { useAiReview } from "@/lib/hooks/use-ai-review";
+import { useAiReview, useAiReviewUsage } from "@/lib/hooks/use-ai-review";
 import { useLocale, type Locale, type TranslationKey } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
 import type { AiReviewErrorCode, AiReviewResult } from "@/lib/types/ai-review";
@@ -30,6 +30,7 @@ export const AI_REVIEW_WARMUP_HINT_MS = 15_000;
 const NON_RETRYABLE: ReadonlySet<AiReviewErrorCode> = new Set([
   "SUBMISSION_NOT_ACCEPTED",
   "CODE_TOO_LONG",
+  "AI_REVIEW_LIMIT_REACHED",
   "NOT_FOUND",
 ]);
 
@@ -71,6 +72,9 @@ function AiReviewSectionInner({ submissionId, className }: { submissionId: numbe
   const viReview = useAiReview(submissionId, "vi");
   const enReview = useAiReview(submissionId, "en");
   const review = locale === "en" ? enReview : viReview;
+  // Mỗi sinh viên có số lượt review cố định cho mỗi bài tập (backend giữ số lượt).
+  const usage = useAiReviewUsage(submissionId);
+  const exhausted = usage.data?.remaining === 0;
 
   const [showWarmup, setShowWarmup] = useState(false);
 
@@ -104,10 +108,11 @@ function AiReviewSectionInner({ submissionId, className }: { submissionId: numbe
 
     const targetIdle = locale === "en" ? enIdle : viIdle;
     requestedRef.current = locale;
-    if (targetIdle) {
+    // Review bằng ngôn ngữ mới cũng tốn một lượt: hết lượt thì không tự gọi nữa.
+    if (targetIdle && !exhausted) {
       (locale === "en" ? mutateEn : mutateVi)();
     }
-  }, [locale, enIdle, viIdle, mutateEn, mutateVi]);
+  }, [locale, enIdle, viIdle, mutateEn, mutateVi, exhausted]);
 
   // Đóng panel: xoá kết quả của CẢ HAI ngôn ngữ, nếu không thì chuyển ngôn ngữ
   // sẽ làm panel bật lại kết quả vừa đóng.
@@ -129,7 +134,7 @@ function AiReviewSectionInner({ submissionId, className }: { submissionId: numbe
   }, [review.isPending]);
 
   const start = () => {
-    if (review.isPending) return;
+    if (review.isPending || exhausted) return;
     runReview(locale);
   };
 
@@ -144,14 +149,17 @@ function AiReviewSectionInner({ submissionId, className }: { submissionId: numbe
       {/* ─── Lời mời + nút ──────────────────────────────────────────── */}
       {(isIdle || review.isPending) && (
         <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-indigo-200 bg-indigo-50/60 px-5 py-4 dark:border-indigo-500/30 dark:bg-indigo-500/10">
-          <p className="flex items-center gap-2 text-sm text-indigo-900 dark:text-indigo-200">
-            <Sparkles className="size-4 shrink-0 text-indigo-600 dark:text-indigo-300" aria-hidden />
-            {t("aiReview.prompt")}
-          </p>
+          <div className="min-w-0 space-y-1">
+            <p className="flex items-center gap-2 text-sm text-indigo-900 dark:text-indigo-200">
+              <Sparkles className="size-4 shrink-0 text-indigo-600 dark:text-indigo-300" aria-hidden />
+              {t("aiReview.prompt")}
+            </p>
+            {usage.data && <UsageNote usage={usage.data} />}
+          </div>
           <Button
             type="button"
             onClick={start}
-            disabled={review.isPending}
+            disabled={review.isPending || exhausted}
             aria-busy={review.isPending}
             className="bg-[#352078] font-semibold text-white hover:bg-[#2b1a63]"
           >
@@ -181,10 +189,30 @@ function AiReviewSectionInner({ submissionId, className }: { submissionId: numbe
             result={review.data}
             onClose={close}
             onReviewAgain={start}
+            canReviewAgain={!exhausted}
+            usageNote={usage.data && <UsageNote usage={usage.data} />}
           />
         )}
       </div>
     </section>
+  );
+}
+
+/* ─── Số lượt review ────────────────────────────────────────────────────── */
+
+function UsageNote({ usage }: { usage: { limit: number; remaining: number } }) {
+  const { t } = useLocale();
+  if (usage.remaining <= 0) {
+    return (
+      <p className="text-xs font-medium text-amber-700 dark:text-amber-300" data-testid="ai-review-usage">
+        {t("aiReview.exhausted", { limit: usage.limit })}
+      </p>
+    );
+  }
+  return (
+    <p className="text-xs text-muted-foreground" data-testid="ai-review-usage">
+      {t("aiReview.remaining", { remaining: usage.remaining, limit: usage.limit })}
+    </p>
   );
 }
 
@@ -279,10 +307,14 @@ export function ReviewResultCard({
   result,
   onClose,
   onReviewAgain,
+  canReviewAgain = true,
+  usageNote,
 }: {
   result: AiReviewResult;
   onClose: () => void;
   onReviewAgain: () => void;
+  canReviewAgain?: boolean;
+  usageNote?: React.ReactNode;
 }) {
   const { t } = useLocale();
   const { optimization } = result;
@@ -379,14 +411,19 @@ export function ReviewResultCard({
       )}
 
       <footer className="flex flex-wrap items-center justify-between gap-3 border-t pt-3">
-        <p className="flex items-center gap-1.5 text-xs text-muted-foreground">
-          <Info className="size-3.5 shrink-0" aria-hidden />
-          {t("aiReview.disclaimer")}
-        </p>
-        <Button type="button" variant="outline" size="sm" onClick={onReviewAgain}>
-          <RotateCcw className="size-3.5" aria-hidden />
-          {t("aiReview.reviewAgain")}
-        </Button>
+        <div className="min-w-0 space-y-1">
+          <p className="flex items-center gap-1.5 text-xs text-muted-foreground">
+            <Info className="size-3.5 shrink-0" aria-hidden />
+            {t("aiReview.disclaimer")}
+          </p>
+          {usageNote}
+        </div>
+        {canReviewAgain && (
+          <Button type="button" variant="outline" size="sm" onClick={onReviewAgain}>
+            <RotateCcw className="size-3.5" aria-hidden />
+            {t("aiReview.reviewAgain")}
+          </Button>
+        )}
       </footer>
     </article>
   );

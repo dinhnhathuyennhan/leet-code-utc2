@@ -63,16 +63,13 @@ Trường `testcase_results` (danh sách `{index, is_sample, status, time}`, the
 | Field | Kiểu | Ghi chú |
 |---|---|---|
 | feedback | string \| null | Tối đa 10.000 ký tự; chuỗi rỗng sau trim được lưu thành null |
-| status | string \| null | Chỉ nhận `pending`, `processing`, `accepted`, `wrong_answer`, `compile_error`, `time_limit_exceeded`, `runtime_error`, `internal_error` |
 | manual_score | float \| null | Điểm chấm tay, 0–10. Gửi `null` để xoá điểm tay; bỏ field thì giữ nguyên |
+
+**Không sửa được `status`.** Trạng thái chấm (`accepted`, `wrong_answer`, ...) và `passed_count` chỉ do máy chấm ghi. Body có `status` khác `null` bị từ chối với 422, không field nào được cập nhật. Muốn chấm lại bài lỗi hệ thống dùng `POST /submissions/{submission_id}/regrade`; muốn đổi điểm dùng `manual_score`.
 
 **Response 200 OK**: `SubmissionDetailResponse` sau cập nhật.
 
-**Tương tác với máy chấm**
-
-- Khi gửi `status`, quyền chấm (lease) của worker đang chấm bài này bị thu hồi: kết quả máy chấm trả về sau đó bị bỏ, không ghi đè trạng thái giáo viên vừa sửa.
-- Đổi về `pending` hoặc `processing`: chấm lại từ đầu như regrade. Token Judge0, `testcase_results`, `passed_count`, `compile_output` bị xoá, rồi bài được đưa lại vào hàng đợi để máy chấm nộp mới lên Judge0.
-- Chỉ sửa `feedback`/`manual_score` (không gửi `status`): không ảnh hưởng worker đang chấm.
+**Tương tác với máy chấm**: chỉ ghi `feedback`/`manual_score`, không thu hồi quyền chấm (lease) của worker đang chấm bài này; kết quả máy chấm trả về sau đó vẫn được lưu bình thường.
 
 **Response lỗi**
 
@@ -80,7 +77,7 @@ Trường `testcase_results` (danh sách `{index, is_sample, status, time}`, the
 |---|---|
 | 403 | Người gọi không phải Admin/Teacher |
 | 404 | Submission không tồn tại hoặc ngoài phạm vi Teacher |
-| 422 | Status không thuộc các giá trị cho phép hoặc body sai định dạng |
+| 422 | Body có `status` (`{"error_code": "INVALID_FORMAT", "message": "Không thể sửa trạng thái bài nộp: trạng thái do máy chấm quyết định"}`), hoặc `feedback`/`manual_score` sai định dạng, giới hạn |
 
 ## GET /submissions/mine/{submission_id} — Sinh viên xem kết quả bài nộp của mình
 

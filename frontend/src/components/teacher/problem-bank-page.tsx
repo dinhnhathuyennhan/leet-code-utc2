@@ -2,50 +2,33 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { FileUp, Filter, Plus, Search, X } from "lucide-react";
-import { toast } from "sonner";
+import { Search } from "lucide-react";
 import {
   getProblems,
   type ProblemListItem,
 } from "@/lib/api/endpoints/problems";
-import {
-  createBankProblem,
-  type ProblemCreateRequest,
-} from "@/lib/api/endpoints/courses";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { ErrorState } from "@/components/shared/page-state";
-import { ProblemImportDialog } from "@/components/shared/problem-import-dialog";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useDebouncedValue } from "@/lib/hooks/use-debounced-value";
-import { AdminProblemEditor } from "@/components/admin/admin-problem-editor";
-
-const LEVELS = [
-  { value: "", label: "Tất cả mức độ" },
-  { value: "easy", label: "Dễ" },
-  { value: "medium", label: "Trung bình" },
-  { value: "hard", label: "Khó" },
-] as const;
-const GRADING_MODES = [
-  { value: "", label: "Tất cả cách chấm" },
-  { value: "harness", label: "Function-call (harness)" },
-  { value: "stdin_stdout", label: "stdin/stdout" },
-] as const;
+import {
+  ProblemGradingModeSelect,
+  ProblemLevelSelect,
+  type ProblemGradingModeFilter,
+  type ProblemLevelFilter,
+} from "@/components/shared/problem-filter-selects";
 
 export function ProblemBankPage() {
   const [query, setQuery] = useState("");
-  const [level, setLevel] = useState<"" | "easy" | "medium" | "hard">("");
-  const [gradingMode, setGradingMode] = useState<
-    "" | "harness" | "stdin_stdout"
-  >("");
+  const [level, setLevel] = useState<ProblemLevelFilter>("");
+  const [gradingMode, setGradingMode] = useState<ProblemGradingModeFilter>("");
   const [page, setPage] = useState(1);
   const [items, setItems] = useState<ProblemListItem[]>([]);
   const [total, setTotal] = useState(0);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<unknown>(null);
   const [refreshKey, setRefreshKey] = useState(0);
-  const [createOpen, setCreateOpen] = useState(false);
-  const [importOpen, setImportOpen] = useState(false);
   const pageSize = 12;
   // Chờ người dùng gõ xong mới gọi API, thay vì bắn một request cho mỗi phím.
   const debouncedQuery = useDebouncedValue(query, 300);
@@ -85,20 +68,10 @@ export function ProblemBankPage() {
             Ngân hàng bài
           </h1>
           <p className="text-sm text-muted-foreground">
-            Danh sách bài từ backend, gồm bài dùng chung và bài thuộc các khóa
-            học của bạn.
+            Bài dùng chung do Admin quản lý và bài thuộc các khóa học của bạn.
+            Để thêm bài, vào buổi học và chọn &ldquo;Thêm bài tập mới&rdquo;
+            hoặc &ldquo;Thêm từ ngân hàng&rdquo;.
           </p>
-        </div>
-        <div className="flex gap-2">
-          <Button variant="outline" onClick={() => setImportOpen(true)}>
-            <FileUp className="size-4" /> Import JSON
-          </Button>
-          <Button
-            onClick={() => setCreateOpen(true)}
-            className="bg-[#34227a] text-white"
-          >
-            <Plus className="size-4" /> Tạo bài
-          </Button>
         </div>
       </header>
       <div className="m-4 flex flex-wrap items-center gap-3 rounded-xl bg-card p-3">
@@ -114,38 +87,20 @@ export function ProblemBankPage() {
             placeholder="Tìm mã hoặc tên bài..."
           />
         </div>
-        <div className="flex items-center gap-2">
-          <Filter className="size-4 text-muted-foreground" />
-          <select
-            value={level}
-            onChange={(event) => {
-              setLevel(event.target.value as typeof level);
-              setPage(1);
-            }}
-            className="h-9 rounded-md border bg-background px-3 text-sm"
-          >
-            {LEVELS.map((item) => (
-              <option key={item.value} value={item.value}>
-                {item.label}
-              </option>
-            ))}
-          </select>
-        </div>
-        <select
-          aria-label="Lọc cách chấm"
-          value={gradingMode}
-          onChange={(event) => {
-            setGradingMode(event.target.value as typeof gradingMode);
+        <ProblemLevelSelect
+          value={level}
+          onChange={(next) => {
+            setLevel(next);
             setPage(1);
           }}
-          className="h-9 rounded-md border bg-background px-3 text-sm"
-        >
-          {GRADING_MODES.map((item) => (
-            <option key={item.value} value={item.value}>
-              {item.label}
-            </option>
-          ))}
-        </select>
+        />
+        <ProblemGradingModeSelect
+          value={gradingMode}
+          onChange={(next) => {
+            setGradingMode(next);
+            setPage(1);
+          }}
+        />
       </div>
       {loading ? (
         <div className="grid gap-4 px-4 pb-6 md:grid-cols-2 xl:grid-cols-3">
@@ -200,39 +155,6 @@ export function ProblemBankPage() {
           </footer>
         </>
       )}
-      <ProblemImportDialog
-        open={importOpen}
-        onClose={() => setImportOpen(false)}
-        onImported={(result) => {
-          setImportOpen(false);
-          setQuery("");
-          setLevel("");
-          setGradingMode("");
-          setPage(1);
-          setRefreshKey((current) => current + 1);
-          toast.success(`Đã import ${result.created_count} problem.`);
-        }}
-        onImportOutcomeUncertain={() => {
-          setImportOpen(false);
-          setQuery("");
-          setLevel("");
-          setGradingMode("");
-          setPage(1);
-          setRefreshKey((current) => current + 1);
-          toast.error(
-            "Chưa nhận được xác nhận import. Danh sách đang được tải lại; hãy kiểm tra trước khi gửi lại vì bài có thể đã được lưu.",
-          );
-        }}
-      />
-      {createOpen && (
-        <BankProblemCreateDialog
-          onClose={() => setCreateOpen(false)}
-          onCreated={() => {
-            setCreateOpen(false);
-            setRefreshKey((current) => current + 1);
-          }}
-        />
-      )}
     </section>
   );
 }
@@ -281,40 +203,5 @@ function ProblemCard({
         Xem chi tiết
       </Link>
     </article>
-  );
-}
-
-function BankProblemCreateDialog({
-  onClose,
-  onCreated,
-}: {
-  onClose: () => void;
-  onCreated: () => void;
-}) {
-  const [busy, setBusy] = useState(false);
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
-      <div className="max-h-[95dvh] w-full max-w-4xl overflow-y-auto rounded-2xl bg-card p-6">
-        <div className="mb-5 flex items-center justify-between">
-          <div>
-            <h2 className="text-xl font-bold">Tạo bài trong ngân hàng</h2>
-            <p className="text-sm text-muted-foreground">
-              Cần 10–50 testcase, ít nhất 3 mẫu và 5 hidden.
-            </p>
-          </div>
-          <Button variant="ghost" size="icon" disabled={busy} onClick={onClose}>
-            <X className="size-4" />
-          </Button>
-        </div>
-        <AdminProblemEditor
-          onBusyChange={setBusy}
-          onSave={async (payload) => {
-            await createBankProblem(payload as ProblemCreateRequest);
-            toast.success("Đã tạo bài trong ngân hàng (lesson_id = null).");
-            onCreated();
-          }}
-        />
-      </div>
-    </div>
   );
 }

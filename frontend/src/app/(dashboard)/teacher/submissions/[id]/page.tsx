@@ -45,7 +45,6 @@ export default function SubmissionDetailPage() {
   const [feedback, setFeedback] = useState("");
   const [manualScore, setManualScore] = useState("");
   const [saved, setSaved] = useState(false);
-  const [status, setStatus] = useState("pending");
   const [regrading, setRegrading] = useState(false);
 
   /** Chỉ nhận đường dẫn nội bộ, tránh bị lợi dụng để điều hướng ra ngoài hệ thống. */
@@ -61,7 +60,6 @@ export default function SubmissionDetailPage() {
         setManualScore(submission.manual_score == null
           ? (submission.total_testcases ? ((submission.passed_count / submission.total_testcases) * 10).toFixed(1) : "0.0")
           : String(submission.manual_score));
-        setStatus(submission.status);
       })
       .catch(setError);
   }, [id]);
@@ -75,7 +73,6 @@ export default function SubmissionDetailPage() {
           consecutiveErrors = 0;
           setSaveError(null);
           setData(submission);
-          setStatus(submission.status);
         })
         .catch((error) => {
           consecutiveErrors += 1;
@@ -106,7 +103,6 @@ export default function SubmissionDetailPage() {
         manual_score: parsedScore,
       });
       setData(submission);
-      setStatus(submission.status);
       setSaved(true);
       window.dispatchEvent(new CustomEvent("submission:updated", { detail: submission }));
       if (returnTo) router.push(returnTo);
@@ -121,7 +117,6 @@ export default function SubmissionDetailPage() {
     try {
       await regradeSubmission(id);
       setData((current) => current ? { ...current, status: "pending" } : current);
-      setStatus("pending");
     } catch (requestError) {
       setSaveError(requestError instanceof Error ? requestError.message : "Không thể chấm lại bài nộp.");
     } finally { setRegrading(false); }
@@ -238,10 +233,9 @@ export default function SubmissionDetailPage() {
             )}
 
             <div>
-              <label className="text-xs font-semibold text-slate-700 dark:text-slate-300">Trạng thái</label>
-              <select value={status} disabled className="mt-1 h-11 w-full rounded-md border bg-muted px-3 text-sm opacity-80">
-                <option value={status}>{statusLabel}</option>
-              </select>
+              <p className="text-xs font-semibold text-slate-700 dark:text-slate-300">Trạng thái</p>
+              {/* Trạng thái do máy chấm quyết định, giáo viên không sửa được nên chỉ hiển thị */}
+              <p className="mt-1 text-sm font-semibold text-slate-900 dark:text-slate-100">{statusLabel}</p>
             </div>
 
             <div>

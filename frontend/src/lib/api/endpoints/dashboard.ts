@@ -77,7 +77,7 @@ export async function regradeSubmission(id: string | number): Promise<{ submissi
   }
 }
 
-export async function updateSubmission(id: string | number, data: { feedback?: string | null; status?: string; manual_score?: number }): Promise<SubmissionDetail> {
+export async function updateSubmission(id: string | number, data: { feedback?: string | null; manual_score?: number | null }): Promise<SubmissionDetail> {
   try {
     const response = await axiosInstance.patch<SubmissionDetail>(`/submissions/${id}`, data);
     return response.data;

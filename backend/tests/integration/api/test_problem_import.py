@@ -98,15 +98,16 @@ def test_preview_requires_auth(client):
     assert response.status_code in (401, 403)
 
 
-@pytest.mark.parametrize("role_id", [Role.ADMIN, Role.TEACHER])
-def test_preview_allowed_for_admin_and_teacher(client, role_id):
-    _login_as(role_id)
+def test_preview_allowed_for_admin(client):
+    _login_as(Role.ADMIN)
     response = _upload(client, "/problems/import/preview", [_valid_problem_payload()])
     assert response.status_code == 200
 
 
-def test_preview_forbidden_for_student(client):
-    _login_as(Role.STUDENT)
+# Ngân hàng bài chỉ Admin được thêm: Teacher cũng bị chặn như Student
+@pytest.mark.parametrize("role_id", [Role.TEACHER, Role.STUDENT])
+def test_preview_forbidden_for_teacher_and_student(client, role_id):
+    _login_as(role_id)
     response = _upload(client, "/problems/import/preview", [_valid_problem_payload()])
     assert response.status_code in (401, 403)
 
@@ -122,19 +123,15 @@ def test_import_requires_auth(client):
     assert response.status_code in (401, 403)
 
 
-@pytest.mark.parametrize("role_id", [Role.ADMIN, Role.TEACHER])
-def test_import_allowed_for_admin_and_teacher(client, role_id):
-    _login_as(role_id)
-    p = _valid_problem_payload(
-        title=f"Unique Problem {role_id}",
-        description=f"Unique description for role {role_id}.",
-    )
-    response = _upload(client, "/problems/import", [p])
+def test_import_allowed_for_admin(client):
+    _login_as(Role.ADMIN)
+    response = _upload(client, "/problems/import", [_valid_problem_payload()])
     assert response.status_code == 201
 
 
-def test_import_forbidden_for_student(client):
-    _login_as(Role.STUDENT)
+@pytest.mark.parametrize("role_id", [Role.TEACHER, Role.STUDENT])
+def test_import_forbidden_for_teacher_and_student(client, role_id):
+    _login_as(role_id)
     response = _upload(client, "/problems/import", [_valid_problem_payload()])
     assert response.status_code in (401, 403)
 

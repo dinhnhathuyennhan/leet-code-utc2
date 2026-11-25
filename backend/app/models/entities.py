@@ -169,3 +169,27 @@ class Submission(SQLModel, table=True):
 
     problem: Problem | None = Relationship(back_populates="submissions")
     student: User | None = Relationship(back_populates="submissions")
+
+
+# ==================== AI REVIEW USAGE ====================
+class AIReviewUsage(SQLModel, table=True):
+    """Một lượt AI review của sinh viên cho một bài tập (đang chạy hoặc đã thành công).
+
+    Mỗi sinh viên có tối đa ``AI_REVIEW_MAX_PER_PROBLEM`` lượt cho mỗi problem, cố định
+    (nộp lại bài không được thêm lượt). Unique (student_id, problem_id, attempt_no) với
+    attempt_no trong 1..giới hạn chặn vượt lượt kể cả khi nhiều request chạy đồng thời.
+    Lượt gọi AI bị lỗi được xoá đi (hoàn lượt).
+    """
+
+    __tablename__ = "ai_review_usage"
+    __table_args__ = (
+        UniqueConstraint(
+            "student_id", "problem_id", "attempt_no", name="uq_ai_review_usage_slot"
+        ),
+    )
+    usage_id: int | None = Field(default=None, primary_key=True)
+    student_id: uuid.UUID = Field(foreign_key="user.user_id", index=True)
+    problem_id: int = Field(foreign_key="problem.problem_id", index=True)
+    submission_id: int = Field(foreign_key="submission.submission_id")
+    attempt_no: int
+    created_at: datetime = Field(sa_type=UTCDateTime)

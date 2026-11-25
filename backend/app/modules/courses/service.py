@@ -31,6 +31,7 @@ from app.modules.courses.access import (
 from app.modules.courses import grade_service
 from app.modules.courses.view import build_course_response
 from app.models import (
+    AIReviewUsage,
     Course,
     Enrollment,
     Lesson,
@@ -252,6 +253,8 @@ def delete_course(
 
     try:
         if force and problem_ids:
+            # Lượt AI review trỏ tới Submission/Problem nên phải xoá trước
+            session.exec(delete(AIReviewUsage).where(AIReviewUsage.problem_id.in_(problem_ids)))
             session.exec(delete(Submission).where(Submission.problem_id.in_(problem_ids)))
         for model, column, ids in (
             (Testcase, Testcase.problem_id, problem_ids),

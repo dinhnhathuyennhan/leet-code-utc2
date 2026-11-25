@@ -125,6 +125,32 @@ class TestListProblems:
         assert result.items[0].id == in_course.problem_id
 
 
+    def test_list_problems_searches_code_and_filters_bank_problems_with_testcases(
+        self, session, problem_teacher, problem_lesson, problem_factory,
+    ):
+        ready = problem_factory(None, title="Ready", report="BT-001", total_number_testcase=10)
+        problem_factory(None, title="Empty", report="BT-002", total_number_testcase=0)
+        problem_factory(problem_lesson, title="Attached", report="BT-003", total_number_testcase=10)
+        stdin = problem_factory(
+            None, title="Stdin", report="IO-001", function_name=None, total_number_testcase=10,
+        )
+
+        result = problem_service.list_problems(
+            session, problem_teacher, q="bt-", level=None, course_id=None,
+            page=1, page_size=20, bank_only=True, has_testcases=True,
+        )
+        assert result.total == 1
+        assert [item.id for item in result.items] == [ready.problem_id]
+        assert result.items[0].grading_mode == "harness"
+
+        io = problem_service.list_problems(
+            session, problem_teacher, q=None, level=None, grading_mode="stdin_stdout",
+            course_id=None, page=1, page_size=20, bank_only=True,
+        )
+        assert [item.id for item in io.items] == [stdin.problem_id]
+        assert io.items[0].grading_mode == "stdin_stdout"
+
+
 class TestBankProblemDetail:
     def test_listed_attached_problem_opens_by_id_for_admin_and_owner(
         self, session, problem_factory, problem_lesson, problem_course,

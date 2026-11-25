@@ -16,8 +16,6 @@ import {
   getAdminBankProblem,
   updateAdminBankProblem,
   deleteAdminBankProblem,
-  updateAdminProblem,
-  deleteAdminProblem,
 } from "@/lib/api/endpoints/admin-management";
 import { adminKeys } from "@/lib/hooks/use-admin";
 import type { AdminProblem, AdminProblemPayload } from "@/lib/types/admin";
@@ -276,22 +274,19 @@ export function AdminBankProblemDetail({ id }: { id: number }) {
                 </Link>
               </Button>
             )}
-            <AdminConfirm
-              label="Xóa đề"
-              title="Xóa bài tập?"
-              description={
-                attached
-                  ? "Bài tập sẽ bị xóa khỏi buổi học. Đề nguồn và bản sao ở các buổi khác vẫn được giữ."
-                  : "Đề nguồn này sẽ bị xóa. Bản sao đã gắn vào buổi học vẫn được giữ."
-              }
-              onConfirm={async () => {
-                if (attached) await deleteAdminProblem(courseId, lessonId, id);
-                else await deleteAdminBankProblem(id);
-                await client.invalidateQueries({ queryKey: adminKeys.all });
-                toast.success("Đã xóa bài tập.");
-                router.push("/admin/problem-bank");
-              }}
-            />
+            {!attached && (
+              <AdminConfirm
+                label="Xóa đề"
+                title="Xóa bài tập?"
+                description="Đề nguồn này sẽ bị xóa. Bản sao đã gắn vào buổi học vẫn được giữ."
+                onConfirm={async () => {
+                  await deleteAdminBankProblem(id);
+                  await client.invalidateQueries({ queryKey: adminKeys.all });
+                  toast.success("Đã xóa bài tập.");
+                  router.push("/admin/problem-bank");
+                }}
+              />
+            )}
           </>
         }
       />
@@ -311,14 +306,17 @@ export function AdminBankProblemDetail({ id }: { id: number }) {
           {problem.time_limit_seconds} giây
         </p>
       </section>
-      {legacy ? (
+      {attached ? (
+        <p className="rounded-xl border border-dashed bg-muted/40 p-4 text-sm text-muted-foreground">
+          Đây là bản sao đã gắn vào buổi học. Nội dung và testcase của bài trong buổi học do giảng
+          viên chủ lớp quản lý, Admin chỉ xem.
+        </p>
+      ) : legacy ? (
         <LegacyProblemEditor
           key={`legacy-editor-${query.dataUpdatedAt}`}
           problem={problem}
           onSave={async (data) => {
-            if (attached)
-              await updateAdminProblem(courseId, lessonId, String(id), data);
-            else await updateAdminBankProblem(id, data);
+            await updateAdminBankProblem(id, data);
             await client.invalidateQueries({ queryKey: adminKeys.problems });
             toast.success("Đã lưu nội dung đề.");
           }}
@@ -335,26 +333,21 @@ export function AdminBankProblemDetail({ id }: { id: number }) {
                 toast.info("Không có thay đổi để lưu.");
                 return;
               }
-              if (attached)
-                await updateAdminProblem(
-                  courseId,
-                  lessonId,
-                  String(id),
-                  changes,
-                );
-              else await updateAdminBankProblem(id, changes);
+              await updateAdminBankProblem(id, changes);
               await client.invalidateQueries({ queryKey: adminKeys.problems });
               toast.success("Đã lưu bài tập.");
             }}
           />
         </section>
       )}
-      <AdminProblemTestcases
-        problem={problem}
-        onChanged={async () => {
-          await client.invalidateQueries({ queryKey: adminKeys.problems });
-        }}
-      />
+      {!attached && (
+        <AdminProblemTestcases
+          problem={problem}
+          onChanged={async () => {
+            await client.invalidateQueries({ queryKey: adminKeys.problems });
+          }}
+        />
+      )}
       <AdminProblemPreview key={problemPreviewKey(problem)} problem={problem} />
     </div>
   );

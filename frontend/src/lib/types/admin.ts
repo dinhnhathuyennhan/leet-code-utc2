@@ -1,4 +1,4 @@
-import type { CourseApiRecord, LessonMutationRequest } from "@/lib/types/course";
+import type { CourseApiRecord } from "@/lib/types/course";
 
 export interface AdminClass {
   class_id: string;
@@ -148,4 +148,3 @@ export interface JudgeResult {
 }
 
 export type AdminCourse = CourseApiRecord;
-export type AdminLessonPayload = LessonMutationRequest;

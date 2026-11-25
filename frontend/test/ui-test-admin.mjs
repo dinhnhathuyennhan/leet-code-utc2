@@ -9,7 +9,8 @@
  *    rồi truyền qua UI_ADMIN_EMAIL / UI_ADMIN_PASSWORD nếu khác mặc định.
  *
  * Dữ liệu tạo ra mang mã theo timestamp và KHÔNG tự xoá hết được (hệ thống không
- * có API xoá tài khoản/lớp học phần). Chỉ chạy trên DB local.
+ * có API xoá tài khoản). Chỉ chạy trên DB local.
+ * Admin chỉ xem lớp học phần: phần lớp học chạy trên lớp seed `UI_COURSE_ID` và không ghi gì vào lớp.
  */
 
 import { chromium } from "playwright";
@@ -38,9 +39,6 @@ const NEW_STUDENT_EMAIL = `${NEW_STUDENT_CODE}@st.utc2.edu.vn`;
 const NEW_STUDENT_NAME = `Sinh Vien Admin ${stamp}`;
 const NEW_TEACHER_EMAIL = `gvadmin${stamp}@st.utc2.edu.vn`;
 const NEW_TEACHER_NAME = `Giang Vien Admin ${stamp}`;
-const NEW_COURSE_ID = `ADM${stamp}`;
-const NEW_COURSE_NAME = `Lop Admin ${stamp}`;
-const NEW_LESSON_NAME = `Buoi Admin ${stamp}`;
 const NEW_PROBLEM_TITLE = `Bai Admin ${stamp}`;
 const NEW_CLASS_DEPARTMENT = `ADM${stamp}`;
 const NEW_CLASS_NUMBER = String(Number(stamp.slice(-5)) + 1);
@@ -66,7 +64,6 @@ function skip(name, reason) {
 }
 
 const isoDate = (offsetDays) => new Date(Date.now() + offsetDays * 86_400_000).toISOString();
-const dateOnly = (offsetDays) => isoDate(offsetDays).slice(0, 10);
 const dateTimeLocal = (offsetDays) => isoDate(offsetDays).slice(0, 19);
 
 /** Gọi API trực tiếp bằng fetch: không dùng chung cookie với trình duyệt. */
@@ -98,7 +95,7 @@ const countOf = (data) => (Array.isArray(data) ? data.length : data?.total);
 async function main() {
   console.log("=".repeat(100));
   console.log(`UI TEST ADMIN  ->  ${FRONTEND}   (API ${API})`);
-  console.log(`Du lieu test: sinh vien=${NEW_STUDENT_CODE}  giang vien=${NEW_TEACHER_EMAIL}  lop=${NEW_COURSE_ID}`);
+  console.log(`Du lieu test: sinh vien=${NEW_STUDENT_CODE}  giang vien=${NEW_TEACHER_EMAIL}  lop (chi xem)=${SEED_COURSE_ID}`);
   console.log("=".repeat(100));
 
   const preflight = await apiLogin(ADMIN_EMAIL, ADMIN_PASSWORD);
@@ -218,7 +215,7 @@ async function main() {
     return null;
   }
 
-  const created = { student: false, teacher: false, course: false, lesson: false, problem: false };
+  const created = { student: false, teacher: false, problem: false };
 
   try {
     // ── 1. Phân quyền ─────────────────────────────────────────────────
@@ -302,11 +299,13 @@ async function main() {
     await section("Tai khoan", async () => {
       await open("/admin/accounts");
       await page.locator("tbody tr").first().waitFor({ timeout: 20_000 });
-      const statCard = (label) => page.locator("div.rounded-2xl").filter({ hasText: label }).first();
+      // Khớp đúng nhãn của thẻ (vd "Sinh viên"), tránh trùng với chữ "Sinh viên" ở chỗ khác trên trang.
+      const statCard = (label) => page.locator("div.rounded-2xl")
+        .filter({ has: page.locator("p", { hasText: new RegExp(`^${label}$`) }) }).first();
       for (const [label, query] of [
         ["Tổng số tài khoản", ""],
-        ["Sinh viên (Role 3)", "&role_id=3"],
-        ["Giảng viên (Role 2)", "&role_id=2"],
+        ["Sinh viên", "&role_id=3"],
+        ["Giảng viên", "&role_id=2"],
       ]) {
         const expected = (await api("GET", `/users?page=1&page_size=1${query}`, { token: adminToken })).data?.total;
         const shown = await metric(statCard(label));
@@ -540,12 +539,16 @@ async function main() {
       if (visible) check("the de nguon ghi 1 testcase + 'De nguon'", /1 testcase · Đề nguồn/.test(await card.innerText()));
     });
 
-    // ── 6. Lớp học phần ───────────────────────────────────────────────
-    await section("Lop hoc phan", async () => {
+    // ── 6. Lớp học phần: Admin chỉ xem ────────────────────────────────
+    // Admin không vận hành lớp học: không tạo/sửa lớp, không tạo/sửa buổi, không gắn bài,
+    // không sửa bài/testcase trong buổi, không ghi danh, không xem/ghi đè bài nộp.
+    // Các việc đó do giảng viên chủ lớp làm. Admin vẫn xem được lớp và vẫn xoá được lớp.
+    await section("Lop hoc phan (chi xem)", async () => {
       await open("/admin/courses");
       const courses = (await api("GET", "/courses", { token: adminToken })).data;
       const shown = await adminMetric("Tổng lớp học phần");
       check("tong lop hoc phan khop API", shown === String(countOf(courses)), `UI=${shown} API=${countOf(courses)}`);
+      check("khong co nut Tao lop hoc phan", (await page.getByRole("button", { name: "Tạo lớp học phần" }).count()) === 0);
 
       const search = page.getByLabel("Tìm lớp học phần");
       await search.fill(SEED_COURSE_ID);
@@ -560,138 +563,85 @@ async function main() {
       await page.getByRole("button", { name: "Dạng lưới" }).click();
       await shot("08-courses");
 
-      // Tạo lớp: ngày kết thúc trước ngày bắt đầu không được gọi API.
-      await page.getByRole("button", { name: "Tạo lớp học phần" }).click();
-      const form = dialog();
-      await form.getByLabel("Mã lớp").fill(NEW_COURSE_ID);
-      await form.getByLabel("Tên lớp học phần").fill(NEW_COURSE_NAME);
-      await form.getByLabel("Học kỳ / năm học").fill("HK1 2026-2027");
-      await form.getByLabel("Ngày bắt đầu").fill(dateOnly(10));
-      await form.getByLabel("Ngày kết thúc").fill(dateOnly(5));
-      const saveCourse = form.getByRole("button", { name: "Lưu lớp học phần" });
-      check("ngay ket thuc truoc ngay bat dau -> khong goi API", (await writesDuring(() => saveCourse.click())) === 0);
-      await form.getByLabel("Ngày bắt đầu").fill(dateOnly(-1));
-      await form.getByLabel("Ngày kết thúc").fill(dateOnly(60));
-      const status = await submitAndStatus(/\/courses$/, "POST", () => saveCourse.click());
-      check("tao lop hoc phan -> 201", status === 201, String(status));
-      check("tao lop -> co toast", await toast("Đã tạo lớp học phần."));
-      created.course = status === 201;
-      if (!created.course) return;
-
-      // Trang chi tiết.
-      const link = page.locator(`a[href="/admin/courses/${NEW_COURSE_ID}"]`).first();
-      await link.waitFor({ timeout: 10_000 });
-      await link.click();
-      await page.waitForURL(`**/admin/courses/${NEW_COURSE_ID}`, { timeout: 25_000 });
-      await page.getByRole("heading", { level: 1 }).filter({ hasText: NEW_COURSE_ID }).waitFor({ timeout: 25_000 });
-      check("chi tiet lop co ten va ma", (await heading()).includes(NEW_COURSE_NAME), await heading());
-      const creator = (await page.getByText("Người tạo:").locator("strong").first().innerText()).trim();
-      check("nguoi tao hien ten, khong hien UUID", !UUID_PATTERN.test(creator), creator);
-
-      // Sửa lớp: mã lớp bị khoá, đổi được tên.
-      await page.getByRole("button", { name: "Chỉnh sửa lớp" }).click();
-      check("sua lop: ma lop bi khoa", await dialog().getByLabel("Mã lớp").isDisabled());
-      await dialog().getByLabel("Tên lớp học phần").fill(`${NEW_COURSE_NAME} sua`);
-      const patch = await submitAndStatus(new RegExp(`/courses/${NEW_COURSE_ID}$`), "PATCH", () => dialog().getByRole("button", { name: "Lưu lớp học phần" }).click());
-      check("sua lop -> 200", patch === 200, String(patch));
-      const renamed = await page.getByRole("heading", { level: 1 }).filter({ hasText: `${NEW_COURSE_NAME} sua` })
-        .waitFor({ timeout: 10_000 }).then(() => true).catch(() => false);
-      check("sua lop -> tieu de cap nhat", renamed);
-
-      // Tạo buổi học.
-      await page.getByRole("button", { name: "Tạo buổi học" }).click();
-      await dialog().getByLabel("Tên buổi học").fill(NEW_LESSON_NAME);
-      const lessonStatus = await submitAndStatus(new RegExp(`/courses/${NEW_COURSE_ID}/lessons$`), "POST", () => dialog().getByRole("button", { name: "Lưu buổi học" }).click());
-      check("tao buoi hoc -> 2xx", lessonStatus !== null && lessonStatus < 300, String(lessonStatus));
-      const lessonCard = page.locator("article").filter({ hasText: NEW_LESSON_NAME }).first();
-      created.lesson = await lessonCard.waitFor({ timeout: 10_000 }).then(() => true).catch(() => false);
-      check("buoi hoc moi xuat hien", created.lesson, NEW_LESSON_NAME);
-
-      // Tab sinh viên.
-      await page.getByRole("tab", { name: "Sinh viên" }).click();
-      await page.getByRole("button", { name: "Thêm sinh viên" }).waitFor({ timeout: 10_000 });
-      check("lop moi chua co sinh vien", (await body()).includes("Chưa có sinh viên phù hợp"));
-
-      // HỒI QUY: form ghi "Theo MSSV" nên nhập MSSV phải thêm được sinh viên.
-      if (created.student) {
-        await page.getByRole("button", { name: "Thêm sinh viên" }).click();
-        await dialog().getByLabel("MSSV").fill(NEW_STUDENT_CODE);
-        const byCode = await submitAndStatus(/\/enrollments$/, "POST", () => dialog().getByRole("button", { name: "Thêm vào lớp" }).click());
-        check("them sinh vien theo MSSV -> thanh cong", byCode !== null && byCode < 300, `MSSV=${NEW_STUDENT_CODE} status=${byCode}`);
-        await shot("09-enroll-by-mssv");
-        if (await dialog().isVisible().catch(() => false)) {
-          await dialog().getByRole("button", { name: "Hủy" }).click();
-          await dialog().waitFor({ state: "hidden", timeout: 5000 }).catch(() => {});
-        }
-      } else {
-        skip("them sinh vien theo MSSV", "khong tao duoc sinh vien o buoc truoc");
+      // Backend chặn mọi API ghi của Admin vào lớp học (403), kể cả khi gọi thẳng.
+      const seed = encodeURIComponent(SEED_COURSE_ID);
+      for (const [method, path] of [
+        ["POST", "/courses"],
+        ["PATCH", `/courses/${seed}`],
+        ["POST", `/courses/${seed}/lessons`],
+        ["POST", `/courses/${seed}/enrollments`],
+        ["POST", `/courses/${seed}/enrollments/class`],
+        ["GET", "/submissions/pending"],
+      ]) {
+        const { status } = await api(method, path, { token: adminToken, body: method === "GET" ? undefined : {} });
+        check(`API ${method} ${path} -> 403`, status === 403, String(status));
       }
 
-      // Thêm theo lớp hành chính.
-      await page.getByRole("button", { name: "Thêm sinh viên" }).click();
-      await dialog().getByRole("button", { name: "Theo lớp hành chính" }).click();
-      await dialog().locator("select").selectOption(SEED_CLASS_ID);
-      const byClass = await submitAndStatus(/\/enrollments\/class$/, "POST", () => dialog().getByRole("button", { name: "Thêm vào lớp" }).click());
-      check("them theo lop hanh chinh -> 2xx", byClass !== null && byClass < 300, String(byClass));
-      check("them theo lop -> toast co so luong", await toast(/Đã thêm \d+ sinh viên/));
-      await page.locator("tbody tr").first().waitFor({ timeout: 10_000 });
-      const enrolled = await page.locator("tbody tr").count();
-      check("danh sach sinh viên co du lieu", enrolled > 0, `${enrolled} sinh vien`);
+      // Trang chi tiết lớp seed: chỉ xem, vẫn còn nút xoá lớp.
+      await open(`/admin/courses/${seed}`);
+      await page.getByRole("heading", { level: 1 }).filter({ hasText: SEED_COURSE_ID }).waitFor({ timeout: 25_000 });
+      check("chi tiet lop co ma lop", (await heading()).includes(SEED_COURSE_ID), await heading());
+      const creator = (await page.getByText("Người tạo:").locator("strong").first().innerText()).trim();
+      check("nguoi tao hien ten, khong hien UUID", !UUID_PATTERN.test(creator), creator);
+      for (const label of ["Tạo buổi học", "Chỉnh sửa lớp", "Chỉnh sửa"]) {
+        check(`khong co nut '${label}'`, (await page.getByRole("button", { name: label, exact: true }).count()) === 0);
+      }
+      check("van con nut Xoa lop", (await page.getByRole("button", { name: "Xoá lớp" }).count()) > 0);
 
-      // HỒI QUY: cột "MSSV" của lớp học phần cũng phải là MSSV.
-      const rosterMssv = (await page.locator("tbody tr").first().locator("td").first().innerText()).trim();
-      check("lop hoc phan: cot MSSV hien MSSV 10 so", MSSV_PATTERN.test(rosterMssv), rosterMssv);
+      // Tab sinh viên: xem và xuất danh sách, không thêm/xoá.
+      await page.getByRole("tab", { name: "Sinh viên" }).click();
+      await page.getByRole("button", { name: "Xuất danh sách" }).waitFor({ timeout: 10_000 });
+      check("khong co nut Them sinh vien", (await page.getByRole("button", { name: "Thêm sinh viên" }).count()) === 0);
+      check("khong co nut Xoa khoi lop", (await page.getByRole("button", { name: "Xóa khỏi lớp" }).count()) === 0);
+      const enrolled = await page.locator("tbody tr").count();
+      check("danh sach sinh vien co du lieu", enrolled > 0, `${enrolled} sinh vien`);
+      if (enrolled) {
+        // HỒI QUY: cột "MSSV" của lớp học phần phải là MSSV, không phải UUID.
+        const rosterMssv = (await page.locator("tbody tr").first().locator("td").first().innerText()).trim();
+        check("lop hoc phan: cot MSSV hien MSSV 10 so", MSSV_PATTERN.test(rosterMssv), rosterMssv);
+      }
       await shot("10-course-roster");
 
-      await page.locator("tbody tr").first().getByRole("button", { name: "Xóa khỏi lớp" }).click();
-      const removed = await submitAndStatus(/\/enrollments\//, "DELETE", () => dialog().getByRole("button", { name: "Xác nhận" }).click());
-      check("xoa sinh vien khoi lop -> 2xx", removed !== null && removed < 300, String(removed));
-      check("xoa sinh vien -> co toast", await toast("Đã xóa sinh viên khỏi lớp học phần."));
-      await page.waitForTimeout(1000);
-      check("so sinh vien giam 1", (await page.locator("tbody tr").count()) === enrolled - 1);
-
-      // Bảng điểm.
+      // Tab bảng điểm: xem và xuất, không ghi đè điểm.
       await page.getByRole("tab", { name: "Bảng điểm" }).click();
       await page.waitForTimeout(800);
       check("tab Bang diem khong loi", !ERROR_TEXT.test(await body()));
+      check("bang diem khong cho ghi de diem", !(await body()).includes("Double click vào ô điểm để ghi đè điểm"));
+      check("bang diem van xuat duoc", (await page.getByRole("button", { name: /Xuất bảng điểm/ }).count()) > 0);
       await shot("11-course-grades");
 
-      // Trang quản lý buổi học + gắn đề từ ngân hàng.
+      // Trang buổi học: chỉ xem, không sửa buổi, không gắn bài.
       await page.getByRole("tab", { name: "Buổi học" }).click();
-      if (!created.lesson) return;
-      await page.locator("article").filter({ hasText: NEW_LESSON_NAME }).first().locator("a", { hasText: "Quản lý buổi học" }).click();
-      await page.waitForURL(/\/sessions\/\d+$/, { timeout: 25_000 });
-      await page.getByRole("heading", { level: 1 }).filter({ hasText: NEW_LESSON_NAME }).waitFor({ timeout: 25_000 });
-      check("trang buoi hoc co tieu de", (await heading()).includes(NEW_LESSON_NAME), await heading());
-      check("buoi moi chua co bai", (await body()).includes("Buổi học chưa có bài tập"));
-
-      if (!created.problem) {
-        skip("gan de vao buoi hoc", "khong tao duoc de nguon o buoc truoc");
+      const lessonLink = page.locator("a", { hasText: "Xem buổi học" }).first();
+      if (!(await lessonLink.waitFor({ timeout: 10_000 }).then(() => true).catch(() => false))) {
+        skip("trang buoi hoc", "lop seed chua co buoi hoc");
         return;
       }
-      await page.getByRole("button", { name: "Thêm từ ngân hàng đề" }).click();
-      await dialog().getByLabel("Tìm bài để gắn vào buổi học").fill(NEW_PROBLEM_TITLE);
-      const option = dialog().locator("label").filter({ hasText: NEW_PROBLEM_TITLE }).first();
-      await option.waitFor({ timeout: 10_000 });
-      await option.locator('input[type="checkbox"]').check();
-      const attach = await submitAndStatus(/\/lessons\/\d+\/problems$/, "POST", () => dialog().getByRole("button", { name: /Thêm 1 bài tập/ }).click());
-      check("gan de vao buoi hoc -> 2xx", attach !== null && attach < 300, String(attach));
-      check("gan de -> co toast", await toast("Đã gắn bài tập vào buổi học."));
-      const contentLink = page.locator("a", { hasText: "Nội dung & testcase" }).first();
-      const attached = await contentLink.waitFor({ timeout: 10_000 }).then(() => true).catch(() => false);
-      check("buoi hoc hien bai vua gan", attached);
+      await lessonLink.click();
+      await page.waitForURL(/\/sessions\/\d+$/, { timeout: 25_000 });
+      await page.getByRole("heading", { level: 1 }).waitFor({ timeout: 25_000 });
+      check("trang buoi hoc khong loi", !ERROR_TEXT.test(await body()), await heading());
+      check("khong co nut Chinh sua buoi", (await page.getByRole("button", { name: "Chỉnh sửa buổi" }).count()) === 0);
+      check("khong co nut Them tu ngan hang de", (await page.getByRole("button", { name: "Thêm từ ngân hàng đề" }).count()) === 0);
       await shot("12-lesson-detail");
-      if (attached) {
-        await contentLink.click();
-        await page.waitForURL(/\/problems\/\d+$/, { timeout: 25_000 });
-        await page.getByText(NEW_PROBLEM_TITLE).first().waitFor({ timeout: 25_000 }).catch(() => {});
-        const problemText = await body();
-        check("trang bai trong buoi co noi dung", problemText.includes(NEW_PROBLEM_TITLE) && !ERROR_TEXT.test(problemText), page.url());
-        await shot("13-lesson-problem");
+
+      // Trang bài tập trong buổi: chỉ xem nội dung, không có form sửa/tải testcase.
+      const contentLink = page.locator("a", { hasText: "Xem nội dung & testcase" }).first();
+      if (!(await contentLink.waitFor({ timeout: 10_000 }).then(() => true).catch(() => false))) {
+        skip("trang bai trong buoi", "buoi hoc seed chua co bai tap");
+        return;
       }
+      await contentLink.click();
+      await page.waitForURL(/\/problems\/\d+$/, { timeout: 25_000 });
+      await page.getByRole("heading", { level: 1 }).waitFor({ timeout: 25_000 });
+      const problemText = await body();
+      check("trang bai trong buoi khong loi", !ERROR_TEXT.test(problemText), page.url());
+      check("trang bai trong buoi ghi ro chi xem", problemText.includes("Chỉ xem"));
+      check("khong co o Ten bai tap de sua", (await page.getByLabel("Tên bài tập").count()) === 0);
+      await shot("13-lesson-problem");
     });
 
-    // ── 7. Xoá đề nguồn sau khi đã gắn vào buổi học ───────────────────
+    // ── 7. Xoá đề nguồn trong ngân hàng ───────────────────────────────
     await section("Xoa de nguon", async () => {
       if (!created.problem) {
         skip("xoa de nguon", "khong tao duoc de nguon");

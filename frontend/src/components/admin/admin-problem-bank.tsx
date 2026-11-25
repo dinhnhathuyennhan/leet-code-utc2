@@ -56,7 +56,7 @@ export function AdminProblemBank() {
     <div className="space-y-6">
       <AdminHeading
         title="Ngân hàng đề"
-        description="Đề nguồn và bài tập trong các buổi học. Gắn bài vào buổi học để tạo bản sao phục vụ giảng dạy."
+        description="Đề nguồn và bài tập trong các buổi học. Giảng viên gắn đề nguồn vào buổi học để tạo bản sao phục vụ giảng dạy."
         actions={
           <>
             <Button variant="outline" onClick={() => setImporting(true)}>

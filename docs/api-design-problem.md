@@ -5,7 +5,7 @@
 - `lesson_id = null` biểu thị Problem nằm trong bank; Problem khác gắn trực tiếp vào Lesson.
 - Problem trong bank là nguồn dùng chung, chưa thuộc Course nào. Khi thêm vào Lesson, hệ thống tạo một Problem mới cho Lesson; không đổi `lesson_id` của bản nguồn.
 - Chưa có `created_by` cho Problem, Topic, archive hoặc Assignment snapshot.
-- Problem gắn Lesson chỉ được quản lý bởi Admin hoặc Teacher chủ Course.
+- Problem gắn Lesson (bản sao trong buổi học) chỉ được quản lý bởi Teacher chủ Course: tạo trong Lesson, sửa, xoá, upload testcase. Admin chỉ xem (403 khi gọi API ghi). Endpoint testcase của bank (`/problems/{problem_id}/testcases`, chỉ Admin) chỉ nhận bài bank (`lesson_id = null`), bản sao trong Lesson trả 404.
 - **Ngân hàng bài chỉ Admin được ghi**: tạo (`POST /problems`), import (`POST /problems/import`, `/import/preview`), sửa (`PATCH /problems/{problem_id}`) và xoá (`DELETE /problems/{problem_id}`) bài bank đều yêu cầu Admin. Teacher chỉ xem/tìm bài bank (`GET /problems`, `GET /problems/{problem_id}`), sao chép bài vào Lesson (`POST /courses/{course_id}/lessons/{lesson_id}/problems`) hoặc tạo bài mới thẳng trong Lesson (`POST /courses/{course_id}/lessons/{lesson_id}/problems/new`).
 - Datetime request phải kèm UTC offset; response dùng giờ Việt Nam với offset `+07:00`. `start_datetime` mở đề; `end_datetime` chỉ chặn Submit và không chặn xem đề.
 - Với Problem đã gắn Lesson, lịch được suy ra từ `Lesson.start_date`/`end_date`; không chỉnh lịch riêng trên Problem. Khi ngày Lesson thay đổi, các Problem thuộc Lesson được đồng bộ về đầu ngày bắt đầu và cuối ngày kết thúc theo giờ Việt Nam.
@@ -97,7 +97,7 @@ Teacher (chủ Course) hoặc Admin tạo bài mới gắn thẳng vào Lesson, 
 
 **Response 201 Created**: `ProblemDetailResponse` với `lesson_id` là Lesson đích và `course_id` là Course.
 
-**Response lỗi**: 403 không phải Admin/Teacher hoặc Teacher không phải chủ Course; 404 Course/Lesson không tồn tại hoặc Lesson không thuộc Course; 422 như `POST /problems`.
+**Response lỗi**: 403 không phải Teacher (kể cả Admin) hoặc Teacher không phải chủ Course; 404 Course/Lesson không tồn tại hoặc Lesson không thuộc Course; 422 như `POST /problems`.
 
 ## POST /problems/import — Import nhiều Problem từ file JSON
 

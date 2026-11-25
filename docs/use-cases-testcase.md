@@ -19,9 +19,9 @@ Testcase ban đầu của Problem bank được khai báo cùng `POST /problems`
 
 | | |
 |---|---|
-| **Description** | Admin hoặc chủ Course quản lý testcase của Problem trong Lesson |
+| **Description** | Giáo viên chủ Course quản lý testcase của Problem trong Lesson. Admin chỉ xem |
 | **Trigger** | Người dùng thêm, sửa hoặc xóa testcase |
-| **Pre-condition** | Đã đăng nhập; Problem thuộc Lesson; người dùng có quyền quản lý Course; Problem chưa có Submission |
+| **Pre-condition** | Đã đăng nhập; Problem thuộc Lesson; người dùng là Giáo viên chủ Course; Problem chưa có Submission |
 | **Post-condition** | Testcase được tạo, cập nhật hoặc xóa; số lượng testcase của Problem được làm mới khi cần |
 | **Basic flow** | 1. Người dùng gửi mảng đối số JSON, output JSON mong đợi hoặc chọn testcase cần sửa/xóa<br>2. Hệ thống kiểm tra quyền, kiểu JSON và testcase thuộc đúng Problem<br>3. Hệ thống kiểm tra Problem chưa có Submission<br>4. Hệ thống lưu thay đổi và trả ProblemDetailResponse (xóa trả 204) |
 | **Exception flow** | **E1. Problem đã có Submission**: trả lỗi 409, giữ nguyên testcase<br>**E2. Testcase không tồn tại/không thuộc Problem**: trả lỗi 404<br>**E3. Yêu cầu xóa testcase cuối cùng**: trả lỗi 409, giữ nguyên testcase<br>**E4. Không có quyền**: trả lỗi 403 |
@@ -30,7 +30,7 @@ Testcase ban đầu của Problem bank được khai báo cùng `POST /problems`
 
 | | |
 |---|---|
-| **Description** | Admin hoặc chủ Course đánh dấu một hay nhiều testcase là mẫu hoặc ẩn |
+| **Description** | Giáo viên chủ Course đánh dấu một hay nhiều testcase là mẫu hoặc ẩn |
 | **Trigger** | Người dùng chọn testcase và đổi trạng thái mẫu |
 | **Pre-condition** | Problem chưa có Submission; các ID testcase thuộc Problem |
 | **Post-condition** | `is_sample` được cập nhật cho toàn bộ testcase đã chọn |
@@ -41,9 +41,9 @@ Testcase ban đầu của Problem bank được khai báo cùng `POST /problems`
 
 | | |
 |---|---|
-| **Description** | Admin hoặc chủ Course kiểm tra payload, thay toàn bộ testcase từ JSON/ZIP hoặc tải testcase hiện có |
+| **Description** | Giáo viên chủ Course kiểm tra payload, thay toàn bộ testcase từ JSON/ZIP hoặc tải testcase hiện có. Admin chỉ kiểm tra payload và tải testcase để xem |
 | **Trigger** | Người dùng chọn preview, upload hoặc download testcase |
-| **Pre-condition** | Preview cần đăng nhập Admin/Teacher; import/export cần quyền quản lý Course và Problem chưa có Submission nếu import |
+| **Pre-condition** | Preview cần đăng nhập Admin/Teacher; export cần quyền xem Course (Admin hoặc Teacher chủ Course); import cần là Teacher chủ Course và Problem chưa có Submission |
 | **Post-condition** | Preview không đổi dữ liệu; import thay toàn bộ testcase; export tải JSON hoặc ZIP |
 | **Basic flow** | 1. Với preview, hệ thống kiểm tra từng testcase và trả lỗi/cảnh báo theo vị trí<br>2. Với import, hệ thống đọc JSON/ZIP, kiểm tra định dạng, kiểu dữ liệu và giới hạn kích thước<br>3. Nếu toàn bộ payload hợp lệ và Problem chưa có Submission, hệ thống thay testcase trong transaction<br>4. Với export, hệ thống đóng gói toàn bộ testcase, bao gồm testcase ẩn, thành JSON hoặc ZIP |
 | **Exception flow** | **E1. File/payload sai hoặc quá lớn**: trả lỗi 422, giữ nguyên testcase cũ<br>**E2. Problem đã có Submission**: import bị từ chối 409<br>**E3. Format export không hỗ trợ**: trả lỗi 422 |

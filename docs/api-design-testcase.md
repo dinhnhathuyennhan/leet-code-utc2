@@ -5,7 +5,7 @@
 - Testcase thuộc trực tiếp Problem; chưa có AssignmentTestcase snapshot.
 - Khi tạo Problem bank qua `POST /problems`, testcase ban đầu được gửi trong body và gắn với Problem có `lesson_id = null`.
 - Base path: `/courses/{course_id}/lessons/{lesson_id}/problems/{problem_id}/testcases` (ký hiệu `BASE`).
-- Các thao tác ghi yêu cầu Admin hoặc Teacher chủ Course.
+- Các thao tác ghi (thêm, sửa, xoá, đổi mẫu hàng loạt, upload) chỉ dành cho Teacher chủ Course (`require_role(Role.TEACHER)`). Admin chỉ xem: danh sách, tải về (`/download`) và kiểm tra payload (`/preview`); gọi API ghi nhận 403.
 - Không cho thay testcase khi Problem đã có Submission.
 - Mỗi Problem chỉ có một cách chấm, suy ra từ `function_name` và không đổi sau khi tạo bài.
 - Problem có `function_name` dùng `input` là mảng đối số JSON và `expected_output` là giá trị JSON. Problem không có `function_name` dùng input/stdout dạng chuỗi; Java chỉ hỗ trợ kiểu này.
@@ -85,7 +85,7 @@ Không ghi database. Payload phải có 10–50 testcase, ít nhất 3 mẫu và
 
 **Query**: `format` là `json` (mặc định) hoặc `zip`.
 
-Admin/Teacher chủ Course tải toàn bộ testcase, gồm input/output testcase ẩn. ZIP chứa một file JSON.
+Admin (mọi Course, chỉ để xem) và Teacher chủ Course tải toàn bộ testcase, gồm input/output testcase ẩn. ZIP chứa một file JSON.
 
 **Response 200 OK**: file JSON hoặc ZIP, `Content-Disposition` đặt tên `testcases_{problem_id}.{format}`.
 

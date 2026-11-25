@@ -8,31 +8,31 @@ Các use-case quản lý Submission hiện chỉ bao gồm bài thuộc Lesson/C
 
 | | |
 |---|---|
-| **Description** | Admin hoặc Giáo viên theo dõi các Submission đang pending, sai kết quả hoặc lỗi biên dịch |
-| **Trigger** | Admin/Giáo viên mở màn hình bài nộp cần xử lý |
-| **Pre-condition** | Đã đăng nhập với vai trò Admin hoặc Teacher |
+| **Description** | Giáo viên theo dõi các Submission đang pending, sai kết quả hoặc lỗi biên dịch trong các lớp mình tạo. Admin không quản lý bài nộp |
+| **Trigger** | Giáo viên mở màn hình bài nộp cần xử lý |
+| **Pre-condition** | Đã đăng nhập với vai trò Teacher |
 | **Post-condition** | Không thay đổi dữ liệu |
-| **Basic flow** | 1. Người dùng gửi filter, từ khóa tìm kiếm và giới hạn kết quả<br>2. Hệ thống lấy Submission có status pending, wrong_answer hoặc compile_error<br>3. Teacher chỉ nhận Submission thuộc Course mình quản lý; Admin nhận toàn bộ<br>4. Hệ thống áp dụng filter/search và trả danh sách cùng counts |
+| **Basic flow** | 1. Người dùng gửi filter, từ khóa tìm kiếm và giới hạn kết quả<br>2. Hệ thống lấy Submission có status pending, wrong_answer hoặc compile_error<br>3. Teacher chỉ nhận Submission thuộc Course mình quản lý (Admin không gọi được chức năng này)<br>4. Hệ thống áp dụng filter/search và trả danh sách cùng counts |
 | **Exception flow** | **E1. Filter ngoài tập hỗ trợ**: hệ thống trả dữ liệu theo nhánh mặc định hiện tại<br>**E2. Lỗi truy vấn**: hệ thống trả lỗi chung |
 
 ### Use-case: Xem chi tiết bài nộp
 
 | | |
 |---|---|
-| **Description** | Admin hoặc Giáo viên xem code, kết quả và testcase của một Submission |
+| **Description** | Giáo viên xem code, kết quả và testcase của một Submission trong lớp mình tạo |
 | **Trigger** | Người dùng chọn một Submission trong danh sách |
-| **Pre-condition** | Đã đăng nhập với vai trò Admin/Teacher; Submission nằm trong phạm vi được xem |
+| **Pre-condition** | Đã đăng nhập với vai trò Teacher; Submission nằm trong phạm vi được xem |
 | **Post-condition** | Không thay đổi dữ liệu |
 | **Basic flow** | 1. Người dùng yêu cầu chi tiết theo `submission_id`<br>2. Hệ thống kiểm tra vai trò và phạm vi Course<br>3. Hệ thống lấy thông tin Student, Course, Lesson, Problem, code, trạng thái, feedback, số test đạt và testcase<br>4. Hệ thống trả chi tiết Submission |
-| **Exception flow** | **E1. Submission không tồn tại hoặc ngoài phạm vi Teacher**: trả lỗi 404<br>**E2. Người gọi không phải Admin/Teacher**: trả lỗi 403 |
+| **Exception flow** | **E1. Submission không tồn tại hoặc ngoài phạm vi Teacher**: trả lỗi 404<br>**E2. Người gọi không phải Teacher (kể cả Admin)**: trả lỗi 403 |
 
 ### Use-case: Cập nhật phản hồi hoặc trạng thái
 
 | | |
 |---|---|
-| **Description** | Admin hoặc Giáo viên ghi feedback và điểm chấm tay cho Submission. Trạng thái chấm chỉ do máy chấm quyết định, không sửa tay được |
+| **Description** | Giáo viên chủ lớp ghi feedback và điểm chấm tay cho Submission. Admin không ghi đè điểm. Trạng thái chấm chỉ do máy chấm quyết định, không sửa tay được |
 | **Trigger** | Người dùng chỉnh phản hồi/điểm và lưu |
-| **Pre-condition** | Đã đăng nhập với vai trò Admin/Teacher; Submission nằm trong phạm vi được quản lý |
+| **Pre-condition** | Đã đăng nhập với vai trò Teacher; Submission nằm trong phạm vi được quản lý |
 | **Post-condition** | Feedback và/hoặc `manual_score` được cập nhật; `status`, `passed_count` và kết quả máy chấm giữ nguyên |
 | **Basic flow** | 1. Người dùng gửi `feedback` và/hoặc `manual_score`<br>2. Hệ thống từ chối nếu body có `status`<br>3. Hệ thống kiểm tra Submission và quyền truy cập<br>4. Hệ thống lưu feedback/`manual_score`, không ảnh hưởng worker đang chấm bài<br>5. Hệ thống trả chi tiết Submission |
 | **Exception flow** | **E1. Body có `status`**: trả lỗi 422 "Không thể sửa trạng thái bài nộp: trạng thái do máy chấm quyết định", không cập nhật<br>**E2. Submission không tồn tại/ngoài phạm vi**: trả lỗi 404<br>**E3. Người gọi không có quyền**: trả lỗi 403 |

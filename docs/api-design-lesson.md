@@ -4,7 +4,7 @@
 
 - Lesson chứa trực tiếp Problem qua `Problem.lesson_id`; chưa có LessonAssignment hoặc snapshot.
 - Problem bank (`lesson_id = null`) chưa thuộc Course/Lesson và không xuất hiện trong dữ liệu Lesson/Course cho tới khi được sao chép vào Lesson.
-- Admin có thể quản lý mọi Course; Teacher chỉ quản lý Course mình tạo.
+- Chỉ Teacher chủ Course được tạo/sửa/sắp xếp/nhân bản/xoá Lesson và gắn Problem vào Lesson (`require_role(Role.TEACHER)`). Admin chỉ xem Lesson của mọi Course; gọi các API ghi nhận 403.
 - Student xem Lesson khi có quyền xem Course; dữ liệu testcase ẩn và thống kê được lọc khỏi response.
 
 ## POST /courses/{course_id}/lessons — Tạo buổi học
@@ -26,7 +26,7 @@
 
 | Status | Khi nào |
 |---|---|
-| 403 | Không có quyền tạo/sửa Lesson trong Course |
+| 403 | Không phải Teacher chủ Course (Admin cũng bị 403) |
 | 404 | Course hoặc Problem được chỉ định không tồn tại |
 | 422 | Body sai định dạng, tên rỗng hoặc ngày không hợp lệ |
 
@@ -36,7 +36,7 @@
 
 **Quy tắc theo vai trò**
 
-- Admin/Teacher có quyền xem Course nhận tất cả Problem/testcase và trường thống kê.
+- Admin và Teacher chủ Course (người có quyền xem Course) nhận tất cả Problem/testcase và trường thống kê.
 - Student chỉ nhận Problem đã tới `start_datetime`, testcase mẫu; các trường `submitted_students`, `total_students`, `stats`, `alert` và `submitted_count` được trả về là `null`.
 - Thống kê dành cho Admin/Teacher chỉ tính các Student hiện đang enroll trong Course; bài nộp của Student đã bị gỡ enrollment không được tính.
 - `stats.avg_score` (thang 10, làm tròn 1 chữ số) chọn bài nộp như bảng điểm lớp: với mỗi cặp (Student, Problem), bài có `manual_score` được ưu tiên, sau đó tới `passed_count` cao nhất; điểm là `manual_score` nếu có, nếu không là `10 × passed_count / total_number_testcase`. Bằng `0` khi chưa có bài nào có điểm.
@@ -69,7 +69,7 @@ Khi `start_date` hoặc `end_date` thực sự thay đổi, hệ thống đồng
 
 **Request body**: `{ "problem_ids": [1, 2] }`; danh sách không được rỗng.
 
-Problem bank được dùng chung và không bị chuyển khỏi bank. Khi thêm Problem bank, hệ thống tạo bản sao với `problem_id` mới, `lesson_id` là Lesson đích, sao chép testcase và giữ `report`; `start_datetime`/`end_datetime` của bản sao được đặt theo ngày bắt đầu/kết thúc của Lesson đích. Problem thuộc Lesson khác cũng được sao chép; Teacher chỉ được sao chép nếu sở hữu Course nguồn, Admin được sao chép mọi Problem. Submission không được sao chép. Problem đã nằm trong chính Lesson đích được giữ nguyên.
+Problem bank được dùng chung và không bị chuyển khỏi bank. Khi thêm Problem bank, hệ thống tạo bản sao với `problem_id` mới, `lesson_id` là Lesson đích, sao chép testcase và giữ `report`; `start_datetime`/`end_datetime` của bản sao được đặt theo ngày bắt đầu/kết thúc của Lesson đích. Problem thuộc Lesson khác cũng được sao chép; Teacher chỉ được sao chép nếu sở hữu Course nguồn (Admin không gắn bài vào Lesson). Submission không được sao chép. Problem đã nằm trong chính Lesson đích được giữ nguyên.
 
 **Response 200 OK**: `CourseResponse`.
 

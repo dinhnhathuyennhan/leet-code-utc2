@@ -6,9 +6,9 @@
 
 | | |
 |---|---|
-| **Description** | Admin hoặc Giáo viên tạo một buổi học trong Course và có thể đưa Problem vào buổi ngay khi tạo |
-| **Trigger** | Admin/Giáo viên chọn Course và nhấn "Tạo buổi học" |
-| **Pre-condition** | Đã đăng nhập; Course tồn tại; nếu là Giáo viên thì là chủ Course |
+| **Description** | Giáo viên chủ Course tạo một buổi học trong Course và có thể đưa Problem vào buổi ngay khi tạo. Admin chỉ xem buổi học |
+| **Trigger** | Giáo viên chọn Course và nhấn "Tạo buổi học" |
+| **Pre-condition** | Đã đăng nhập với vai trò Giáo viên; Course tồn tại; là chủ Course |
 | **Post-condition** | Lesson được tạo với `lesson_number` tiếp theo; mỗi Problem bank được chọn tạo thành bản riêng của Lesson, kèm testcase |
 | **Basic flow** | 1. Người dùng mở Course và chọn tạo Lesson<br>2. Nhập `lesson_name`, `start_date`, `end_date`, có thể gửi `problem_ids`<br>3. Hệ thống kiểm tra tên không rỗng và ngày bắt đầu không sau ngày kết thúc<br>4. Hệ thống kiểm tra quyền quản lý Course<br>5. Hệ thống tạo Lesson, tự gán số thứ tự tiếp theo<br>6. Nếu có Problem, hệ thống kiểm tra quyền sử dụng; bài bank hoặc bài từ Lesson khác được sao chép cùng testcase thành Problem mới, đặt lịch theo ngày Lesson đích và không sao chép Submission<br>7. Hệ thống trả Course mới và thông báo tạo thành công |
 | **Exception flow** | **E1. Dữ liệu không hợp lệ**: tại bước 3, trả lỗi 422 và không tạo Lesson<br>**E2. Không có quyền**: tại bước 4 hoặc 6, trả lỗi 403<br>**E3. Problem không tồn tại**: tại bước 6, trả lỗi 404 và thao tác không hoàn tất<br>**E4. Lỗi hệ thống**: thao tác lưu thất bại, client hiển thị lỗi và cho phép thử lại |
@@ -28,9 +28,9 @@
 
 | | |
 |---|---|
-| **Description** | Admin hoặc chủ Course cập nhật thông tin Lesson hoặc thay đổi thứ tự các buổi |
+| **Description** | Giáo viên chủ Course cập nhật thông tin Lesson hoặc thay đổi thứ tự các buổi |
 | **Trigger** | Người dùng sửa thông tin Lesson hoặc chọn chức năng sắp xếp |
-| **Pre-condition** | Đã đăng nhập; Lesson/Course tồn tại; người dùng có quyền quản lý Course |
+| **Pre-condition** | Đã đăng nhập; Lesson/Course tồn tại; người dùng là Giáo viên chủ Course |
 | **Post-condition** | Thông tin hoặc thứ tự Lesson được cập nhật |
 | **Basic flow** | 1. Người dùng gửi field cần sửa hoặc danh sách `order` gồm các `lesson_id`<br>2. Hệ thống kiểm tra quyền và dữ liệu<br>3. Với reorder, hệ thống xác nhận danh sách chứa chính xác mọi Lesson trong Course, không trùng ID<br>4. Hệ thống cập nhật dữ liệu/thứ tự và trả Course |
 | **Exception flow** | **E1. Ngày không hợp lệ**: `start_date` sau `end_date`, trả lỗi 422<br>**E2. Danh sách reorder không hợp lệ**: trả lỗi 422, không cập nhật thứ tự<br>**E3. Không có quyền**: trả lỗi 403 |
@@ -39,7 +39,7 @@
 
 | | |
 |---|---|
-| **Description** | Admin hoặc Giáo viên nhân bản Lesson và các Problem/testcase sang một Lesson mới |
+| **Description** | Giáo viên nhân bản Lesson và các Problem/testcase sang một Lesson mới trong Course mình quản lý |
 | **Trigger** | Người dùng chọn "Nhân bản buổi học" |
 | **Pre-condition** | Đã đăng nhập; Lesson nguồn tồn tại; có quyền xem Course nguồn và quản lý Course đích |
 | **Post-condition** | Lesson mới được thêm cuối danh sách Course đích với ngày do người dùng chọn; Problem và testcase được sao chép |
@@ -50,9 +50,9 @@
 
 | | |
 |---|---|
-| **Description** | Admin hoặc chủ Course xóa Lesson chưa có Problem |
+| **Description** | Giáo viên chủ Course xóa Lesson chưa có Problem |
 | **Trigger** | Người dùng chọn xóa Lesson và xác nhận |
-| **Pre-condition** | Đã đăng nhập; Lesson tồn tại; người dùng có quyền quản lý Course |
+| **Pre-condition** | Đã đăng nhập; Lesson tồn tại; người dùng là Giáo viên chủ Course |
 | **Post-condition** | Lesson bị xóa nếu không còn Problem |
 | **Basic flow** | 1. Người dùng yêu cầu xóa Lesson<br>2. Hệ thống kiểm tra quyền và tìm Lesson trong Course<br>3. Hệ thống xác nhận Lesson không có Problem<br>4. Hệ thống xóa Lesson và trả 204 |
 | **Exception flow** | **E1. Lesson còn Problem**: trả lỗi 409, không xóa Lesson<br>**E2. Không có quyền hoặc không tìm thấy Lesson**: trả lỗi tương ứng |

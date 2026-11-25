@@ -154,7 +154,7 @@ def create_lesson_problem_route(
     lesson_id: int,
     data: ProblemCreateRequest,
     session: Session = Depends(get_session),
-    current_user: User = Depends(require_role(Role.ADMIN, Role.TEACHER)),
+    current_user: User = Depends(require_role(Role.TEACHER)),
 ) -> ProblemDetailResponse:
     return problem_service.create_lesson_problem(session, course_id, lesson_id, data, current_user)
 
@@ -172,7 +172,7 @@ def get_problem_detail_route(
 def update_problem_route(
     course_id: str, lesson_id: int, problem_id: int, data: ProblemUpdateRequest,
     session: Session = Depends(get_session),
-    current_user: User = Depends(require_role(Role.ADMIN, Role.TEACHER)),
+    current_user: User = Depends(require_role(Role.TEACHER)),
 ) -> ProblemDetailResponse:
     return problem_service.update_problem(session, course_id, lesson_id, problem_id, data, current_user)
 
@@ -181,7 +181,7 @@ def update_problem_route(
 def delete_problem_route(
     course_id: str, lesson_id: int, problem_id: int,
     session: Session = Depends(get_session),
-    current_user: User = Depends(require_role(Role.ADMIN, Role.TEACHER)),
+    current_user: User = Depends(require_role(Role.TEACHER)),
 ):
     problem_service.delete_problem(session, course_id, lesson_id, problem_id, current_user)
 
@@ -191,7 +191,7 @@ def upload_problem_testcases_route(
     course_id: str, lesson_id: int, problem_id: int,
     file: UploadFile = File(...),
     session: Session = Depends(get_session),
-    current_user: User = Depends(require_role(Role.ADMIN, Role.TEACHER)),
+    current_user: User = Depends(require_role(Role.TEACHER)),
 ) -> ProblemDetailResponse:
     raw = file.file.read(MAX_UPLOAD_BYTES + 1)           # đọc có giới hạn
     items = parse_testcases(file.filename or "", raw)

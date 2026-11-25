@@ -39,7 +39,7 @@ def list_pending_submissions_route(
     problem_id: int | None = Query(default=None),
     include_graded: bool = Query(default=False),
     session: Session = Depends(get_session),
-    current_user: User = Depends(require_role(Role.ADMIN, Role.TEACHER)),
+    current_user: User = Depends(require_role(Role.TEACHER)),
 ) -> PendingSubmissionListResponse:
     return list_pending_submissions(session, current_user, filter, search, limit, course, lesson_id, problem_id, include_graded)
 
@@ -88,7 +88,7 @@ def get_submission_result_route(
 def regrade_submission_route(
     submission_id: int,
     session: Session = Depends(get_session),
-    current_user: User = Depends(require_role(Role.ADMIN, Role.TEACHER)),
+    current_user: User = Depends(require_role(Role.TEACHER)),
 ) -> SubmitAcceptedResponse:
     submission = judge_service.regrade(session, submission_id, current_user)
     return SubmitAcceptedResponse(submission_id=submission.submission_id, status=submission.status)
@@ -98,7 +98,7 @@ def regrade_submission_route(
 def get_submission_detail_route(
     submission_id: int,
     session: Session = Depends(get_session),
-    current_user: User = Depends(require_role(Role.ADMIN, Role.TEACHER)),
+    current_user: User = Depends(require_role(Role.TEACHER)),
 ) -> SubmissionDetailResponse:
     return get_submission_detail(session, submission_id, current_user)
 
@@ -108,6 +108,6 @@ def update_submission_route(
     submission_id: int,
     data: SubmissionUpdateRequest,
     session: Session = Depends(get_session),
-    current_user: User = Depends(require_role(Role.ADMIN, Role.TEACHER)),
+    current_user: User = Depends(require_role(Role.TEACHER)),
 ) -> SubmissionDetailResponse:
     return update_submission(session, submission_id, data, current_user)

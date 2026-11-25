@@ -178,11 +178,10 @@ class TestBankProblemDetail:
 
 
 class TestAdminProblemTestcasesAndPreview:
-    def test_source_and_attached_case_crud_preserve_format_and_count(
-        self, session, problem_bank_problem, problem_record, problem_admin,
-        problem_testcase_factory,
+    def test_source_case_crud_preserves_format_and_count(
+        self, session, problem_bank_problem, problem_admin, problem_testcase_factory,
     ):
-        for problem in (problem_bank_problem, problem_record):
+        for problem in (problem_bank_problem,):
             problem.function_name = None
             session.add(problem)
             session.flush()
@@ -227,16 +226,32 @@ class TestAdminProblemTestcasesAndPreview:
         assert detail.testcases[0].input_type == "json_args"
 
     def test_case_changes_reject_existing_submission(
-        self, session, problem_record, problem_admin, problem_student,
+        self, session, problem_bank_problem, problem_admin, problem_student,
         problem_testcase_factory, problem_submission_factory,
     ):
-        problem_testcase_factory(problem_record)
-        problem_submission_factory(problem_record, problem_student)
+        problem_testcase_factory(problem_bank_problem)
+        problem_submission_factory(problem_bank_problem, problem_student)
         with pytest.raises(ConflictError):
             problem_service.add_admin_testcase(
-                session, problem_record.problem_id,
+                session, problem_bank_problem.problem_id,
                 AdminTestcaseMutation(input=[1], expected_output=2), problem_admin,
             )
+
+    # Bản sao đã gắn vào buổi học do giảng viên chủ lớp quản lý: Admin không sửa testcase
+    # qua endpoint ngân hàng đề.
+    def test_attached_problem_cases_are_not_editable_from_bank(
+        self, session, problem_record, problem_admin, problem_testcase_factory,
+    ):
+        case = problem_testcase_factory(problem_record)
+        mutation = AdminTestcaseMutation(input=[1], expected_output=2)
+        with pytest.raises(NotFoundError, match="Không tìm thấy bài tập nguồn"):
+            problem_service.add_admin_testcase(session, problem_record.problem_id, mutation, problem_admin)
+        with pytest.raises(NotFoundError, match="Không tìm thấy bài tập nguồn"):
+            problem_service.update_admin_testcase(
+                session, problem_record.problem_id, case.testcase_id, mutation, problem_admin
+            )
+        with pytest.raises(NotFoundError, match="Không tìm thấy bài tập nguồn"):
+            problem_service.delete_admin_testcase(session, problem_record.problem_id, case.testcase_id)
 
     def test_preview_runs_all_cases_without_creating_submission(
         self, session, problem_record, problem_admin, problem_testcase_factory, monkeypatch,
@@ -324,7 +339,8 @@ class TestCopyProblemsToLesson:
                 session, [foreign_problem.problem_id], problem_lesson, problem_teacher
             )
 
-    def test_admin_can_copy_foreign_lesson_problem(
+    # Admin không vận hành lớp học: không sao chép bài của lớp khác vào buổi học
+    def test_admin_cannot_copy_foreign_lesson_problem(
         self,
         session,
         problem_admin,
@@ -335,10 +351,10 @@ class TestCopyProblemsToLesson:
     ):
         source = problem_factory(problem_other_lesson)
         problem_testcase_factory(source)
-        result = problem_service.copy_problems_to_lesson(
-            session, [source.problem_id], problem_lesson, problem_admin
-        )
-        assert result[0].lesson_id == problem_lesson.lesson_id
+        with pytest.raises(ForbiddenError, match="Bạn không có quyền sao chép bài tập này"):
+            problem_service.copy_problems_to_lesson(
+                session, [source.problem_id], problem_lesson, problem_admin
+            )
 
     def test_admin_copy_of_missing_problem_returns_not_found(
         self, session, problem_admin, problem_lesson

@@ -26,7 +26,7 @@ def add_student_to_course(
     data: AddStudentToCourseRequest,
     course_id: str,
     session: Session = Depends(get_session),
-    current_user: User = Depends(require_role(Role.ADMIN, Role.TEACHER)),
+    current_user: User = Depends(require_role(Role.TEACHER)),
 ) -> AddStudentToCourseResponse:
     return enrollment_service.add_student_to_course(
         student_id=data.student_id,
@@ -46,7 +46,7 @@ def add_class_to_course(
     course_id: str,
     data: AddClassToCourseRequest,
     session: Session = Depends(get_session),
-    current_user: User = Depends(require_role(Role.ADMIN, Role.TEACHER)),
+    current_user: User = Depends(require_role(Role.TEACHER)),
 ) -> AddClassToCourseResponse:
     return enrollment_service.add_class_to_course(
         session,
@@ -64,7 +64,7 @@ def delete_student_from_course(
     student_id: str,
     course_id: str,
     session: Session = Depends(get_session),
-    current_user: User = Depends(require_role(Role.ADMIN, Role.TEACHER)),
+    current_user: User = Depends(require_role(Role.TEACHER)),
 ) -> None:
     enrollment_service.delete_student_from_course(
         student_id=student_id,

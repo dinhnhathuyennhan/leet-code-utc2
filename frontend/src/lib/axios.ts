@@ -42,8 +42,28 @@ export const axiosInstance = axios.create({
 
 // ─── Session-expired handler (AuthProvider đăng ký lúc mount) ─────────────────
 
-type SessionExpiredHandler = () => void;
+/**
+ * Lý do phiên kết thúc:
+ *  - "expired": refresh thất bại (hết hạn, bị thu hồi...).
+ *  - "account-locked": backend trả 403 `ACCOUNT_LOCKED` (tài khoản bị khoá,
+ *    kể cả khi đang đăng nhập) — backend đã xoá cookie refresh.
+ */
+export type SessionEndReason = "expired" | "account-locked";
+type SessionExpiredHandler = (reason: SessionEndReason) => void;
 let onSessionExpired: SessionExpiredHandler | null = null;
+
+const ACCOUNT_LOCKED_CODE = "ACCOUNT_LOCKED";
+
+/** 403 kèm `error_code = ACCOUNT_LOCKED` (docs/api-design-auth.md). */
+function isAccountLockedError(error: unknown): boolean {
+  if (!axios.isAxiosError(error) || error.response?.status !== 403) return false;
+  const data: unknown = error.response.data;
+  return (
+    typeof data === "object" &&
+    data !== null &&
+    (data as Record<string, unknown>).error_code === ACCOUNT_LOCKED_CODE
+  );
+}
 
 /** AuthProvider gọi hàm này khi mount để nhận callback logout. */
 export function setSessionExpiredHandler(handler: SessionExpiredHandler | null): void {
@@ -84,9 +104,15 @@ const REFRESH_EXEMPT_PATHS = new Set([
 let refreshPromise: Promise<string | null> | null = null;
 let lastRefreshWasNetworkError = false;
 let lastRefreshStatus: number | null = null;
+let lastRefreshWasAccountLocked = false;
 
 export function wasLastRefreshNetworkError(): boolean {
   return lastRefreshWasNetworkError;
+}
+
+/** Lần refresh gần nhất bị từ chối vì tài khoản đang bị khoá (403 `ACCOUNT_LOCKED`). */
+export function wasLastRefreshAccountLocked(): boolean {
+  return lastRefreshWasAccountLocked;
 }
 
 export function getLastRefreshStatus(): number | null {
@@ -104,6 +130,7 @@ export function refreshAccessToken(): Promise<string | null> {
     try {
       lastRefreshWasNetworkError = false;
       lastRefreshStatus = null;
+      lastRefreshWasAccountLocked = false;
       // Dùng axios.post thuần — tránh kích hoạt lại response interceptor
       const response = await axios.post<RefreshResponse>(
         `${API_URL}/auth/refresh-access-token`,
@@ -116,6 +143,7 @@ export function refreshAccessToken(): Promise<string | null> {
     } catch (error) {
       lastRefreshWasNetworkError = !axios.isAxiosError(error) || !error.response;
       lastRefreshStatus = axios.isAxiosError(error) ? (error.response?.status ?? null) : null;
+      lastRefreshWasAccountLocked = isAccountLockedError(error);
       setAccessToken(null);
       return null;
     } finally {
@@ -138,6 +166,14 @@ axiosInstance.interceptors.response.use(
     const path = originalRequest?.url ?? "";
     const isExempt = REFRESH_EXEMPT_PATHS.has(path);
 
+    // Tài khoản bị khoá giữa phiên: mọi API trả 403 ACCOUNT_LOCKED → kết thúc phiên ngay.
+    // /auth/login tự hiển thị lỗi (chưa có phiên nào để xoá).
+    if (path !== "/auth/login" && isAccountLockedError(error)) {
+      setAccessToken(null);
+      onSessionExpired?.("account-locked");
+      return Promise.reject(error);
+    }
+
     if (error.response?.status === 401 && !originalRequest._retry && !isExempt) {
       originalRequest._retry = true;
 
@@ -148,8 +184,8 @@ axiosInstance.interceptors.response.use(
         return axiosInstance(originalRequest);
       }
 
-      // Refresh thất bại → session hết hạn
-      onSessionExpired?.();
+      // Refresh thất bại → session hết hạn (hoặc tài khoản vừa bị khoá)
+      onSessionExpired?.(lastRefreshWasAccountLocked ? "account-locked" : "expired");
     }
 
     return Promise.reject(error);

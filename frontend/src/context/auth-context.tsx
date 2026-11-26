@@ -13,7 +13,12 @@ import {
 import { useQueryClient } from "@tanstack/react-query";
 
 import { setSessionExpiredHandler } from "@/lib/api/client";
-import { getLastRefreshStatus, wasLastRefreshNetworkError } from "@/lib/axios";
+import {
+  getLastRefreshStatus,
+  wasLastRefreshAccountLocked,
+  wasLastRefreshNetworkError,
+  type SessionEndReason,
+} from "@/lib/axios";
 import {
   changePassword as changePasswordRequest,
   login as loginRequest,
@@ -31,7 +36,8 @@ import { setAccessToken } from "@/lib/auth/token-store";
 
 type AuthState =
   | { status: "loading"; user?: undefined }
-  | { status: "unauthenticated"; user?: undefined }
+  /** `reason = "account-locked"`: phiên bị kết thúc vì tài khoản bị khoá (trang đăng nhập báo cho người dùng). */
+  | { status: "unauthenticated"; user?: undefined; reason?: "account-locked" }
   | { status: "connection-lost"; user?: undefined }
   | { status: "server-error"; user?: undefined }
   | { status: "authenticated"; user: UserResponse };
@@ -97,6 +103,15 @@ function clearCachedProfile(): void {
  * refresh token itself — so a truly stale cache can only occur in a fresh
  * tab that never completed a real login in this session.
  */
+/** Trạng thái khi refresh lúc khởi động không cấp được token. */
+function stateAfterFailedRefresh(): AuthState {
+  const status = getLastRefreshStatus();
+  if (status !== null && status >= 500) return { status: "server-error" };
+  if (wasLastRefreshNetworkError()) return { status: "connection-lost" };
+  if (wasLastRefreshAccountLocked()) return { status: "unauthenticated", reason: "account-locked" };
+  return { status: "unauthenticated" };
+}
+
 function buildUserFromAccessToken(accessToken: string): UserResponse | null {
   const claims = decodeAccessToken(accessToken);
   if (!claims) return null;
@@ -116,10 +131,22 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [loginInProgress, setLoginInProgress] = useState(false);
   const queryClient = useQueryClient();
 
-  const handleSessionExpired = useCallback(() => {
+  const handleSessionExpired = useCallback((reason: SessionEndReason) => {
     clearCachedProfile();
-    setState({ status: "unauthenticated" });
-  }, []);
+    if (reason === "account-locked") {
+      // Tài khoản bị khoá: xoá phiên và mọi dữ liệu đã tải của tài khoản này
+      // (backend đã xoá cookie refresh).
+      setAccessToken(null);
+      queryClient.clear();
+      setState({ status: "unauthenticated", reason: "account-locked" });
+      return;
+    }
+    // Request chạy dở sau khi bị khoá (token đã xoá → 401 → refresh 401) không được
+    // hạ thông báo "tài khoản bị khoá" xuống thành hết phiên thường.
+    setState((current) =>
+      current.status === "unauthenticated" && current.reason ? current : { status: "unauthenticated" },
+    );
+  }, [queryClient]);
 
   useEffect(() => {
     setSessionExpiredHandler(handleSessionExpired);
@@ -132,7 +159,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setState({ status: "loading" });
     const token = await refreshRequest();
     const user = token ? buildUserFromAccessToken(token) : null;
-    setState(user ? { status: "authenticated", user } : getLastRefreshStatus() !== null && getLastRefreshStatus()! >= 500 ? { status: "server-error" } : wasLastRefreshNetworkError() ? { status: "connection-lost" } : { status: "unauthenticated" });
+    setState(user ? { status: "authenticated", user } : stateAfterFailedRefresh());
   }, []);
 
   useEffect(() => {
@@ -143,7 +170,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       if (cancelled) return;
 
       const user = token ? buildUserFromAccessToken(token) : null;
-      setState(user ? { status: "authenticated", user } : getLastRefreshStatus() !== null && getLastRefreshStatus()! >= 500 ? { status: "server-error" } : wasLastRefreshNetworkError() ? { status: "connection-lost" } : { status: "unauthenticated" });
+      setState(user ? { status: "authenticated", user } : stateAfterFailedRefresh());
     }
 
     void hydrate();
@@ -156,6 +183,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     // Không cho phép dữ liệu của tài khoản trước tồn tại trong màn hình mới.
     queryClient.clear();
     setLoginInProgress(true);
+    // Lần đăng nhập mới: bỏ thông báo "tài khoản đã bị khoá" của phiên trước.
+    setState((current) =>
+      current.status === "unauthenticated" && current.reason ? { status: "unauthenticated" } : current,
+    );
     try {
       const result: LoginResponse = await loginRequest(data);
       setAccessToken(result.access_token);

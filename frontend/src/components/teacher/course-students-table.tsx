@@ -6,12 +6,20 @@ import {
   Download,
   FileSpreadsheet,
   Loader2,
+  Pencil,
   Plus,
   Search,
   Trash2,
   UserPlus,
 } from "lucide-react";
 import { toast } from "sonner";
+import {
+  AccountLockButton,
+  AccountLockDialog,
+  AccountStatusBadge,
+  EditAccountDialog,
+  type ManagedAccount,
+} from "@/components/shared/account-actions";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -41,6 +49,20 @@ import { importStudents } from "@/lib/api/endpoints/admin";
 import { downloadCsv } from "@/lib/helpers/download";
 import { useClassStudents, useClasses } from "@/lib/hooks/use-courses";
 import type { CourseStudent } from "@/lib/types/course";
+import { Role } from "@/lib/api/types";
+
+/** Dòng ghi danh → tài khoản đích cho thao tác sửa/khoá (`student_id` là UUID `user_id`). */
+function toManagedAccount(student: CourseStudent): ManagedAccount {
+  return {
+    user_id: student.student_id,
+    full_name: student.full_name,
+    email: student.email,
+    role_id: Role.STUDENT,
+    student_code: student.student_code,
+    class_id: student.class_id ?? null,
+    is_active: student.is_active,
+  };
+}
 
 export function CourseStudentsTable({
   students,
@@ -79,6 +101,10 @@ export function CourseStudentsTable({
     null,
   );
   const [deleting, setDeleting] = useState(false);
+  // Trang này chỉ mở được với lớp do chính GV tạo (backend trả 403 nếu không),
+  // nên mọi SV trong danh sách đều thuộc phạm vi GV được sửa/khoá; backend vẫn kiểm tra lại.
+  const [lockTarget, setLockTarget] = useState<ManagedAccount | null>(null);
+  const [editTarget, setEditTarget] = useState<ManagedAccount | null>(null);
   async function importFile(file: File) {
     setImporting(true);
     try {
@@ -331,7 +357,10 @@ export function CourseStudentsTable({
                   {student.student_code ?? "—"}
                 </td>
                 <td className="px-4 py-3">
-                  <div className="font-semibold">{student.full_name}</div>
+                  <div className="flex flex-wrap items-center gap-2 font-semibold">
+                    {student.full_name}
+                    <AccountStatusBadge isActive={student.is_active} />
+                  </div>
                   <div className="text-xs text-muted-foreground">
                     {student.email}
                   </div>
@@ -348,19 +377,47 @@ export function CourseStudentsTable({
                   </div>
                 </td>
                 <td className="px-4 py-3 text-right">
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    onClick={() => void remove(student)}
-                  >
-                    <Trash2 className="size-4" />
-                  </Button>
+                  <div className="flex justify-end gap-1">
+                    <Button
+                      variant="ghost"
+                      size="icon-sm"
+                      onClick={() => setEditTarget(toManagedAccount(student))}
+                      aria-label={`Sửa tài khoản ${student.full_name}`}
+                      title="Sửa thông tin"
+                    >
+                      <Pencil className="size-4" />
+                    </Button>
+                    <AccountLockButton
+                      account={toManagedAccount(student)}
+                      size="icon-sm"
+                      onClick={() => setLockTarget(toManagedAccount(student))}
+                    />
+                    <Button
+                      variant="ghost"
+                      size="icon-sm"
+                      onClick={() => void remove(student)}
+                      aria-label={`Xoá ${student.full_name} khỏi lớp`}
+                      title="Xoá khỏi lớp"
+                    >
+                      <Trash2 className="size-4" />
+                    </Button>
+                  </div>
                 </td>
               </tr>
             ))}
           </tbody>
         </table>
       </div>
+      <AccountLockDialog
+        account={lockTarget}
+        onClose={() => setLockTarget(null)}
+        onChanged={() => void refresh()}
+      />
+      <EditAccountDialog
+        account={editTarget}
+        onClose={() => setEditTarget(null)}
+        onSaved={() => void refresh()}
+      />
       <AlertDialog
         open={Boolean(pendingDelete)}
         onOpenChange={(next) => {

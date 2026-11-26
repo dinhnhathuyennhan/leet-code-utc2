@@ -211,6 +211,7 @@ function toStudent(record: {
   full_name: string;
   email: string;
   class_id?: string | null;
+  is_active?: boolean | null;
   submitted_lessons?: number;
   accepted_problems?: number;
   total_lessons?: number;
@@ -302,6 +303,7 @@ export async function getCourseEnrollments(
       full_name: string; 
       email: string; 
       class_id?: string | null; 
+      is_active?: boolean | null;
       submitted_lessons?: number;
       accepted_problems?: number;
       total_lessons?: number; 

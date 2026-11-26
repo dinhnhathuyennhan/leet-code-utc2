@@ -1,5 +1,5 @@
 import { refreshAccessToken, setSessionExpiredHandler } from "@/lib/axios";
-import { ApiError } from "@/lib/api/error";
+import { ApiError, readErrorCode } from "@/lib/api/error";
 import type { AxiosError } from "axios";
 
 export { setSessionExpiredHandler, refreshAccessToken };
@@ -88,5 +88,6 @@ export function wrapAxiosError(error: unknown): never {
   throw new ApiError({
     status,
     detail: extractErrorDetail(data, status),
+    code: readErrorCode(data),
   });
 }

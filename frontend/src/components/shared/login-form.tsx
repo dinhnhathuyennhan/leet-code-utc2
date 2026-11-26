@@ -10,7 +10,7 @@ import {
 } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import type { z } from "zod";
-import { ArrowRight, AtSign, CircleX, Loader2 } from "lucide-react";
+import { ArrowRight, AtSign, CircleX, Loader2, Lock } from "lucide-react";
 
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
@@ -86,9 +86,14 @@ function FormMessage({ name }: { name: string }) {
 }
 
 export function LoginForm({ onSuccess, onSubmittingChange }: LoginFormProps) {
-  const { login } = useAuth();
+  const auth = useAuth();
+  const { login } = auth;
   const { t, locale } = useLocale();
   const [connectionError, setConnectionError] = React.useState<string | null>(null);
+  const [loginLocked, setLoginLocked] = React.useState(false);
+  // Bị đá khỏi phiên vì tài khoản bị khoá (403 ACCOUNT_LOCKED), hoặc vừa đăng nhập đúng mật khẩu vào tài khoản bị khoá.
+  const accountLocked =
+    loginLocked || (auth.status === "unauthenticated" && auth.reason === "account-locked");
 
   const form = useForm<z.input<typeof loginSchema>, unknown, LoginFormValues>({
     resolver: zodResolver(loginSchema),
@@ -106,6 +111,7 @@ export function LoginForm({ onSuccess, onSubmittingChange }: LoginFormProps) {
 
   async function onSubmit(values: LoginFormValues) {
     setConnectionError(null);
+    setLoginLocked(false);
     onSubmittingChange?.(true);
     try {
       const user = await login({
@@ -122,6 +128,13 @@ export function LoginForm({ onSuccess, onSubmittingChange }: LoginFormProps) {
         if (error.isNetworkError) {
           setConnectionError(t("error.network"));
           toast.error(t("error.network"));
+          return;
+        }
+
+        if (error.code === "ACCOUNT_LOCKED") {
+          // Mật khẩu đúng nhưng tài khoản bị khoá: không đánh dấu ô mật khẩu là sai.
+          setLoginLocked(true);
+          toast.error(t("error.accountLocked"));
           return;
         }
 
@@ -249,6 +262,20 @@ export function LoginForm({ onSuccess, onSubmittingChange }: LoginFormProps) {
                 </FormItem>
               )}
             />
+
+            {/* Account Locked Alert */}
+            {accountLocked && (
+              <Alert
+                variant="destructive"
+                role="alert"
+                className="items-center gap-2 rounded-xl border-red-300 bg-red-50 py-2.5 text-xs sm:text-sm text-red-600"
+              >
+                <Lock className="size-4 shrink-0" />
+                <AlertDescription className="text-red-600">
+                  {t("error.accountLocked")}
+                </AlertDescription>
+              </Alert>
+            )}
 
             {/* Connection Error Alert */}
             {connectionError && (

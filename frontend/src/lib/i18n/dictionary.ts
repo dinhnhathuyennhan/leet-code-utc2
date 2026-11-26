@@ -87,6 +87,10 @@ export const common = {
   "error.retry": { vi: "Thử lại", en: "Retry" },
   "error.network": { vi: "Mất kết nối từ server, vui lòng thử lại.", en: "Lost connection to the server, please try again." },
   "error.generic": { vi: "Đã có lỗi xảy ra, vui lòng thử lại.", en: "Something went wrong, please try again." },
+  "error.accountLocked": {
+    vi: "Tài khoản đã bị khoá. Vui lòng liên hệ quản trị viên hoặc giảng viên để được mở khoá.",
+    en: "Your account has been locked. Please contact an administrator or your teacher to unlock it.",
+  },
   "error.invalidCredentials": { vi: "Email hoặc mật khẩu không chính xác", en: "Incorrect email or password" },
 };
 

@@ -2,7 +2,6 @@ from sqlalchemy.orm import load_only
 from sqlmodel import Session, func, select
 
 from app.core.exceptions import NotFoundError
-from app.core.dependencies import Role
 from app.modules.testcases.testcase_format import testcase_to_api_values
 from app.modules.submissions.testcase_results import build_testcase_results, result_by_testcase
 from app.modules.submissions.schemas import (
@@ -33,9 +32,10 @@ def _submission_query(*entities):
 
 
 def _scope_to_viewer(statement, current_user: User):
-    """Chỉ ADMIN thấy hết; vai trò khác bị giới hạn trong các khoá do chính mình tạo."""
-    if current_user.role_id == Role.ADMIN:
-        return statement
+    """Chỉ thấy bài nộp trong các lớp do chính mình tạo (giảng viên chủ lớp).
+
+    Admin không quản lý bài nộp nên không có nhánh xem tất cả.
+    """
     return statement.where(Course.created_by == current_user.user_id)
 
 

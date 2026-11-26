@@ -54,8 +54,6 @@ def assert_can_copy_problems(
     ).all()
     if {row[0] for row in rows} != set(problem_ids):
         raise NotFoundError("Một hoặc nhiều bài tập không tồn tại")
-    if current_user.role_id == Role.ADMIN:
-        return
     for _pid, source_lesson_id, source_course_owner in rows:
         if source_lesson_id is None:
             continue
@@ -474,9 +472,10 @@ def _has_submissions(session: Session, problem_id: int) -> bool:
 
 
 def _get_admin_testcase_problem(session: Session, problem_id: int) -> Problem:
+    """Đề nguồn trong ngân hàng (Admin). Bản sao đã gắn vào buổi học do giảng viên chủ lớp quản lý."""
     problem = session.get(Problem, problem_id)
-    if problem is None:
-        raise NotFoundError("Không tìm thấy bài tập")
+    if problem is None or problem.lesson_id is not None:
+        raise NotFoundError("Không tìm thấy bài tập nguồn")
     if _has_submissions(session, problem_id):
         raise ConflictError("Bài đã có bài nộp, không thể thay đổi testcase")
     return problem

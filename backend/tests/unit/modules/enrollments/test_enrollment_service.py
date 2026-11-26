@@ -52,19 +52,21 @@ class TestAddStudentToCourse:
 
     # role admin không phải chủ khóa học
     # vẫn có thể thêm sinh viên và tăng total_number_student
-    def test_admin_who_does_not_own_course_can_add_student(
-        self, session, course, admin, student
-    ):
-        add_student_to_course(student.user_id, course.course_id, session, admin)
+    # Admin chỉ xem lớp học phần, không ghi danh sinh viên → 403
+    def test_admin_cannot_add_student(self, session, course, admin, student):
+        with pytest.raises(
+            ForbiddenError, match="Bạn không có quyền thêm sinh viên vào lớp này"
+        ):
+            add_student_to_course(student.user_id, course.course_id, session, admin)
 
-        assert counter_of(session, course) == 1
+        assert counter_of(session, course) == 0
 
-    # admin nhập MSSV (student_code) thay cho UUID vẫn thêm được sinh viên
-    def test_admin_can_add_student_by_student_code(
-        self, session, course, admin, student
+    # nhập MSSV (student_code) thay cho UUID vẫn thêm được sinh viên
+    def test_owner_teacher_can_add_student_by_student_code(
+        self, session, course, owner_teacher, student
     ):
         result = add_student_to_course(
-            student.student_code, course.course_id, session, admin
+            student.student_code, course.course_id, session, owner_teacher
         )
 
         assert result.student_id == str(student.user_id)

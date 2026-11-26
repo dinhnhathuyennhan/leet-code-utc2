@@ -39,9 +39,9 @@
 
 | | |
 |---|---|
-| **Description** | Admin hoặc Giáo viên đưa Problem vào một Lesson; bài bank hoặc bài ở Lesson khác được sao chép thành bản riêng cho Lesson đích |
+| **Description** | Giáo viên chủ Course đưa Problem vào một Lesson; bài bank hoặc bài ở Lesson khác được sao chép thành bản riêng cho Lesson đích. Admin không gắn bài vào Lesson |
 | **Trigger** | Người dùng chọn Problem và yêu cầu thêm vào Lesson |
-| **Pre-condition** | Đã đăng nhập; Course/Lesson đích tồn tại; người dùng có quyền quản lý Course |
+| **Pre-condition** | Đã đăng nhập; Course/Lesson đích tồn tại; người dùng là Giáo viên chủ Course |
 | **Post-condition** | Lesson có Problem riêng với `lesson_id` đích; nguồn bank vẫn giữ `lesson_id = null`; testcase được sao chép, Submission không được sao chép |
 | **Basic flow** | 1. Người dùng gửi danh sách `problem_ids`<br>2. Hệ thống kiểm tra quyền quản lý Course và sự tồn tại của Problem<br>3. Problem bank được mọi Teacher dùng chung; Problem thuộc Course khác chỉ được Teacher sao chép khi là chủ Course nguồn<br>4. Nếu Problem đã nằm trong Lesson đích, hệ thống giữ nguyên; nếu là bài bank hoặc thuộc Lesson khác, hệ thống tạo Problem mới cùng testcase, giữ nguyên `report`, tạo `problem_id` mới và dùng ngày Lesson đích cho `start_datetime`/`end_datetime`<br>5. Hệ thống cập nhật số lượng bài và trả Course |
 | **Exception flow** | **E1. Danh sách rỗng**: trả lỗi 422<br>**E2. Có ID không tồn tại**: trả lỗi 404<br>**E3. Teacher không có quyền sao chép nguồn**: trả lỗi 403 |
@@ -50,9 +50,9 @@
 
 | | |
 |---|---|
-| **Description** | Admin hoặc chủ Course chỉnh sửa hoặc xóa Problem đã gắn Lesson |
+| **Description** | Giáo viên chủ Course chỉnh sửa hoặc xóa Problem đã gắn Lesson. Admin chỉ xem |
 | **Trigger** | Người dùng mở chức năng sửa/xóa Problem |
-| **Pre-condition** | Đã đăng nhập; Problem thuộc Lesson trong Course; người dùng có quyền quản lý Course |
+| **Pre-condition** | Đã đăng nhập; Problem thuộc Lesson trong Course; người dùng là Giáo viên chủ Course |
 | **Post-condition** | Problem được cập nhật hoặc xóa cùng testcase nếu chưa có Submission |
 | **Basic flow** | 1. Người dùng gửi các field cần sửa hoặc yêu cầu xóa<br>2. Hệ thống kiểm tra quyền và quan hệ Problem/Lesson/Course<br>3. Nếu sửa testcase, hệ thống thay toàn bộ danh sách sau khi kiểm tra chưa có Submission<br>4. Nếu xóa, hệ thống xóa testcase và Problem sau khi kiểm tra chưa có Submission<br>5. Hệ thống trả dữ liệu mới hoặc 204 |
 | **Exception flow** | **E1. Đã có Submission**: sửa/xóa bị từ chối với 409<br>**E2. Problem không thuộc Lesson chỉ định**: trả lỗi 404<br>**E3. Không có quyền quản lý Course**: trả lỗi 403 |

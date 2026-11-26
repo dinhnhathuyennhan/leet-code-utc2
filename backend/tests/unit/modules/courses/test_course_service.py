@@ -193,12 +193,16 @@ class TestUpdateCourse:
         assert result.end_date == course.end_date
 
     # Admin cập nhật lớp của teacher khác — được phép
-    def test_admin_can_update_any_course(self, session, course, admin):
+    # Admin chỉ xem lớp học phần, không được sửa → 403
+    def test_admin_cannot_update_course(self, session, course, admin):
         update = UpdateCourseRequest(avt_link="https://cdn/avt.png")
 
-        result = update_course(course.course_id, update, session, admin)
+        with pytest.raises(
+            ForbiddenError, match="Bạn không có quyền thực hiện hành động này"
+        ):
+            update_course(course.course_id, update, session, admin)
 
-        assert result.avt_link == "https://cdn/avt.png"
+        assert course.avt_link != "https://cdn/avt.png"
 
     # Teacher không phải chủ lớp → 403
     def test_raises_forbidden_when_teacher_does_not_own_course(

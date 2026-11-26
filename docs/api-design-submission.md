@@ -3,9 +3,9 @@
 ## Quy ước
 
 - Submission hiện tham chiếu trực tiếp Problem, Student và testcase của Problem.
-- Các màn hình Admin/Teacher hiện truy vấn Submission qua Problem → Lesson → Course; vì vậy Problem bank (`lesson_id = null`) không thuộc phạm vi các danh sách/chi tiết Submission này. Khi thêm bài bank vào Lesson, hệ thống tạo Problem bản sao với `problem_id` riêng; Submission cũ không được sao chép.
-- Router này chỉ cung cấp chức năng quản lý bài nộp cho Admin/Teacher.
-- Teacher chỉ xem và xử lý bài thuộc Course mình tạo; Admin xem toàn bộ.
+- Các màn hình Teacher hiện truy vấn Submission qua Problem → Lesson → Course; vì vậy Problem bank (`lesson_id = null`) không thuộc phạm vi các danh sách/chi tiết Submission này. Khi thêm bài bank vào Lesson, hệ thống tạo Problem bản sao với `problem_id` riêng; Submission cũ không được sao chép.
+- Router này chỉ cung cấp chức năng quản lý bài nộp cho Teacher chủ Course (`require_role(Role.TEACHER)`): danh sách bài cần xử lý, chi tiết, ghi feedback/điểm tay, chấm lại.
+- Teacher chỉ xem và xử lý bài thuộc Course mình tạo. **Admin không quản lý bài nộp**: gọi các endpoint `/submissions/pending`, `/submissions/{submission_id}` (GET, PATCH) và `/submissions/{submission_id}/regrade` nhận 403.
 - Sinh viên nộp bài qua `POST /courses/{course_id}/lessons/{lesson_id}/problems/{problem_id}/submissions` (xem api-design-problem.md); bài được chấm bất đồng bộ qua Judge0.
 
 ## GET /submissions/pending — Danh sách bài cần xử lý
@@ -37,7 +37,7 @@ Mỗi bài có `judge_kind` gom status thành 4 nhóm: `accepted`, `pending`, `c
 
 **Response 200 OK**: `PendingSubmissionListResponse` gồm `items`, `total`, `counts`. `counts` được tính sau khi giới hạn theo quyền, các query `course`/`lesson_id`/`problem_id` và `search`, nhưng trước khi áp dụng `filter`. Các key: `all`, `graded`, `ungraded`, `pending`, `wrong_answer`, `compile_error`, `needs_grading`, `error`, `late_appeal`, `similarity` (hai key cuối hiện luôn bằng 0).
 
-**Response lỗi**: 403 người gọi không phải Admin/Teacher; 422 query sai kiểu hoặc limit ngoài giới hạn.
+**Response lỗi**: 403 người gọi không phải Teacher (kể cả Admin); 422 query sai kiểu hoặc limit ngoài giới hạn.
 
 ## GET /submissions/{submission_id} — Chi tiết bài nộp
 
@@ -53,7 +53,7 @@ Trường `testcase_results` (danh sách `{index, is_sample, status, time}`, the
 
 | Status | Khi nào |
 |---|---|
-| 403 | Người gọi không phải Admin/Teacher |
+| 403 | Người gọi không phải Teacher (kể cả Admin) |
 | 404 | Submission không tồn tại hoặc nằm ngoài phạm vi Teacher |
 
 ## PATCH /submissions/{submission_id} — Cập nhật bài nộp
@@ -75,7 +75,7 @@ Trường `testcase_results` (danh sách `{index, is_sample, status, time}`, the
 
 | Status | Khi nào |
 |---|---|
-| 403 | Người gọi không phải Admin/Teacher |
+| 403 | Người gọi không phải Teacher (kể cả Admin) |
 | 404 | Submission không tồn tại hoặc ngoài phạm vi Teacher |
 | 422 | Body có `status` (`{"error_code": "INVALID_FORMAT", "message": "Không thể sửa trạng thái bài nộp: trạng thái do máy chấm quyết định"}`), hoặc `feedback`/`manual_score` sai định dạng, giới hạn |
 
@@ -88,9 +88,9 @@ Chỉ chủ bài nộp (role Student). Bài của người khác trả 404 (khô
 
 ## POST /submissions/{submission_id}/regrade — Chấm lại bài lỗi hệ thống
 
-Admin/Teacher (trong phạm vi lớp của mình). Chỉ nhận bài có `status = internal_error`; reset `passed_count`, `compile_output`, token Judge0, `testcase_results` và lease chấm (`grading_claimed_at`), rồi đưa vào hàng đợi chấm.
+Teacher (trong phạm vi lớp của mình). Chỉ nhận bài có `status = internal_error`; reset `passed_count`, `compile_output`, token Judge0, `testcase_results` và lease chấm (`grading_claimed_at`), rồi đưa vào hàng đợi chấm.
 
-**Response 202 Accepted**: `{"submission_id": int, "status": "pending"}`. **409** nếu bài không ở trạng thái `internal_error`; **403** với Student.
+**Response 202 Accepted**: `{"submission_id": int, "status": "pending"}`. **409** nếu bài không ở trạng thái `internal_error`; **403** với Student và Admin.
 
 ## Chấm theo lô và dừng sớm
 

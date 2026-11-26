@@ -282,7 +282,8 @@ def export_testcases(
     export_format: str,
     current_user: User,
 ) -> bytes:
-    problem = _get_manageable_problem(session, course_id, lesson_id, problem_id, current_user)
+    # Chỉ đọc: Admin vẫn tải được testcase của bài trong buổi học để xem
+    problem = _get_viewable_problem(session, course_id, lesson_id, problem_id, current_user)
     if export_format not in EXPORT_FORMATS:
         raise InvalidExportFormatError("format phải là 'json' hoặc 'zip'")
 

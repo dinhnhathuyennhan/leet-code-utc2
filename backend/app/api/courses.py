@@ -40,7 +40,7 @@ logger = logging.getLogger(__name__)
 def create_course_route(
     data: CreateCourseRequest,
     session: Session = Depends(get_session),
-    current_user: User = Depends(require_role(Role.ADMIN, Role.TEACHER)),
+    current_user: User = Depends(require_role(Role.TEACHER)),
 ) -> CourseResponse:
     return _create_course(
         data=data,
@@ -107,7 +107,7 @@ def update_course_route(
     course_id: str,
     data: UpdateCourseRequest,
     session: Session = Depends(get_session),
-    current_user: User = Depends(require_role(Role.ADMIN, Role.TEACHER)),
+    current_user: User = Depends(require_role(Role.TEACHER)),
 ) -> CourseResponse:
     return _update_course(
         course_id=course_id,

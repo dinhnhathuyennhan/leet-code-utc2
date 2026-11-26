@@ -19,7 +19,7 @@ router = APIRouter(tags=["lesson"])
 def create_lesson_route(
     course_id: str, data: LessonCreateRequest,
     session: Session = Depends(get_session),
-    current_user: User = Depends(require_role(Role.ADMIN, Role.TEACHER)),
+    current_user: User = Depends(require_role(Role.TEACHER)),
 ) -> CourseResponse:
     return lesson_service.create_lesson(session, course_id, data, current_user)
 
@@ -29,7 +29,7 @@ def reorder_lessons_route(
     course_id: str,
     data: LessonReorderRequest,
     session: Session = Depends(get_session),
-    current_user: User = Depends(require_role(Role.ADMIN, Role.TEACHER)),
+    current_user: User = Depends(require_role(Role.TEACHER)),
 ) -> CourseResponse:
     return lesson_service.reorder_lessons(session, course_id, data, current_user)
 
@@ -44,7 +44,7 @@ def duplicate_lesson_route(
     lesson_id: int,
     data: LessonDuplicateRequest,
     session: Session = Depends(get_session),
-    current_user: User = Depends(require_role(Role.ADMIN, Role.TEACHER)),
+    current_user: User = Depends(require_role(Role.TEACHER)),
 ) -> CourseResponse:
     return lesson_service.duplicate_lesson(
         session, course_id, lesson_id, data, current_user
@@ -81,7 +81,7 @@ def get_lesson_detail_route(
 def update_lesson_route(
     course_id: str, lesson_id: int, data: LessonUpdateRequest,
     session: Session = Depends(get_session),
-    current_user: User = Depends(require_role(Role.ADMIN, Role.TEACHER)),
+    current_user: User = Depends(require_role(Role.TEACHER)),
 ) -> CourseResponse:
     return lesson_service.update_lesson(session, course_id, lesson_id, data, current_user)
 
@@ -95,7 +95,7 @@ def add_problems_to_lesson_route(
     lesson_id: int,
     data: LessonProblemAttachRequest,
     session: Session = Depends(get_session),
-    current_user: User = Depends(require_role(Role.ADMIN, Role.TEACHER)),
+    current_user: User = Depends(require_role(Role.TEACHER)),
 ) -> CourseResponse:
     return lesson_service.add_problems_to_lesson(
         session, course_id, lesson_id, data.problem_ids, current_user
@@ -106,6 +106,6 @@ def add_problems_to_lesson_route(
 def delete_lesson_route(
     course_id: str, lesson_id: int,
     session: Session = Depends(get_session),
-    current_user: User = Depends(require_role(Role.ADMIN, Role.TEACHER)),
+    current_user: User = Depends(require_role(Role.TEACHER)),
 ):
     lesson_service.delete_lesson(session, course_id, lesson_id, current_user)

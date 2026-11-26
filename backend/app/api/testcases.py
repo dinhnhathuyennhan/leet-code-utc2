@@ -30,7 +30,7 @@ def list_testcases_route(
 def add_testcase_route(
     course_id: str, lesson_id: int, problem_id: int, data: ProblemTestcaseUpdate,
     session: Session = Depends(get_session),
-    current_user: User = Depends(require_role(Role.ADMIN, Role.TEACHER)),
+    current_user: User = Depends(require_role(Role.TEACHER)),
 ) -> ProblemDetailResponse:
     return testcase_service.add_testcase(
         session, course_id, lesson_id, problem_id, data, current_user
@@ -69,7 +69,7 @@ def preview_testcases_route(
 def batch_update_sample_route(
     course_id: str, lesson_id: int, problem_id: int, data: TestcaseBatchRequest,
     session: Session = Depends(get_session),
-    current_user: User = Depends(require_role(Role.ADMIN, Role.TEACHER)),
+    current_user: User = Depends(require_role(Role.TEACHER)),
 ) -> ProblemDetailResponse:
     return testcase_service.batch_update_sample(
         session, course_id, lesson_id, problem_id, data, current_user
@@ -81,7 +81,7 @@ def update_testcase_route(
     course_id: str, lesson_id: int, problem_id: int, testcase_id: int,
     data: TestcaseUpdateRequest,
     session: Session = Depends(get_session),
-    current_user: User = Depends(require_role(Role.ADMIN, Role.TEACHER)),
+    current_user: User = Depends(require_role(Role.TEACHER)),
 ) -> ProblemDetailResponse:
     return testcase_service.update_testcase(
         session, course_id, lesson_id, problem_id, testcase_id, data, current_user
@@ -92,7 +92,7 @@ def update_testcase_route(
 def delete_testcase_route(
     course_id: str, lesson_id: int, problem_id: int, testcase_id: int,
     session: Session = Depends(get_session),
-    current_user: User = Depends(require_role(Role.ADMIN, Role.TEACHER)),
+    current_user: User = Depends(require_role(Role.TEACHER)),
 ):
     testcase_service.delete_testcase(
         session, course_id, lesson_id, problem_id, testcase_id, current_user

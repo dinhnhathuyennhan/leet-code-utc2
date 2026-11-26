@@ -67,7 +67,7 @@ export function buildBreadcrumbs(
   if (segments[0] === "admin") {
     const labels: Record<string, string> = {
       dashboard: "Tổng quan", courses: "Lớp học phần", classes: "Lớp hành chính",
-      accounts: "Quản lý tài khoản", submissions: "Bài nộp", settings: "Cấu hình",
+      accounts: "Quản lý tài khoản", settings: "Cấu hình",
       "problem-bank": "Ngân hàng đề", import: "Nhập từ Excel",
     };
     if (segments[1] === "courses" && segments[2]) {

@@ -34,10 +34,14 @@ def get_viewable_course(session: Session, course_id: str, current_user: User) ->
 def get_manageable_course(
     course_id: str, session: Session, current_user: User, forbidden_message: str
 ) -> Course:
+    """Lớp mà người gọi được ghi (lớp, buổi học, bài tập trong buổi, ghi danh...).
+
+    Chỉ giảng viên chủ lớp (`created_by`). Admin chỉ xem lớp học phần, không vận hành lớp.
+    """
     course = session.get(Course, course_id)
     if not course:
         raise NotFoundError("Không tìm thấy lớp học")
-    if current_user.role_id != Role.ADMIN and course.created_by != current_user.user_id:
+    if current_user.role_id != Role.TEACHER or course.created_by != current_user.user_id:
         raise ForbiddenError(forbidden_message)
     return course
 

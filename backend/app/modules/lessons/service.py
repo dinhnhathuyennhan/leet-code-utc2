@@ -121,7 +121,7 @@ def duplicate_lesson(
     target_course = session.get(Course, target_course_id)
     if target_course is None:
         raise NotFoundError("Không tìm thấy lớp học đích")
-    if current_user.role_id != Role.ADMIN and target_course.created_by != current_user.user_id:
+    if current_user.role_id != Role.TEACHER or target_course.created_by != current_user.user_id:
         raise ForbiddenError("Bạn không có quyền tạo buổi học trong lớp đích")
     last_order = session.exec(
         select(Lesson.lesson_number)

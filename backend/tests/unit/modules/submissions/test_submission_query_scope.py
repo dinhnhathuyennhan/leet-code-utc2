@@ -96,7 +96,8 @@ class TestVisibilityScope:
         assert detail.submitted_code == pending_error_submission.submitted_code
         assert detail.course_code == "CS101"
 
-    def test_admin_sees_every_submission(
+    # Admin không quản lý bài nộp: không thấy bài nộp của lớp nào
+    def test_admin_sees_no_submission(
         self,
         session: Session,
         admin: User,
@@ -104,10 +105,9 @@ class TestVisibilityScope:
         foreign_submission: Submission,
     ):
         for submission in (pending_error_submission, foreign_submission):
-            assert get_submission_detail(session, submission.submission_id, admin).id == (
-                submission.submission_id
-            )
-        assert list_pending_submissions(session, admin).total == 2
+            with pytest.raises(NotFoundError):
+                get_submission_detail(session, submission.submission_id, admin)
+        assert list_pending_submissions(session, admin).total == 0
 
     def test_update_missing_submission_is_not_found(
         self, session: Session, submission_teacher: User
@@ -359,7 +359,7 @@ class TestQueryShape:
         assert "submission.submission_id = ?" in queries.statements[0]
         assert "course.created_by = ?" in queries.statements[0]
 
-    def test_admin_detail_query_is_not_scoped_by_course_owner(
+    def test_admin_detail_query_is_scoped_by_course_owner(
         self,
         engine,
         session: Session,
@@ -370,7 +370,7 @@ class TestQueryShape:
         submission_id = pending_error_submission.submission_id
         session.refresh(admin)
 
-        with count_queries(engine) as queries:
+        with count_queries(engine) as queries, pytest.raises(NotFoundError):
             get_submission_detail(session, submission_id, admin)
 
-        assert "course.created_by = ?" not in queries.statements[0]
+        assert "course.created_by = ?" in queries.statements[0]

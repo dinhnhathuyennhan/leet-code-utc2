@@ -81,19 +81,23 @@ export function CourseHeaderCard({ course, onCreateSession, onEditCourse, onDele
       </div>
 
       <div className="flex w-full flex-col gap-3 sm:w-auto sm:shrink-0">
-        <Button
-          onClick={onCreateSession}
-          className="h-11 bg-[#2f226b] px-6 text-[15px] font-semibold text-white shadow-sm hover:bg-[#251b56]"
-        >
-          <Plus className="size-5" /> Tạo buổi học
-        </Button>
-        <Button
-          onClick={onEditCourse}
-          variant="outline"
-          className="h-11 border-[#2f226b] px-6 text-[15px] font-semibold text-[#2f226b] hover:bg-indigo-50 dark:border-indigo-400 dark:text-indigo-300 dark:hover:bg-slate-800"
-        >
-          <Pencil className="size-4" /> Chỉnh sửa lớp
-        </Button>
+        {onCreateSession && (
+          <Button
+            onClick={onCreateSession}
+            className="h-11 bg-[#2f226b] px-6 text-[15px] font-semibold text-white shadow-sm hover:bg-[#251b56]"
+          >
+            <Plus className="size-5" /> Tạo buổi học
+          </Button>
+        )}
+        {onEditCourse && (
+          <Button
+            onClick={onEditCourse}
+            variant="outline"
+            className="h-11 border-[#2f226b] px-6 text-[15px] font-semibold text-[#2f226b] hover:bg-indigo-50 dark:border-indigo-400 dark:text-indigo-300 dark:hover:bg-slate-800"
+          >
+            <Pencil className="size-4" /> Chỉnh sửa lớp
+          </Button>
+        )}
         {onDeleteCourse && (
           <Button
             onClick={() => setConfirmOpen(true)}

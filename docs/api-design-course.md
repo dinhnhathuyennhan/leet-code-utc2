@@ -1,5 +1,11 @@
 # Thiết kế API — Quản lý lớp học (Course)
 
+## Phân quyền tổng quát
+
+- **Admin không vận hành lớp học.** Admin chỉ **xem** lớp học phần do giảng viên quản lý: danh sách và chi tiết lớp, buổi học, bài tập và testcase trong buổi, danh sách sinh viên, bảng điểm (kể cả xuất Excel). Admin không tạo/sửa lớp, không can thiệp buổi học, bài tập trong buổi, testcase, ghi danh và bài nộp; gọi các API ghi đó nhận **403**.
+- Các thao tác ghi trên do **Teacher chủ lớp** (`course.created_by`) thực hiện.
+- Admin vẫn được **xoá lớp**, kể cả xoá cưỡng bức (`force=true`), xem mục DELETE bên dưới.
+
 ## Quy ước thời gian
 
 Áp dụng cho các field `datetime` của Course, Problem và Submission.
@@ -49,14 +55,14 @@ Problem bank có `lesson_id = null` nên chưa thuộc Course; bản nguồn kh�
 | 422 | Thiếu field, field bắt buộc = `null`, sai kiểu dữ liệu, vượt quá độ dài tối đa, hoặc `course_id` / `course_name` / `term` là chuỗi rỗng `""` (use-case bước 5a) | `{"error_code": "VALIDATION_ERROR", "message": "..."}` (message của pydantic, tiếng Anh) |
 | 422 | `course_id` / `course_name` / `term` chỉ chứa khoảng trắng, vd `"   "` (use-case bước 5a) | `{"error_code": "EMPTY_FIELD", "message": "<field> không được để trống"}` |
 | 422 | `start_date` không trước `end_date` (use-case bước 5a) | `{"error_code": "INVALID_FORMAT", "message": "start_date phải trước end_date"}` |
-| 403 | Người gọi không phải Admin/Teacher | `{"error_code": "FORBIDDEN", "message": "Bạn không có quyền thực hiện hành động này"}` |
+| 403 | Người gọi không phải Teacher (Admin chỉ xem lớp học phần) | `{"error_code": "FORBIDDEN", "message": "Bạn không có quyền thực hiện hành động này"}` |
 | 409 | `course_id` đã tồn tại (use-case bước 6a) | `{"error_code": "CONFLICT", "message": "Mã lớp học đã tồn tại"}` |
 
 **Quy tắc nghiệp vụ**
 
 - `created_by` luôn set = `user_id` của người đang đăng nhập, không nhận từ client.
 - `total_number_student` luôn khởi tạo = 0, không nhận từ client. Ở các response chi tiết/danh sách lớp học (có buổi học), giá trị này là số dòng `enrollment` thật của lớp tại thời điểm gọi, không đọc cột cache.
-- **Yêu cầu quyền**: Admin hoặc Teacher (`require_role(Role.ADMIN, Role.TEACHER)`).
+- **Yêu cầu quyền**: chỉ Teacher (`require_role(Role.TEACHER)`). Admin chỉ xem lớp học phần, không tạo lớp (403).
 
 ## GET /courses — Danh sách lớp học
 
@@ -111,7 +117,7 @@ Field gửi lên với giá trị `null` sẽ bị **bỏ qua** (giữ nguyên g
 | Status | Khi nào | Body |
 |---|---|---|
 | 404 | `course_id` không tồn tại | `{"error_code": "NOT_FOUND", "message": "Không tìm thấy lớp học"}` |
-| 403 | Người gọi không phải Admin/Teacher, hoặc Teacher không phải chủ lớp | `{"error_code": "FORBIDDEN", "message": "Bạn không có quyền thực hiện hành động này"}` |
+| 403 | Người gọi không phải Teacher (kể cả Admin), hoặc Teacher không phải chủ lớp | `{"error_code": "FORBIDDEN", "message": "Bạn không có quyền thực hiện hành động này"}` |
 | 422 | Sai kiểu dữ liệu, vượt quá độ dài tối đa | `{"error_code": "VALIDATION_ERROR", "message": "..."}` |
 | 422 | `course_name` / `term` được truyền nhưng rỗng hoặc chỉ chứa khoảng trắng | `{"error_code": "EMPTY_FIELD", "message": "<field> không được để trống"}` |
 | 422 | `start_date` không trước `end_date` (nếu chỉ gửi một trong hai, so với giá trị đang lưu trong DB) | `{"error_code": "INVALID_FORMAT", "message": "start_date phải trước end_date"}` |
@@ -119,11 +125,11 @@ Field gửi lên với giá trị `null` sẽ bị **bỏ qua** (giữ nguyên g
 **Quy tắc nghiệp vụ**
 
 - Không cho sửa `course_id`, `created_by`, `total_number_student` qua endpoint này (field lạ trong body bị bỏ qua).
-- **Yêu cầu quyền**: Admin, hoặc Teacher chủ lớp (`created_by == current_user.user_id`).
+- **Yêu cầu quyền**: chỉ Teacher chủ lớp (`require_role(Role.TEACHER)` + `created_by == current_user.user_id`). Admin chỉ xem, không sửa lớp (403).
 
 ## DELETE /courses/{course_id} — Xoá lớp học
 
-**Quyền**: Admin (mọi lớp) hoặc Teacher là chủ lớp (`created_by`). Riêng `force=true` chỉ Admin.
+**Quyền**: Admin (mọi lớp) hoặc Teacher là chủ lớp (`created_by`). Riêng `force=true` chỉ Admin. Đây là thao tác ghi duy nhất trên lớp học phần mà Admin còn giữ.
 
 Xoá lớp cùng toàn bộ buổi học, bài tập (bản sao trong lớp), testcase của các bài đó và danh sách ghi danh. Đề nguồn trong ngân hàng (`lesson_id = null`) và tài khoản Sinh viên không bị ảnh hưởng.
 
@@ -189,6 +195,7 @@ Truyền **đúng một** trong `student_id` / `student_code`. Chuỗi rỗng ho
 | 422 | `student_code` không đúng 10 chữ số ASCII | `{"error_code": "INVALID_FORMAT", "message": "Mã sinh viên phải gồm đúng 10 chữ số"}` (hoặc "...chỉ được gồm chữ số (0-9)") |
 | 404 | `course_id` không tồn tại | `{"error_code": "NOT_FOUND", "message": "Không tìm thấy lớp học"}` |
 | 404 | `student_id` / `student_code` không khớp Sinh viên nào, hoặc thuộc tài khoản không phải Sinh viên (use-case bước 4a) | `{"error_code": "NOT_FOUND", "message": "Không tìm thấy sinh viên"}` |
+| 403 | Người gọi không phải Teacher (Admin chỉ xem lớp học phần) | `{"error_code": "FORBIDDEN", "message": "Bạn không có quyền thực hiện hành động này"}` |
 | 403 | Teacher không phải chủ lớp (use-case bước 3a) | `{"error_code": "FORBIDDEN", "message": "Bạn không có quyền thêm sinh viên vào lớp này"}` |
 | 409 | Sinh viên đã có trong lớp học (use-case bước 5a), kể cả khi 2 request thêm cùng một Sinh viên chạy cùng lúc (E2) | `{"error_code": "CONFLICT", "message": "Sinh viên đã có trong lớp học"}` |
 
@@ -196,7 +203,7 @@ Truyền **đúng một** trong `student_id` / `student_code`. Chuỗi rỗng ho
 
 - Sau khi thêm thành công, `total_number_student` được đếm lại từ bảng `enrollment` (không cộng dồn), nên giá trị cũ bị lệch cũng tự đúng lại.
 - DB có ràng buộc unique `uq_enrollment_course_student` trên (`course_id`, `student_id`). Nếu 2 request cùng qua bước kiểm tra trùng, request đến sau bị ràng buộc chặn, rollback (sĩ số không tăng) và nhận 409 như trên, không phải 500.
-- **Yêu cầu quyền**: Admin, hoặc Teacher chủ lớp.
+- **Yêu cầu quyền**: chỉ Teacher chủ lớp (`require_role(Role.TEACHER)`). Admin chỉ xem danh sách sinh viên, không ghi danh (403).
 
 ## POST /courses/{course_id}/enrollments/class — Thêm cả lớp hành chính vào lớp học
 
@@ -237,7 +244,7 @@ Ví dụ:
 | Status | Khi nào | Body |
 |---|---|---|
 | 422 | Thiếu `class_id`, rỗng `""` hoặc dài quá 50 ký tự | `{"error_code": "VALIDATION_ERROR", "message": "..."}` (message của pydantic, tiếng Anh) |
-| 403 | Người gọi không phải Admin/Teacher | `{"error_code": "FORBIDDEN", "message": "Bạn không có quyền thực hiện hành động này"}` |
+| 403 | Người gọi không phải Teacher (Admin chỉ xem lớp học phần) | `{"error_code": "FORBIDDEN", "message": "Bạn không có quyền thực hiện hành động này"}` |
 | 404 | `course_id` không tồn tại | `{"error_code": "NOT_FOUND", "message": "Không tìm thấy lớp học"}` |
 | 403 | Teacher không phải chủ lớp (use-case "Thêm lớp hành chính vào lớp học" bước 4a) | `{"error_code": "FORBIDDEN", "message": "Bạn không có quyền thêm sinh viên vào lớp này"}` |
 | 404 | `class_id` không tồn tại (bước 5a) | `{"error_code": "NOT_FOUND", "message": "Không tìm thấy lớp hành chính"}` |
@@ -248,7 +255,7 @@ Ví dụ:
 - Chỉ lấy tài khoản có `class_id` bằng lớp hành chính và `role_id = 3` (Sinh viên). Sinh viên đã có trong lớp học được bỏ qua, không báo lỗi.
 - Cả lô được lưu trong **một transaction**: `total_number_student` được đếm lại từ bảng `enrollment`. Nếu ràng buộc unique (`course_id`, `student_id`) chặn một dòng bất kỳ (request đồng thời), **cả lô bị huỷ**, không Sinh viên nào được thêm, sĩ số không lệch; gọi lại thì những Sinh viên đã có sẽ được tính vào `skipped_count`.
 - Lớp hành chính không có Sinh viên nào: trả 201 với `added_count = 0`.
-- **Yêu cầu quyền**: Admin, hoặc Teacher chủ lớp.
+- **Yêu cầu quyền**: chỉ Teacher chủ lớp (`require_role(Role.TEACHER)`). Admin chỉ xem danh sách sinh viên, không ghi danh (403).
 
 ## GET /courses/{course_id}/enrollments — Danh sách sinh viên trong lớp
 
@@ -299,12 +306,13 @@ Ví dụ một phần tử (Admin/Teacher gọi):
 |---|---|---|
 | 404 | `course_id` không tồn tại | `{"error_code": "NOT_FOUND", "message": "Không tìm thấy lớp học"}` |
 | 404 | `student_id` không có `Enrollment` trong lớp này (use-case bước 5a) | `{"error_code": "NOT_FOUND", "message": "Sinh viên không thuộc lớp học này"}` |
+| 403 | Người gọi không phải Teacher (Admin chỉ xem lớp học phần) | `{"error_code": "FORBIDDEN", "message": "Bạn không có quyền thực hiện hành động này"}` |
 | 403 | Teacher không phải chủ lớp (use-case bước 4a) | `{"error_code": "FORBIDDEN", "message": "Bạn không có quyền thực hiện hành động này"}` |
 
 **Quy tắc nghiệp vụ**
 
 - Sau khi xoá thành công, `total_number_student` được đếm lại từ bảng `enrollment`.
-- **Yêu cầu quyền**: Admin, hoặc Teacher chủ lớp.
+- **Yêu cầu quyền**: chỉ Teacher chủ lớp (`require_role(Role.TEACHER)`). Admin chỉ xem danh sách sinh viên, không ghi danh (403).
 
 ## GET /students/{student_id}/dashboard — Tổng quan học tập của sinh viên
 
@@ -346,5 +354,5 @@ MSSV được xuất dạng text để giữ số 0 ở đầu. Các chuỗi b�
 `-`, hoặc `@` được escape trước khi ghi vào workbook để tránh Excel formula
 injection.
 
-**Yêu cầu quyền**: Admin hoặc Teacher là chủ lớp. Endpoint chỉ đọc dữ liệu và
+**Yêu cầu quyền**: Admin (xem mọi lớp) hoặc Teacher là chủ lớp. Endpoint chỉ đọc dữ liệu và
 không tạo hoặc thay đổi bảng/cột database.

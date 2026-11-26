@@ -67,7 +67,6 @@ class TestStudentSubmissionDetail:
 
 
 class TestUpdateSubmission:
-    @pytest.mark.parametrize("role", [Role.ADMIN, Role.TEACHER])
     @pytest.mark.parametrize(
         ("score_fields", "expected"),
         [({}, 7.5), ({"manual_score": None}, None),
@@ -77,14 +76,13 @@ class TestUpdateSubmission:
     )
     def test_manual_score_patch_persists_explicit_values_only(
         self, session: Session, submission_teacher: User,
-        pending_error_submission, role, score_fields, expected,
+        pending_error_submission, score_fields, expected,
     ):
         submission = pending_error_submission
         submission.manual_score = 7.5
         session.add(submission)
         session.commit()
-        actor = (make_user(session, "ADMIN_TEST", Role.ADMIN)
-                 if role == Role.ADMIN else submission_teacher)
+        actor = submission_teacher
 
         result = update_submission(
             session, submission.submission_id,

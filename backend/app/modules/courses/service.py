@@ -52,10 +52,11 @@ def _excel_text(value: object) -> object:
 
 
 def export_course_grades(session: Session, course_id: str, current_user: User) -> bytes:
-    """Build the teacher/admin grade view as a real XLSX without schema changes."""
-    get_manageable_course(
-        course_id, session, current_user, "Bạn không có quyền xuất bảng điểm này"
-    )
+    """Build the teacher/admin grade view as a real XLSX without schema changes.
+
+    Chỉ đọc: Admin xem được mọi lớp, Teacher chỉ lớp của mình (route chặn Student).
+    """
+    get_viewable_course(session, course_id, current_user)
     lessons = session.exec(
         select(Lesson).where(Lesson.course_id == course_id).order_by(Lesson.lesson_number)
     ).all()
@@ -166,7 +167,7 @@ def update_course(
     - Chỉ field nào client gửi (và không null) mới được cập nhật.
     - Nếu thay đổi ngày, phải bảo đảm `start_date < end_date` khi đối chiếu
       với giá trị đang lưu trong DB (kể cả khi client chỉ gửi một trong hai).
-    - Quyền: Admin mọi lớp, hoặc Teacher là chủ lớp (`created_by`).
+    - Quyền: chỉ Teacher là chủ lớp (`created_by`). Admin chỉ xem, không sửa lớp.
     """
     course = get_manageable_course(
         course_id,
@@ -236,9 +237,15 @@ def delete_course(
     """
     if force and current_user.role_id != Role.ADMIN:
         raise ForbiddenError("Chỉ Admin mới được xoá lớp học đã có bài nộp")
-    course = get_manageable_course(
-        course_id, session, current_user, "Bạn không có quyền xoá lớp học này"
-    )
+    if current_user.role_id == Role.ADMIN:
+        # Admin không sửa lớp nhưng vẫn được xoá (kể cả xoá cưỡng bức) mọi lớp
+        course = session.get(Course, course_id)
+        if course is None:
+            raise NotFoundError("Không tìm thấy lớp học")
+    else:
+        course = get_manageable_course(
+            course_id, session, current_user, "Bạn không có quyền xoá lớp học này"
+        )
     lesson_ids = list(session.exec(select(Lesson.lesson_id).where(Lesson.course_id == course_id)).all())
     problem_ids = (
         list(session.exec(select(Problem.problem_id).where(Problem.lesson_id.in_(lesson_ids))).all())

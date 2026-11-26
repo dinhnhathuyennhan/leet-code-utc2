@@ -105,12 +105,6 @@ export const ADMIN_NAV: NavItem[] = [
     href: "/admin/accounts",
     icon: Users,
   },
-  {
-    label: "Bài nộp",
-    labelKey: "nav.submissions",
-    href: "/admin/submissions",
-    icon: FileCheck2,
-  },
   { label: "Ngân hàng đề", href: "/admin/problem-bank", icon: BookOpenCheck },
   {
     label: "Cấu hình",

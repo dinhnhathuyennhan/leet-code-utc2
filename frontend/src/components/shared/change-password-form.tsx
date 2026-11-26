@@ -17,6 +17,7 @@ import { useAuth } from "@/context/auth-context";
 import { ApiError } from "@/lib/api/error";
 import {
   changePasswordSchema,
+  containsPersonalInfo,
   type ChangePasswordFormValues,
 } from "@/lib/validations/validate-field-form";
 import { toast } from "sonner";
@@ -51,16 +52,15 @@ function FormMessage({ name }: { name: keyof ChangePasswordFormValues }) {
 interface PasswordChecklistProps {
   newPassword: string;
   currentPassword: string;
-  /** Email tài khoản; phần trước @ của Sinh viên chính là MSSV. */
+  /** Email tài khoản. */
   email?: string;
+  /** MSSV (chỉ Sinh viên có); không phải lúc nào cũng trùng phần trước @ của email. */
+  studentCode?: string | null;
 }
 
-function PasswordChecklist({ newPassword, currentPassword, email }: PasswordChecklistProps) {
-  // Khớp backend: không chứa phần trước @ của email (>= 4 ký tự), không phân biệt hoa thường
-  const emailLocal = (email ?? "").split("@")[0].toLowerCase();
+function PasswordChecklist({ newPassword, currentPassword, email, studentCode }: PasswordChecklistProps) {
   const isNotPersonal =
-    newPassword.length > 0 &&
-    (emailLocal.length < 4 || !newPassword.toLowerCase().includes(emailLocal));
+    newPassword.length > 0 && !containsPersonalInfo(newPassword, email, studentCode);
   const isDifferentFromCurrent = newPassword.length > 0 && newPassword !== currentPassword;
   const isMinLength = newPassword.length >= 8;
   const hasComplexChars =
@@ -278,7 +278,12 @@ export function ChangePasswordForm({ onSuccess }: ChangePasswordFormProps) {
                   />
 
                   {/* Password Checklist */}
-                  <PasswordChecklist newPassword={newPassword} currentPassword={currentPassword} email={user?.email} />
+                  <PasswordChecklist
+                    newPassword={newPassword}
+                    currentPassword={currentPassword}
+                    email={user?.email}
+                    studentCode={user?.student_code}
+                  />
                 </div>
 
                 {/* Xác nhận mật khẩu mới */}

@@ -41,6 +41,11 @@ class LoginRateLimitedError(AppError):
     error_code = "LOGIN_RATE_LIMITED"
 
 
+class LoginUnavailableError(AppError):
+    status_code = 503
+    error_code = "LOGIN_UNAVAILABLE"
+
+
 @dataclass(frozen=True)
 class LoginSlot:
     """Một lượt thử đã được giữ chỗ (đã tính vào bộ đếm).
@@ -129,7 +134,7 @@ def _lock_row(session: Session, key: str, now: datetime) -> LoginAttempt:
             return attempt
         # Dòng bị xoá giữa INSERT và SELECT: thử lại
     # Không âm thầm bỏ qua lượt thử: dừng luôn, không kiểm tra mật khẩu
-    raise RuntimeError(f"Không khoá được dòng login_attempt sau {_LOCK_RETRIES} lần thử")
+    raise LoginUnavailableError("Hệ thống đang bận, vui lòng đăng nhập lại sau ít phút")
 
 
 def _purge_expired(session: Session, now: datetime) -> None:

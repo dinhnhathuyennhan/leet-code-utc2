@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { changePasswordSchema } from "./validate-field-form";
+import { changePasswordSchema, containsPersonalInfo } from "./validate-field-form";
 
 function parse(newPassword: string) {
   return changePasswordSchema.safeParse({
@@ -25,5 +25,20 @@ describe("changePasswordSchema", () => {
     const result = parse(pw);
     expect(result.success).toBe(false);
     expect(result.error?.issues.map((i) => i.message)).toContain(message);
+  });
+});
+
+describe("containsPersonalInfo", () => {
+  it("phát hiện MSSV kể cả khi email không trùng MSSV", () => {
+    expect(containsPersonalInfo("Mk@6451071234", "nguyenvana@st.utc2.edu.vn", "6451071234")).toBe(true);
+  });
+
+  it("phát hiện phần trước @ của email, không phân biệt hoa thường", () => {
+    expect(containsPersonalInfo("Xx-NguyenVanA-1", "nguyenvana@st.utc2.edu.vn", null)).toBe(true);
+  });
+
+  it("bỏ qua chuỗi ngắn hơn 4 ký tự và mật khẩu không chứa thông tin cá nhân", () => {
+    expect(containsPersonalInfo("Abc@12345", "abc@st.utc2.edu.vn", "")).toBe(false);
+    expect(containsPersonalInfo("Mk@2026-utc", "nguyenvana@st.utc2.edu.vn", "6451071234")).toBe(false);
   });
 });

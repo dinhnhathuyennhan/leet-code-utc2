@@ -242,6 +242,7 @@ Hàng 13  : 2   | 675107A002   | Trần Thị         | Bình | CQ.67.CNTT |
   - **Teacher/Admin**: email của tài khoản.
   - Vai trò khác: bị chặn (403), không thay đổi gì. Danh sách vai trò được phép là whitelist.
 - Đặt `must_change_password = true`, tăng `token_version` (vô hiệu hoá toàn bộ token cũ của tài khoản mục tiêu).
+- Xoá bộ đếm đăng nhập sai của email đó (bảng `login_attempt`, xem `POST /auth/login`), để người dùng đăng nhập được ngay bằng mật khẩu tạm thay vì vẫn nhận 429 `LOGIN_RATE_LIMITED`.
 - **Yêu cầu quyền**: Admin (mọi tài khoản Admin/Teacher/Student) hoặc Teacher — nhưng Teacher chỉ được reset cho Student đang học **ít nhất một khoá học do chính Teacher đó tạo** (`Course.created_by = current_user.user_id`, kiểu UUID), không phải cứ `role_id = 3` là được; Student và mọi vai trò khác không được reset cho bất kỳ ai. Quyền là whitelist theo vai trò người gọi, vai trò lạ không bị xử lý nhầm như Admin. Endpoint không dùng `require_role` ở router — toàn bộ logic phân quyền nằm trong service (`backend/app/modules/users/service.py::reset_password`).
 
 ## PATCH /users/{user_id} — Sửa thông tin tài khoản
@@ -362,6 +363,7 @@ Các lỗi 422 về định dạng (`EMPTY_FIELD`, `INVALID_FORMAT`) được ki
 **Quy tắc nghiệp vụ**
 
 - Mở khoá: đặt `is_active = true`, `locked_by = NULL`. **Không** đổi `token_version`, nên token phát hành trước khi khoá vẫn không dùng được (access token cũ → 401 `UNAUTHORIZED` `"Phiên đăng nhập đã hết hạn"`, refresh token cũ → 401 `SESSION_REVOKED`). Người dùng phải đăng nhập lại.
+- Mở khoá thành công thì xoá bộ đếm đăng nhập sai của email đó (bảng `login_attempt`). Lúc bị khoá, mỗi lần nhập đúng mật khẩu vẫn tính là một lượt sai, nên nếu không xoá thì người dùng vừa được mở khoá vẫn nhận 429 `LOGIN_RATE_LIMITED`.
 - Idempotent: tài khoản đang hoạt động thì trả 200, không đổi gì.
 - Ai được mở khoá phụ thuộc người khoá (`locked_by`):
   - Admin: mở khoá được mọi Giáo viên/Sinh viên đang bị khoá.
@@ -383,7 +385,7 @@ Các lỗi 422 về định dạng (`EMPTY_FIELD`, `INVALID_FORMAT`) được ki
 |---|---|---|
 | access_token | string | JWT ngắn hạn |
 | token_type | string | luôn `"bearer"` |
-| user | object | `user_id`, `full_name`, `email`, `role_id`, `must_change_password` |
+| user | object | `user_id`, `full_name`, `email`, `role_id`, `must_change_password`, `student_code` (MSSV; `null` với Giáo viên/Admin) |
 
 Đồng thời set cookie `refresh_token` (HttpOnly, `Path=/auth`).
 
@@ -397,6 +399,7 @@ Các lỗi 422 về định dạng (`EMPTY_FIELD`, `INVALID_FORMAT`) được ki
 | 401 | Email hoặc mật khẩu sai | `{"error_code": "INVALID_CREDENTIALS", "message": "Email hoặc mật khẩu không đúng"}` (thông báo chung, không tiết lộ sai cái nào) |
 | 403 | Mật khẩu đúng nhưng tài khoản đang bị khoá (`is_active = false`) | `{"error_code": "ACCOUNT_LOCKED", "message": "Tài khoản đã bị khoá"}` |
 | 429 | Email đã đăng nhập sai quá nhiều lần và đang bị tạm chặn (trả cả khi lần này nhập đúng mật khẩu) | `{"error_code": "LOGIN_RATE_LIMITED", "message": "Bạn đã đăng nhập sai quá nhiều lần. Vui lòng thử lại sau {n} phút"}` |
+| 503 | Không giữ chỗ được lượt thử (dòng `login_attempt` liên tục bị xoá ngay sau khi tạo, gần như không xảy ra); server dừng, không kiểm tra mật khẩu | `{"error_code": "LOGIN_UNAVAILABLE", "message": "Hệ thống đang bận, vui lòng đăng nhập lại sau ít phút"}` |
 
 **Quy tắc nghiệp vụ**
 
@@ -408,7 +411,7 @@ Các lỗi 422 về định dạng (`EMPTY_FIELD`, `INVALID_FORMAT`) được ki
   - Lần sai chạm ngưỡng trả luôn 429. Trong lúc bị chặn, server không kiểm tra mật khẩu và trả 429 kể cả khi mật khẩu đúng.
   - Đếm theo email sau khi `strip` (giữ nguyên hoa/thường, khớp cách login tìm tài khoản), không theo IP, vì cả phòng máy thường dùng chung một IP. Email khác hoa/thường không đăng nhập được vào tài khoản thật, nên đếm riêng không giúp lách ngưỡng.
   - Email chưa có tài khoản cũng bị đếm và chặn giống hệt, để không dò được email nào tồn tại.
-  - Đăng nhập thành công thì xoá bộ đếm. Tài khoản đang bị khoá (`is_active = false`) mà nhập đúng mật khẩu thì vẫn tính là một lượt sai và **không** xoá bộ đếm (vẫn trả 403, riêng lượt chạm ngưỡng trả 429), để đoán trúng không mở ra cửa sổ thử mới. Hết thời gian chặn hoặc hết cửa sổ đếm thì đếm lại từ đầu.
+  - Đăng nhập thành công, Admin/Giáo viên đặt lại mật khẩu hoặc mở khoá tài khoản thì xoá bộ đếm. Tài khoản đang bị khoá (`is_active = false`) mà nhập đúng mật khẩu thì vẫn tính là một lượt sai và **không** xoá bộ đếm (vẫn trả 403, riêng lượt chạm ngưỡng trả 429), để đoán trúng không mở ra cửa sổ thử mới. Hết thời gian chặn hoặc hết cửa sổ đếm thì đếm lại từ đầu.
   - Mỗi lượt đăng nhập được tính vào bộ đếm **trước** khi kiểm tra mật khẩu (dưới khoá dòng), nên một đợt request song song không thử được quá ngưỡng: lượt thứ `LOGIN_MAX_FAILED_ATTEMPTS` đặt luôn mốc chặn, các request đến trong lúc nó đang kiểm tra mật khẩu nhận 429. Nếu chính lượt đó đúng mật khẩu thì vẫn đăng nhập được và bộ đếm bị xoá.
   - Dòng đã hết cửa sổ đếm và không còn bị chặn được tự dọn định kỳ (mỗi process tối đa 5 phút một lần, chạy kèm lượt đăng nhập), để email sai rồi bỏ đi không nằm lại mãi trong bảng.
   - Đánh đổi: người khác biết email có thể cố tình nhập sai để chặn tạm tài khoản đó tối đa 15 phút.
@@ -437,7 +440,8 @@ Các lỗi 422 về định dạng (`EMPTY_FIELD`, `INVALID_FORMAT`) được ki
 
 **Độ mạnh của `new_password`** (khớp `changePasswordSchema` ở frontend):
 
-- Ít nhất 8 ký tự, có ít nhất 1 chữ hoa, 1 chữ số và 1 ký tự đặc biệt (ký tự không phải chữ, số hay khoảng trắng).
+- Ít nhất 8 ký tự, có ít nhất 1 chữ hoa (`A-Z`), 1 chữ số (`0-9`) và 1 ký tự đặc biệt: ký tự không phải chữ (Unicode `L*`), số (Unicode `N*`) hay khoảng trắng, với khoảng trắng hiểu đúng như `\s` của JavaScript (frontend dùng `/[^\p{L}\p{N}\s]/u`).
+- Frontend báo trước luật "không chứa MSSV" dựa vào `user.student_code` trong response đăng nhập, vì MSSV không phải lúc nào cũng trùng phần trước `@` của email.
 - Không chứa MSSV hoặc phần trước `@` của email (mật khẩu tạm của Sinh viên chính là MSSV).
 - Chỉ áp cho mật khẩu mới. Đăng nhập vẫn chấp nhận mật khẩu cũ yếu hơn để không khoá tài khoản sẵn có.
 

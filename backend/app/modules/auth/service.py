@@ -57,6 +57,7 @@ def _build_login_response(user: User) -> tuple[LoginResponse, str]:
             email=user.email,
             role_id=user.role_id,
             must_change_password=user.must_change_password,
+            student_code=user.student_code,
         ),
     )
     return response, refresh_token

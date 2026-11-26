@@ -14,6 +14,8 @@ export interface UserResponse {
   email: string;
   role_id: Role;
   must_change_password: boolean;
+  /** MSSV, chỉ Sinh viên có. */
+  student_code?: string | null;
 }
 
 /** Mirrors backend/app/schemas/auth.py::LoginResponse. */

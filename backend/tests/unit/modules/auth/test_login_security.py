@@ -19,8 +19,9 @@ from app.core.utils import datetime_utils
 from app.models import LoginAttempt, User
 from app.modules.auth import login_throttle
 from app.modules.auth import service as svc
-from app.modules.auth.login_throttle import LoginRateLimitedError
+from app.modules.auth.login_throttle import LoginRateLimitedError, LoginUnavailableError
 from app.modules.auth.schemas import ChangePasswordRequest, LoginRequest
+from app.modules.users import service as users_svc
 
 PASSWORD = "Old-Password-123"
 WRONG = "Wrong-Password-999"
@@ -182,6 +183,55 @@ def test_locked_account_with_correct_password_keeps_counting(session, user, cloc
         _login(session)
 
 
+@pytest.fixture
+def admin(session: Session) -> User:
+    admin = User(
+        full_name="Quản trị viên",
+        email="quantri@st.utc2.edu.vn",
+        hashed_password=hash_password(PASSWORD),
+        role_id=1,
+    )
+    session.add(admin)
+    session.commit()
+    session.refresh(admin)
+    return admin
+
+
+def test_reset_password_clears_counter(session, user, admin, clock):
+    """Được đặt lại mật khẩu thì đăng nhập được ngay bằng mật khẩu tạm, không còn 429."""
+    _fail(session, 2)
+    with pytest.raises(LoginRateLimitedError):
+        _login(session, WRONG)
+
+    users_svc.reset_password(session, admin, user.user_id)
+
+    response, _ = _login(session, user.student_code)
+    assert response.user.must_change_password is True
+
+
+def test_unlock_clears_counter(session, user, admin, clock):
+    """Lúc bị khoá, nhập đúng mật khẩu vẫn tính lượt sai; mở khoá thì phải xoá bộ đếm."""
+    users_svc.lock_user(session, admin, user.user_id)
+    for _ in range(2):
+        with pytest.raises(svc.AccountLockedError):
+            _login(session)
+    with pytest.raises(LoginRateLimitedError):
+        _login(session)
+
+    users_svc.unlock_user(session, admin, user.user_id)
+
+    response, _ = _login(session)
+    assert response.user.email == EMAIL
+
+
+def test_login_response_includes_student_code(session, user, admin, clock):
+    """FE cần MSSV để báo trước luật "không chứa MSSV" (email không phải lúc nào cũng là MSSV)."""
+    response, _ = _login(session)
+    assert response.user.student_code == "6451071234"
+    response, _ = _login(session, email=admin.email)
+    assert response.user.student_code is None
+
+
 # ------------------------------------------------------------- concurrency
 def test_counter_is_reread_under_lock_not_taken_from_session_cache(
     engine, session, user, clock
@@ -235,7 +285,7 @@ def test_attempt_is_never_silently_skipped(session, user, clock, monkeypatch):
     monkeypatch.setattr(session, "exec", exec_then_delete)
     monkeypatch.setattr(svc, "_safe_verify", lambda *a: pytest.fail("không được kiểm tra mật khẩu"))
 
-    with pytest.raises(RuntimeError):
+    with pytest.raises(LoginUnavailableError):
         _login(session, WRONG)
 
 
@@ -287,6 +337,9 @@ def test_purge_keeps_rows_that_are_still_blocked(session, user, clock, monkeypat
         ("Đàoabcd2!", "Mật khẩu mới cần ít nhất 1 chữ cái viết hoa"),
         ("Abcdefg²!", "Mật khẩu mới cần ít nhất 1 chữ số"),
         ("Abcdefg٣!", "Mật khẩu mới cần ít nhất 1 chữ số"),
+        # Khoảng trắng theo đúng \s của JavaScript, không theo str.isspace()
+        ("Abcdef1\ufeff", "Mật khẩu mới cần ít nhất 1 ký tự đặc biệt"),
+        ("Abcdef1\u3000", "Mật khẩu mới cần ít nhất 1 ký tự đặc biệt"),
     ],
 )
 def test_weak_new_password_is_rejected(password, message):
@@ -298,7 +351,10 @@ def test_weak_new_password_is_rejected(password, message):
     assert exc.value.message == message
 
 
-@pytest.mark.parametrize("password", ["Abcdef1!", "Mk_2026.utc", "Xin-Chao-9"])
+# \x1c-\x1f, \x85: str.isspace() coi là khoảng trắng nhưng \s của JavaScript thì không
+@pytest.mark.parametrize(
+    "password", ["Abcdef1!", "Mk_2026.utc", "Xin-Chao-9", "Abcdef1\x1c", "Abcdef1\x85"]
+)
 def test_strong_new_password_is_accepted(password):
     request = ChangePasswordRequest(
         current_password=PASSWORD, new_password=password, confirm_password=password

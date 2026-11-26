@@ -43,5 +43,20 @@ export const changePasswordSchema = z
     path: ["confirmPassword"],
   });
 
+/**
+ * Khớp backend (auth/service._ensure_not_personal): mật khẩu chứa MSSV hoặc phần trước @
+ * của email (chỉ xét chuỗi >= 4 ký tự, không phân biệt hoa thường). MSSV không phải lúc
+ * nào cũng trùng phần trước @ của email, nên phải kiểm tra cả hai.
+ */
+export function containsPersonalInfo(
+  password: string,
+  email?: string | null,
+  studentCode?: string | null,
+): boolean {
+  const lowered = password.toLowerCase();
+  const personal = [studentCode ?? "", (email ?? "").split("@")[0]];
+  return personal.some((item) => item.length >= 4 && lowered.includes(item.toLowerCase()));
+}
+
 export type ChangePasswordFormValues = z.infer<typeof changePasswordSchema>;
 export type LoginFormValues = z.infer<typeof loginSchema>;

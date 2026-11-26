@@ -27,7 +27,8 @@ export const changePasswordSchema = z
       .min(8, { message: "Mật khẩu mới phải có ít nhất 8 ký tự" })
       .regex(/[A-Z]/, { message: "Cần ít nhất 1 chữ cái viết hoa" })
       .regex(/[0-9]/, { message: "Cần ít nhất 1 chữ số" })
-      .regex(/[!@#$%^&*]/, { message: "Cần ít nhất 1 ký tự đặc biệt (!@#$%^&*)" }),
+      // Khớp backend: mọi ký tự không phải chữ, số hay khoảng trắng đều tính là ký tự đặc biệt
+      .regex(/[^\p{L}\p{N}\s]/u, { message: "Cần ít nhất 1 ký tự đặc biệt (ví dụ !@#$%^&*)" }),
     confirmPassword: z
       .string()
       .min(1, { message: "Vui lòng xác nhận mật khẩu mới" }),
@@ -41,6 +42,21 @@ export const changePasswordSchema = z
     message: "Mật khẩu xác nhận không trùng khớp",
     path: ["confirmPassword"],
   });
+
+/**
+ * Khớp backend (auth/service._ensure_not_personal): mật khẩu chứa MSSV hoặc phần trước @
+ * của email (chỉ xét chuỗi >= 4 ký tự, không phân biệt hoa thường). MSSV không phải lúc
+ * nào cũng trùng phần trước @ của email, nên phải kiểm tra cả hai.
+ */
+export function containsPersonalInfo(
+  password: string,
+  email?: string | null,
+  studentCode?: string | null,
+): boolean {
+  const lowered = password.toLowerCase();
+  const personal = [studentCode ?? "", (email ?? "").split("@")[0]];
+  return personal.some((item) => item.length >= 4 && lowered.includes(item.toLowerCase()));
+}
 
 export type ChangePasswordFormValues = z.infer<typeof changePasswordSchema>;
 export type LoginFormValues = z.infer<typeof loginSchema>;

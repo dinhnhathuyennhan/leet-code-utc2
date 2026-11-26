@@ -17,6 +17,7 @@ import { useAuth } from "@/context/auth-context";
 import { ApiError } from "@/lib/api/error";
 import {
   changePasswordSchema,
+  containsPersonalInfo,
   type ChangePasswordFormValues,
 } from "@/lib/validations/validate-field-form";
 import { toast } from "sonner";
@@ -51,20 +52,27 @@ function FormMessage({ name }: { name: keyof ChangePasswordFormValues }) {
 interface PasswordChecklistProps {
   newPassword: string;
   currentPassword: string;
+  /** Email tài khoản. */
+  email?: string;
+  /** MSSV (chỉ Sinh viên có); không phải lúc nào cũng trùng phần trước @ của email. */
+  studentCode?: string | null;
 }
 
-function PasswordChecklist({ newPassword, currentPassword }: PasswordChecklistProps) {
+function PasswordChecklist({ newPassword, currentPassword, email, studentCode }: PasswordChecklistProps) {
+  const isNotPersonal =
+    newPassword.length > 0 && !containsPersonalInfo(newPassword, email, studentCode);
   const isDifferentFromCurrent = newPassword.length > 0 && newPassword !== currentPassword;
   const isMinLength = newPassword.length >= 8;
   const hasComplexChars =
     /[A-Z]/.test(newPassword) &&
     /[0-9]/.test(newPassword) &&
-    /[!@#$%^&*]/.test(newPassword);
+    /[^\p{L}\p{N}\s]/u.test(newPassword);
 
   const rules = [
     { label: "Khác mật khẩu hiện tại", valid: isDifferentFromCurrent },
     { label: "Tối thiểu 8 ký tự", valid: isMinLength },
-    { label: "Chứa ít nhất 1 chữ hoa, 1 số và 1 ký tự đặc biệt (!@#$%^&*)", valid: hasComplexChars },
+    { label: "Chứa ít nhất 1 chữ hoa, 1 số và 1 ký tự đặc biệt (ví dụ !@#$%^&*)", valid: hasComplexChars },
+    { label: "Không chứa mã sinh viên hoặc email", valid: isNotPersonal },
   ];
 
   return (
@@ -270,7 +278,12 @@ export function ChangePasswordForm({ onSuccess }: ChangePasswordFormProps) {
                   />
 
                   {/* Password Checklist */}
-                  <PasswordChecklist newPassword={newPassword} currentPassword={currentPassword} />
+                  <PasswordChecklist
+                    newPassword={newPassword}
+                    currentPassword={currentPassword}
+                    email={user?.email}
+                    studentCode={user?.student_code}
+                  />
                 </div>
 
                 {/* Xác nhận mật khẩu mới */}

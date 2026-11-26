@@ -171,6 +171,22 @@ class Submission(SQLModel, table=True):
     student: User | None = Relationship(back_populates="submissions")
 
 
+# ==================== LOGIN ATTEMPT ====================
+class LoginAttempt(SQLModel, table=True):
+    """Đếm số lần đăng nhập sai theo email để chống dò mật khẩu.
+
+    Không gắn khoá ngoại tới ``user``: email chưa tồn tại cũng bị đếm và bị chặn
+    giống hệt, để kẻ dò không phân biệt được email nào có tài khoản.
+    """
+
+    __tablename__ = "login_attempt"
+    # Email sau khi strip, giữ nguyên hoa/thường như lúc login tìm tài khoản
+    email: str = Field(primary_key=True, max_length=255)
+    failed_count: int = Field(default=0)
+    window_started_at: datetime = Field(sa_type=UTCDateTime)
+    locked_until: datetime | None = Field(default=None, sa_type=UTCDateTime)
+
+
 # ==================== AI REVIEW USAGE ====================
 class AIReviewUsage(SQLModel, table=True):
     """Một lượt AI review của sinh viên cho một bài tập (đang chạy hoặc đã thành công).

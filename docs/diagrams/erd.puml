@@ -115,8 +115,15 @@ entity "submission\n(Bài nộp)" as e_submission {
   grading_claimed_at : timestamptz
 }
 
-entity "ai_review_usage
-(Lượt AI review)" as e_ai_review_usage {
+entity "login_attempt\n(Đăng nhập sai)" as e_login_attempt {
+  * <b>email</b> : varchar(255) <<PK>>
+  --
+  * failed_count : int
+  * window_started_at : timestamptz
+  locked_until : timestamptz
+}
+
+entity "ai_review_usage\n(Lượt AI review)" as e_ai_review_usage {
   * <b>usage_id</b> : int <<PK>>
   --
   * student_id : uuid <<FK>>
@@ -148,6 +155,7 @@ legend right
   user.class_id chỉ có giá trị với Sinh viên
   user.locked_by: người đã khoá tài khoản (NULL khi đang hoạt động), ON DELETE SET NULL
   submission.grading_claimed_at: lease của worker đang chấm (NULL khi không ai giữ)
+  login_attempt: đếm đăng nhập sai theo email (không FK, email chưa có tài khoản cũng được đếm)
   ai_review_usage: mỗi SV tối đa AI_REVIEW_MAX_PER_PROBLEM lượt/problem (attempt_no 1..giới hạn)
 endlegend
 

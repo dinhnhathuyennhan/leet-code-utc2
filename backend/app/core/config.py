@@ -137,6 +137,11 @@ GRADING_WORKERS = _env_int("GRADING_WORKERS", 4)
 RUN_CONCURRENCY = _env_int("RUN_CONCURRENCY", 10)
 MAX_CODE_BYTES = _env_int("MAX_CODE_BYTES", 64 * 1024)
 
+# Chống dò mật khẩu: sai LOGIN_MAX_FAILED_ATTEMPTS lần trong LOGIN_FAILURE_WINDOW_MINUTES
+# phút thì tạm chặn đăng nhập email đó LOGIN_LOCKOUT_MINUTES phút.
+LOGIN_MAX_FAILED_ATTEMPTS = _env_int("LOGIN_MAX_FAILED_ATTEMPTS", 5)
+LOGIN_FAILURE_WINDOW_MINUTES = _env_int("LOGIN_FAILURE_WINDOW_MINUTES", 15)
+LOGIN_LOCKOUT_MINUTES = _env_int("LOGIN_LOCKOUT_MINUTES", 15)
 # ===== AI review =====
 # Số lượt AI review tối đa của mỗi sinh viên cho mỗi bài tập (cố định, không cộng thêm
 # khi nộp lại). Lượt gọi AI bị lỗi không tính. Admin/Teacher không bị giới hạn.

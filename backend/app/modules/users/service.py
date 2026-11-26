@@ -17,6 +17,7 @@ from app.modules.users.schemas import (
     student_email,
 )
 from app.models import Class, Course, Enrollment, User
+from app.modules.auth import login_throttle
 
 
 class UserNotFoundError(AppError):
@@ -267,7 +268,9 @@ def reset_password(
     target.token_version += 1
 
     session.add(target)
-    session.commit()
+    # Xoá bộ đếm đăng nhập sai (commit chung): nếu không, người dùng vừa được đặt lại
+    # mật khẩu vẫn bị 429 cho tới hết thời gian chặn
+    login_throttle.clear_failures(session, target.email)
     session.refresh(target)
     return str(target.user_id), temporary_password
 
@@ -362,6 +365,9 @@ def unlock_user(
     )
     if updated == 0 and not target.is_active:
         raise NotAllowedToManageAccountError(UNLOCK_FORBIDDEN)
+    # Lúc bị khoá, mỗi lần nhập đúng mật khẩu vẫn tính là lượt sai, nên mở khoá phải
+    # xoá bộ đếm, nếu không người dùng vẫn bị 429 cho tới hết thời gian chặn
+    login_throttle.clear_failures(session, target.email)
     return target
 
 

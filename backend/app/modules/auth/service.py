@@ -3,9 +3,10 @@ import uuid
 from sqlalchemy import update
 from sqlmodel import Session, select
 
-from app.core.exceptions import AccountLockedError, AppError
+from app.core.exceptions import AccountLockedError, AppError, WeakPasswordError
 from app.core.security.passwords import hash_password, verify_password
 from app.core.security.tokens import create_access_token, create_refresh_token, decode_token, TokenError
+from app.modules.auth import login_throttle
 from app.modules.auth.schemas import (
     ChangePasswordRequest,
     LoginRequest,
@@ -56,12 +57,17 @@ def _build_login_response(user: User) -> tuple[LoginResponse, str]:
             email=user.email,
             role_id=user.role_id,
             must_change_password=user.must_change_password,
+            student_code=user.student_code,
         ),
     )
     return response, refresh_token
 
 
 def login(session: Session, data: LoginRequest) -> tuple[LoginResponse, str]:
+    # Giữ chỗ một lượt thử TRƯỚC bcrypt, để request song song không cùng lọt qua ngưỡng.
+    # Email đang bị tạm chặn vì sai quá nhiều lần: từ chối ngay, không kiểm tra mật khẩu
+    slot = login_throttle.reserve_attempt(session, data.email)
+
     existing = session.exec(select(User).where(User.email == data.email.strip())).first()
 
     # existing null (email không tồn tại sẽ không verify password
@@ -71,11 +77,20 @@ def login(session: Session, data: LoginRequest) -> tuple[LoginResponse, str]:
     password_ok = _safe_verify(data.password, hashed)
 
     if existing is None or not password_ok:
+        # Lượt này đã được tính lúc giữ chỗ; lượt cuối thì raise LOGIN_RATE_LIMITED thay cho lỗi chung
+        slot.fail()
         raise InvalidCredentialsError("Email hoặc mật khẩu không đúng")
 
     # Chỉ báo khoá sau khi mật khẩu đúng, tránh lộ trạng thái tài khoản cho người lạ.
+    # Chủ ý giữ 403 để chủ tài khoản hiểu vì sao không vào được, chấp nhận việc 403 cho
+    # biết mật khẩu đúng (kẻ dò vẫn bị giới hạn số lượt và không đăng nhập được).
+    # Tài khoản bị khoá không đăng nhập được nên lượt này vẫn tính như lượt sai: không
+    # xoá bộ đếm (nếu không, đoán trúng là mở ra cửa sổ thử mới), lượt cuối thì trả 429.
     if not existing.is_active:
+        slot.fail()
         raise AccountLockedError("Tài khoản đã bị khoá")
+
+    login_throttle.clear_failures(session, data.email)
 
     return _build_login_response(existing)
 
@@ -90,6 +105,8 @@ def change_password(
 
     if data.current_password == data.new_password:
         raise SamePasswordError("Mật khẩu mới phải khác mật khẩu hiện tại")
+
+    _ensure_not_personal(user, data.new_password)
 
     session.exec(
         update(User)
@@ -143,3 +160,14 @@ def _safe_verify(password: str, hashed_password: str) -> bool:
         return verify_password(password=password, hashed_password=hashed_password)
     except ValueError:
         return False
+
+
+def _ensure_not_personal(user: User, password: str) -> None:
+    """Mật khẩu không được chứa MSSV hoặc phần trước @ của email.
+
+    Mật khẩu tạm của Sinh viên chính là MSSV, ai biết MSSV cũng đoán được.
+    """
+    lowered = password.lower()
+    personal = [user.student_code, user.email.split("@")[0]]
+    if any(item and len(item) >= 4 and item.lower() in lowered for item in personal):
+        raise WeakPasswordError("Mật khẩu mới không được chứa mã sinh viên hoặc email")

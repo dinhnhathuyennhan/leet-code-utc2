@@ -52,6 +52,7 @@ interface CachedProfile {
   full_name: string;
   email: string;
   must_change_password: boolean;
+  student_code?: string | null;
 }
 
 function cacheProfile(user: UserResponse): void {
@@ -60,6 +61,7 @@ function cacheProfile(user: UserResponse): void {
       full_name: user.full_name,
       email: user.email,
       must_change_password: user.must_change_password,
+      student_code: user.student_code ?? null,
     };
     sessionStorage.setItem(PROFILE_CACHE_KEY, JSON.stringify(cached));
   } catch {
@@ -108,6 +110,7 @@ function buildUserFromAccessToken(accessToken: string): UserResponse | null {
     full_name: cached?.full_name ?? "",
     email: cached?.email ?? "",
     must_change_password: cached?.must_change_password ?? false,
+    student_code: cached?.student_code ?? null,
   };
 }
 

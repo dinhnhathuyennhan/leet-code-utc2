@@ -19,19 +19,45 @@ participant "Global\nException Handler" as EH
 U -> FE : Nhập email, mật khẩu, nhấn "Đăng nhập"
 FE -> R : POST /auth/login {email, password}
 R -> S : login(email, password)
+S -> DB : INSERT login_attempt ON CONFLICT DO NOTHING\nSELECT ... WHERE email = ? FOR UPDATE
+DB --> S : login_attempt (đã khoá dòng)
+alt locked_until > now (đang bị tạm chặn)
+  S -> DB : ROLLBACK (nhả khoá dòng)
+  S -->> EH : raise LoginRateLimitedError
+  EH --> FE : 429 LOGIN_RATE_LIMITED\n"Vui lòng thử lại sau {n} phút"
+  FE --> U : Hiển thị thông báo lỗi
+else Còn lượt thử
+  S -> DB : Giữ chỗ: failed_count + 1\n(chạm ngưỡng thì đặt locked_until), COMMIT
+  note right of S
+    Giữ chỗ TRƯỚC bcrypt nên request song song
+    không cùng lọt qua ngưỡng
+  end note
+end
 S -> DB : SELECT user WHERE email = ?
 DB --> S : user | null
 S -> S : verify_password(password, hash)\n(email không tồn tại thì verify với hash giả\nđể không lộ email qua thời gian phản hồi)
 
 alt Sai email hoặc mật khẩu (kể cả tài khoản bị khoá)
-  S -->> EH : raise InvalidCredentialsError
-  EH --> FE : 401 "Email hoặc mật khẩu không đúng"
+  alt Lượt này chạm ngưỡng
+    S -->> EH : raise LoginRateLimitedError
+    EH --> FE : 429 LOGIN_RATE_LIMITED
+  else
+    S -->> EH : raise InvalidCredentialsError
+    EH --> FE : 401 "Email hoặc mật khẩu không đúng"
+  end
   FE --> U : Hiển thị thông báo lỗi
 else Đúng mật khẩu nhưng is_active = false
-  S -->> EH : raise AccountLockedError
-  EH --> FE : 403 ACCOUNT_LOCKED "Tài khoản đã bị khoá"
+  note right of S : Vẫn tính là lượt sai, không xoá bộ đếm
+  alt Lượt này chạm ngưỡng
+    S -->> EH : raise LoginRateLimitedError
+    EH --> FE : 429 LOGIN_RATE_LIMITED
+  else
+    S -->> EH : raise AccountLockedError
+    EH --> FE : 403 ACCOUNT_LOCKED "Tài khoản đã bị khoá"
+  end
   FE --> U : Hiển thị thông báo lỗi
 else Đúng thông tin, tài khoản đang hoạt động
+  S -> DB : DELETE login_attempt WHERE email = ?\n(xoá bộ đếm)
   S -> S : Tạo access token (sub, role, tv)\nvà refresh token (sub, tv)
   S --> R : LoginResponse + refresh token
   R --> FE : 200 {access_token, user}\nSet-Cookie: refresh_token (HttpOnly)

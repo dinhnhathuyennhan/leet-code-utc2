@@ -36,11 +36,11 @@ const locked = student({
 
 beforeEach(() => vi.resetAllMocks());
 
-function renderTable(onChanged = vi.fn()) {
+function renderTable(onChanged = vi.fn(), students: CourseStudent[] = [active, locked]) {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   render(
     <QueryClientProvider client={client}>
-      <CourseStudentsTable students={[active, locked]} courseId="CS101-2026A" onChanged={onChanged} />
+      <CourseStudentsTable students={students} courseId="CS101-2026A" onChanged={onChanged} />
     </QueryClientProvider>,
   );
   return { user: userEvent.setup(), onChanged };
@@ -103,4 +103,23 @@ it("does not refetch when the teacher's own account was just locked (session alr
   await waitFor(() => expect(toast.error).toHaveBeenCalledWith("Tài khoản đã bị khoá"));
   await waitFor(() => expect(screen.queryByRole("alertdialog")).not.toBeInTheDocument());
   expect(onChanged).not.toHaveBeenCalled();
+});
+
+it("renames a student with no class and no student code without demanding them", async () => {
+  // SV ghi danh khi chưa có lớp hành chính / MSSV (User.class_id, User.student_code nullable).
+  const legacy = student({
+    enrollment_id: 3, student_id: "c0000000-0000-4000-8000-000000000003", student_code: null,
+    full_name: "Sinh Viên Cũ", email: "sv.cu@st.utc2.edu.vn", class_id: null,
+  });
+  vi.mocked(adminApi.updateUser).mockResolvedValue({ user_id: legacy.student_id, full_name: "Sinh Viên Mới", email: legacy.email, role_id: 3, class_id: null, student_code: null });
+  const { user, onChanged } = renderTable(vi.fn(), [legacy]);
+  await user.click(row("Sinh Viên Cũ").getByRole("button", { name: "Sửa tài khoản Sinh Viên Cũ" }));
+  const dialog = within(await screen.findByRole("dialog"));
+  const name = dialog.getByLabelText("Họ và tên");
+  await user.clear(name);
+  await user.type(name, "Sinh Viên Mới");
+  await user.click(dialog.getByRole("button", { name: "Lưu thay đổi" }));
+  await waitFor(() => expect(adminApi.updateUser).toHaveBeenCalledWith(legacy.student_id, { full_name: "Sinh Viên Mới" }));
+  expect(dialog.queryByRole("alert")).not.toBeInTheDocument();
+  await waitFor(() => expect(onChanged).toHaveBeenCalled());
 });

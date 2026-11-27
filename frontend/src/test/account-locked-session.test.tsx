@@ -26,9 +26,13 @@ const API = "http://localhost:8000";
 const LOCKED_BODY = { error_code: "ACCOUNT_LOCKED", message: "Tài khoản đã bị khoá" };
 const LOCKED_NOTICE = /Tài khoản đã bị khoá\. Vui lòng liên hệ/;
 
+const PROFILE_CACHE_KEY = "chamcode.profile";
+const CACHED_PROFILE = JSON.stringify({ full_name: "Giáo Viên A", email: "gva@st.utc2.edu.vn", must_change_password: false });
+
 afterEach(() => {
   setSessionExpiredHandler(null);
   setAccessToken(null);
+  sessionStorage.clear();
 });
 
 describe("axios interceptor", () => {
@@ -225,5 +229,58 @@ describe("AuthProvider + LoginForm", () => {
     expect(await screen.findByText(LOCKED_NOTICE)).toBeInTheDocument();
     expect(document.querySelector('input[type="password"]')).not.toHaveAttribute("aria-invalid", "true");
     expect(screen.queryByText("Tài khoản đã bị khoá")).not.toBeInTheDocument();
+  });
+
+  it("clears the token, the profile cache and cached query data when a normal session expires too", async () => {
+    // Cùng cách dọn với nhánh "account-locked": không để dữ liệu lớp/khoá học nằm lại sau khi về /login.
+    // (Token và profile cache vốn đã được xoá ở nhánh này; assert cache React Query là phần mới.)
+    server.use(http.get(`${API}/courses`, () => HttpResponse.json({ error_code: "UNAUTHORIZED", message: "x" }, { status: 401 })));
+    const client = renderWithAuth(<AuthProbe />);
+    await waitFor(() => expect(screen.getByTestId("auth")).toHaveTextContent(/^authenticated$/));
+    client.setQueryData(["courses", "list"], { items: ["cached"] });
+    sessionStorage.setItem(PROFILE_CACHE_KEY, CACHED_PROFILE);
+    server.use(
+      http.post(`${API}/auth/refresh-access-token`, () =>
+        HttpResponse.json({ error_code: "SESSION_EXPIRED", message: "Phiên đăng nhập đã hết hạn" }, { status: 401 }),
+      ),
+    );
+
+    await act(async () => {
+      await axiosInstance.get("/courses").catch(() => undefined);
+    });
+
+    expect(screen.getByTestId("auth")).toHaveTextContent(/^unauthenticated$/);
+    expect(client.getQueryData(["courses", "list"])).toBeUndefined();
+    expect(sessionStorage.getItem(PROFILE_CACHE_KEY)).toBeNull();
+    expect(getAccessToken()).toBeNull();
+  });
+});
+
+describe("AuthProvider — refresh lúc khởi động thất bại", () => {
+  it.each([
+    ["401 (session expired)", { error_code: "SESSION_EXPIRED", message: "x" }, 401, /^unauthenticated$/],
+    ["403 ACCOUNT_LOCKED", LOCKED_BODY, 403, /^unauthenticated:account-locked$/],
+  ])("drops the cached profile when the refresh is rejected: %s", async (_label, body, status, expected) => {
+    sessionStorage.setItem(PROFILE_CACHE_KEY, CACHED_PROFILE);
+    server.use(http.post(`${API}/auth/refresh-access-token`, () => HttpResponse.json(body, { status })));
+    renderWithAuth(<AuthProbe />);
+    await waitFor(() => expect(screen.getByTestId("auth")).toHaveTextContent(expected));
+    expect(sessionStorage.getItem(PROFILE_CACHE_KEY)).toBeNull();
+  });
+
+  it("keeps the cached profile on a network error so 'Thử lại' still restores the name", async () => {
+    sessionStorage.setItem(PROFILE_CACHE_KEY, CACHED_PROFILE);
+    server.use(http.post(`${API}/auth/refresh-access-token`, () => HttpResponse.error()));
+    renderWithAuth(<AuthProbe />);
+    await waitFor(() => expect(screen.getByTestId("auth")).toHaveTextContent("connection-lost"));
+    expect(sessionStorage.getItem(PROFILE_CACHE_KEY)).toBe(CACHED_PROFILE);
+  });
+
+  it("keeps the cached profile on a 5xx so 'Thử lại' still restores the name", async () => {
+    sessionStorage.setItem(PROFILE_CACHE_KEY, CACHED_PROFILE);
+    server.use(http.post(`${API}/auth/refresh-access-token`, () => HttpResponse.json({ message: "x" }, { status: 503 })));
+    renderWithAuth(<AuthProbe />);
+    await waitFor(() => expect(screen.getByTestId("auth")).toHaveTextContent("server-error"));
+    expect(sessionStorage.getItem(PROFILE_CACHE_KEY)).toBe(CACHED_PROFILE);
   });
 });

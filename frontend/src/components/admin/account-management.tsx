@@ -477,6 +477,16 @@ export function AccountManagement() {
     void queryClient.invalidateQueries({ queryKey: accountsQueryKey });
   }
 
+  // Admin vừa tự sửa mình: header, trang /login... đọc user từ AuthContext/profile cache,
+  // không phải từ bảng, nên phải đồng bộ cả hai.
+  function handleAccountSaved(updated: AccountResponse) {
+    auth.updateCurrentUser(updated.user_id, {
+      full_name: updated.full_name,
+      email: updated.email,
+    });
+    refreshAccounts();
+  }
+
   function changeRoleFilter(next: RoleFilter) {
     setRoleFilter(next);
     setPage(1);
@@ -764,7 +774,7 @@ export function AccountManagement() {
       <EditAccountDialog
         account={editAccount}
         onClose={() => setEditAccount(null)}
-        onSaved={refreshAccounts}
+        onSaved={handleAccountSaved}
       />
       {resetAccount && (
         <ResetPasswordModal

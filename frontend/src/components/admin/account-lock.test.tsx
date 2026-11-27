@@ -33,6 +33,7 @@ const ALL = [self, otherAdmin, teacher, lockedStudent, unknownRole];
 const adminAuth = {
   status: "authenticated",
   user: { user_id: ADMIN_ID, role_id: 1, full_name: "Admin Chính", email: self.email, must_change_password: false },
+  updateCurrentUser: vi.fn(),
 } as never;
 
 beforeEach(() => {
@@ -187,6 +188,92 @@ describe("Admin — sửa tài khoản", () => {
     await user.click(within(await screen.findByRole("dialog")).getByRole("button", { name: "Lưu thay đổi" }));
     expect(api.updateUser).not.toHaveBeenCalled();
     expect(toast.info).toHaveBeenCalledWith("Không có thay đổi nào.");
+  });
+
+  describe("dữ liệu cũ thiếu field (class_id/student_code NULL, email ngoài đuôi UTC2)", () => {
+    // SV tạo/import khi chưa có lớp hành chính và chưa có MSSV.
+    const legacyStudent: AccountResponse = {
+      user_id: "c0000000-0000-4000-8000-000000000009", full_name: "Sinh Viên Cũ", email: "sv.cu@st.utc2.edu.vn",
+      role_id: 3, student_code: null, class_id: null, is_active: true,
+    };
+    const legacyTeacher: AccountResponse = {
+      user_id: "b0000000-0000-4000-8000-000000000009", full_name: "Giáo Viên Cũ", email: "gv.cu@utc2.edu.vn",
+      role_id: 2, is_active: true,
+    };
+
+    beforeEach(() => {
+      vi.mocked(api.listUsers).mockResolvedValue({ items: [self, legacyStudent, legacyTeacher, lockedStudent], total: 4, page: 1, page_size: 20 });
+    });
+
+    async function openEdit(user: ReturnType<typeof userEvent.setup>, name: string) {
+      await user.click((await row(name)).getByRole("button", { name: `Sửa tài khoản ${name}` }));
+      return within(await screen.findByRole("dialog"));
+    }
+
+    it("renames a student with no class and no student code, sending only full_name", async () => {
+      vi.mocked(api.updateUser).mockResolvedValue({ ...legacyStudent, full_name: "Sinh Viên Mới" });
+      const user = renderPage();
+      const dialog = await openEdit(user, "Sinh Viên Cũ");
+      expect(dialog.getByLabelText("Mã lớp hành chính")).not.toBeRequired();
+      expect(dialog.getByLabelText("Mã sinh viên (MSSV)")).not.toBeRequired();
+      const name = dialog.getByLabelText("Họ và tên");
+      await user.clear(name);
+      await user.type(name, "Sinh Viên Mới");
+      await user.click(dialog.getByRole("button", { name: "Lưu thay đổi" }));
+
+      await waitFor(() => expect(api.updateUser).toHaveBeenCalledWith(legacyStudent.user_id, { full_name: "Sinh Viên Mới" }));
+      expect(dialog.queryByRole("alert")).not.toBeInTheDocument();
+    });
+
+    it("still validates a student code or class that is actually being set", async () => {
+      const user = renderPage();
+      const dialog = await openEdit(user, "Sinh Viên Cũ");
+      await user.type(dialog.getByLabelText("Mã sinh viên (MSSV)"), "12345");
+      await user.click(dialog.getByRole("button", { name: "Lưu thay đổi" }));
+      expect(dialog.getByRole("alert")).toHaveTextContent("Mã sinh viên phải gồm đúng 10 chữ số.");
+      expect(api.updateUser).not.toHaveBeenCalled();
+    });
+
+    it("refuses to clear an existing class (PATCH cannot set it back to NULL)", async () => {
+      const user = renderPage();
+      const dialog = await openEdit(user, "Sinh Viên B");
+      expect(dialog.getByLabelText("Mã lớp hành chính")).toBeRequired();
+      await user.clear(dialog.getByLabelText("Mã lớp hành chính"));
+      await user.click(dialog.getByRole("button", { name: "Lưu thay đổi" }));
+      expect(dialog.getByRole("alert")).toHaveTextContent("Mã lớp không được trống.");
+      expect(api.updateUser).not.toHaveBeenCalled();
+    });
+
+    it("refuses to clear an existing student code", async () => {
+      const user = renderPage();
+      const dialog = await openEdit(user, "Sinh Viên B");
+      expect(dialog.getByLabelText("Mã sinh viên (MSSV)")).toBeRequired();
+      await user.clear(dialog.getByLabelText("Mã sinh viên (MSSV)"));
+      await user.click(dialog.getByRole("button", { name: "Lưu thay đổi" }));
+      expect(dialog.getByRole("alert")).toHaveTextContent("Mã sinh viên phải gồm đúng 10 chữ số.");
+      expect(api.updateUser).not.toHaveBeenCalled();
+    });
+
+    it("refuses a whitespace-only name even for a legacy account", async () => {
+      const user = renderPage();
+      const dialog = await openEdit(user, "Sinh Viên Cũ");
+      await user.clear(dialog.getByLabelText("Họ và tên"));
+      await user.type(dialog.getByLabelText("Họ và tên"), "   ");
+      await user.click(dialog.getByRole("button", { name: "Lưu thay đổi" }));
+      expect(dialog.getByRole("alert")).toHaveTextContent("Họ và tên không được để trống.");
+      expect(api.updateUser).not.toHaveBeenCalled();
+    });
+
+    it("renames a teacher whose stored email predates the UTC2 rule without touching the email", async () => {
+      vi.mocked(api.updateUser).mockResolvedValue({ ...legacyTeacher, full_name: "Giáo Viên Mới" });
+      const user = renderPage();
+      const dialog = await openEdit(user, "Giáo Viên Cũ");
+      const name = dialog.getByLabelText("Họ và tên");
+      await user.clear(name);
+      await user.type(name, "Giáo Viên Mới");
+      await user.click(dialog.getByRole("button", { name: "Lưu thay đổi" }));
+      await waitFor(() => expect(api.updateUser).toHaveBeenCalledWith(legacyTeacher.user_id, { full_name: "Giáo Viên Mới" }));
+    });
   });
 
   it("keeps the dialog open and shows FIELD_NOT_EDITABLE from the backend", async () => {

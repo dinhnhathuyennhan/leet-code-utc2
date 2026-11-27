@@ -42,12 +42,20 @@ nút "Mở khoá" ở tài khoản do Admin khoá; backend từ chối và toast
 
 - Form theo vai trò tài khoản đích: Giáo viên/Admin sửa **họ tên, email**; Sinh viên sửa
   **họ tên, MSSV, lớp hành chính** (không có ô email; dòng gợi ý email tự đổi thành `<MSSV>@st.utc2.edu.vn`).
-- Kiểm tra trước khi gửi: họ tên không rỗng, email có đuôi `@st.utc2.edu.vn`, MSSV đúng 10 chữ số,
-  mã lớp không rỗng.
+- Kiểm tra trước khi gửi **chỉ với field thực sự đổi** (PATCH: field không gửi = giữ nguyên,
+  backend cũng chỉ validate field được gửi): họ tên không rỗng, email có đuôi `@st.utc2.edu.vn`,
+  MSSV đúng 10 chữ số, mã lớp không rỗng. Nhờ vậy tài khoản dữ liệu cũ (Sinh viên chưa có lớp
+  hành chính hay MSSV — `class_id`/`student_code` là `NULL`; email ngoài đuôi UTC2) vẫn sửa được
+  field khác. Đã có MSSV/lớp thì không xoá trống được (PATCH không nhận `null`), chưa có thì để
+  trống được.
 - Chỉ gửi field thực sự đổi và hợp với vai trò, nên bình thường không gặp `FIELD_NOT_EDITABLE`.
   Không có gì thay đổi thì đóng form, toast "Không có thay đổi nào", không gọi API.
 - Lỗi backend (409 trùng email/MSSV, 404 lớp không tồn tại, 422...) hiện trong form và toast,
   form giữ nguyên để sửa tiếp.
+- Admin sửa chính mình: ngoài tải lại bảng, cập nhật luôn user trong `AuthContext` và profile
+  cache (`sessionStorage` `chamcode.profile`), để header và trang `/login` ("Tài khoản … đang được
+  sử dụng") hiện ngay họ tên/email mới, không phải chờ tải lại trang hay đăng nhập lại. Nếu phiên
+  vừa kết thúc trong lúc chờ PATCH thì không ghi lại profile cache.
 
 ## Tài khoản bị khoá (`ACCOUNT_LOCKED`)
 
@@ -58,6 +66,11 @@ nút "Mở khoá" ở tài khoản do Admin khoá; backend từ chối và toast
 | Tải lại trang, refresh lúc khởi động trả 403 `ACCOUNT_LOCKED` | Ở trang đăng nhập kèm thông báo khoá |
 | Đăng nhập đúng mật khẩu vào tài khoản bị khoá | Hiện thông báo khoá + toast; ô mật khẩu **không** bị đánh dấu sai |
 | Đăng nhập sai mật khẩu (kể cả tài khoản bị khoá) | Lỗi chung "Email hoặc mật khẩu không đúng", không lộ trạng thái khoá |
+
+Mọi kiểu kết thúc phiên (bị khoá hay hết phiên thường — refresh trả 401) dọn như nhau: xoá
+access token, profile cache và cache React Query, không để dữ liệu lớp/khoá học nằm lại ở trang
+đăng nhập. Refresh lúc khởi động bị từ chối (mọi lỗi 4xx, kể cả 403 `ACCOUNT_LOCKED`) cũng xoá profile cache; lỗi mạng/5xx thì
+giữ để "Thử lại" vẫn hiện đúng tên.
 
 Lần đăng nhập tiếp theo xoá thông báo khoá cũ. Các lỗi 403 khác (`FORBIDDEN`,
 `NOT_ALLOWED_TO_MANAGE_ACCOUNT`...) không đăng xuất người dùng.

@@ -293,14 +293,18 @@ function EditAccountForm({
   async function submit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (saving) return;
-    if (!normalizeName(form.full_name)) return setError("Họ và tên không được để trống.");
-    if (isStudent && !STUDENT_CODE_PATTERN.test(form.student_code.trim()))
+    // PATCH: field không gửi = giữ nguyên (backend chỉ validate field được gửi), nên chỉ
+    // kiểm tra field thực sự đổi. Dữ liệu cũ thiếu MSSV/lớp (NULL) hay email ngoài đuôi
+    // UTC2 vẫn sửa được field khác.
+    const payload = buildUpdatePayload(account, form);
+    if (payload.full_name !== undefined && !payload.full_name)
+      return setError("Họ và tên không được để trống.");
+    if (payload.student_code !== undefined && !STUDENT_CODE_PATTERN.test(payload.student_code))
       return setError("Mã sinh viên phải gồm đúng 10 chữ số.");
-    if (isStudent && !form.class_id.trim()) return setError("Mã lớp không được trống.");
-    if (!isStudent && !UTC2_EMAIL_PATTERN.test(form.email.trim()))
+    if (payload.class_id !== undefined && !payload.class_id) return setError("Mã lớp không được trống.");
+    if (payload.email !== undefined && !UTC2_EMAIL_PATTERN.test(payload.email))
       return setError("Email phải có đuôi @st.utc2.edu.vn.");
 
-    const payload = buildUpdatePayload(account, form);
     if (Object.keys(payload).length === 0) {
       toast.info("Không có thay đổi nào.");
       onClose();
@@ -344,7 +348,8 @@ function EditAccountForm({
               inputMode="numeric"
               maxLength={10}
               disabled={saving}
-              required
+              // Có MSSV rồi thì không xoá được (PATCH không nhận null); chưa có thì để trống được.
+              required={Boolean(account.student_code)}
             />
             <p className="text-xs text-muted-foreground">
               Email tự đổi theo MSSV: {form.student_code.trim() || "<MSSV>"}@st.utc2.edu.vn
@@ -358,7 +363,7 @@ function EditAccountForm({
               onChange={(event) => update("class_id", event.target.value)}
               placeholder="VD: CQ.64.CNTT"
               disabled={saving}
-              required
+              required={Boolean(account.class_id)}
             />
           </div>
         </>

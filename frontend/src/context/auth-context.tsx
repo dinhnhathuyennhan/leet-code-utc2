@@ -32,7 +32,7 @@ import type {
   UserResponse,
 } from "@/lib/api/types";
 import { decodeAccessToken } from "@/lib/auth/decode-jwt";
-import { setAccessToken } from "@/lib/auth/token-store";
+import { getAccessToken, setAccessToken } from "@/lib/auth/token-store";
 
 type AuthState =
   | { status: "loading"; user?: undefined }
@@ -42,12 +42,20 @@ type AuthState =
   | { status: "server-error"; user?: undefined }
   | { status: "authenticated"; user: UserResponse };
 
+/** Field hồ sơ của người đang đăng nhập có thể đổi giữa phiên (vd: Admin tự sửa họ tên/email). */
+export type CurrentUserChanges = Partial<Pick<UserResponse, "full_name" | "email">>;
+
 type AuthContextValue = AuthState & {
   loginInProgress: boolean;
   login: (data: LoginRequest) => Promise<UserResponse>;
   changePassword: (data: ChangePasswordRequest) => Promise<UserResponse>;
   logout: () => Promise<void>;
   retryConnection: () => Promise<void>;
+  /**
+   * Đồng bộ user trong context và profile cache sau khi chính tài khoản `userId` vừa được sửa.
+   * Bỏ qua nếu `userId` không phải người đang đăng nhập (hoặc không còn phiên).
+   */
+  updateCurrentUser: (userId: string, changes: CurrentUserChanges) => void;
 };
 
 export const AuthContext = createContext<AuthContextValue | null>(null);
@@ -91,27 +99,33 @@ function clearCachedProfile(): void {
 }
 
 /**
+ * Trạng thái khi refresh lúc khởi động không cấp được token. Refresh bị từ chối (không còn
+ * phiên) thì xoá profile cache như mọi nhánh kết thúc phiên khác; lỗi mạng/5xx thì giữ để
+ * "Thử lại" vẫn hiện đúng tên.
+ */
+function stateAfterFailedRefresh(): AuthState {
+  const status = getLastRefreshStatus();
+  if (status !== null && status >= 500) return { status: "server-error" };
+  if (wasLastRefreshNetworkError()) return { status: "connection-lost" };
+  clearCachedProfile();
+  if (wasLastRefreshAccountLocked()) return { status: "unauthenticated", reason: "account-locked" };
+  return { status: "unauthenticated" };
+}
+
+/**
  * POST /auth/refresh-access-token returns only a fresh access token, no user object (a
  * gap in the current backend contract — recommend adding GET /auth/me).
  * user_id/role_id are recovered from the token's own claims (always
  * accurate: they come from the token just issued); full_name/email/
  * must_change_password are best-effort from the last login/change-password
- * response, cached in sessionStorage, purely to avoid a blank-profile flash.
+ * response (or the user's own edit, see `updateCurrentUser`), cached in
+ * sessionStorage, purely to avoid a blank-profile flash.
  *
  * This is safe even when stale: any server-side change to
  * must_change_password also bumps token_version, which invalidates the
  * refresh token itself — so a truly stale cache can only occur in a fresh
  * tab that never completed a real login in this session.
  */
-/** Trạng thái khi refresh lúc khởi động không cấp được token. */
-function stateAfterFailedRefresh(): AuthState {
-  const status = getLastRefreshStatus();
-  if (status !== null && status >= 500) return { status: "server-error" };
-  if (wasLastRefreshNetworkError()) return { status: "connection-lost" };
-  if (wasLastRefreshAccountLocked()) return { status: "unauthenticated", reason: "account-locked" };
-  return { status: "unauthenticated" };
-}
-
 function buildUserFromAccessToken(accessToken: string): UserResponse | null {
   const claims = decodeAccessToken(accessToken);
   if (!claims) return null;
@@ -132,12 +146,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const queryClient = useQueryClient();
 
   const handleSessionExpired = useCallback((reason: SessionEndReason) => {
+    // Mọi lý do kết thúc phiên đều dọn như nhau: token, profile cache và dữ liệu đã tải
+    // của tài khoản này (không để màn hình đăng nhập còn giữ dữ liệu lớp/khoá học).
+    setAccessToken(null);
     clearCachedProfile();
+    queryClient.clear();
     if (reason === "account-locked") {
-      // Tài khoản bị khoá: xoá phiên và mọi dữ liệu đã tải của tài khoản này
-      // (backend đã xoá cookie refresh).
-      setAccessToken(null);
-      queryClient.clear();
+      // Backend đã xoá cookie refresh; trang đăng nhập báo "tài khoản đã bị khoá".
       setState({ status: "unauthenticated", reason: "account-locked" });
       return;
     }
@@ -229,9 +244,34 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return logoutInFlight.current;
   }, [queryClient]);
 
+  const updateCurrentUser = useCallback(
+    (userId: string, changes: CurrentUserChanges) => {
+      // Caller thường gọi sau một `await` (PATCH) nên `state` ở đây có thể đã cũ: phiên có
+      // thể vừa kết thúc trong lúc chờ. Token bị xoá đồng bộ ở mọi nhánh kết thúc phiên,
+      // nên dùng nó để không ghi lại profile cache sau khi đã dọn.
+      if (getAccessToken() === null) return;
+      if (state.status !== "authenticated" || state.user.user_id !== userId) return;
+      cacheProfile({ ...state.user, ...changes });
+      setState((current) =>
+        current.status === "authenticated" && current.user.user_id === userId
+          ? { status: "authenticated", user: { ...current.user, ...changes } }
+          : current,
+      );
+    },
+    [state],
+  );
+
   const value = useMemo<AuthContextValue>(
-    () => ({ ...state, loginInProgress, login, changePassword, logout, retryConnection: bootstrap }),
-    [state, loginInProgress, login, changePassword, logout, bootstrap],
+    () => ({
+      ...state,
+      loginInProgress,
+      login,
+      changePassword,
+      logout,
+      retryConnection: bootstrap,
+      updateCurrentUser,
+    }),
+    [state, loginInProgress, login, changePassword, logout, bootstrap, updateCurrentUser],
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

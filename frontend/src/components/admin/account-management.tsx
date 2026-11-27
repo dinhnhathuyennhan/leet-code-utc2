@@ -8,6 +8,7 @@ import {
   Download,
   KeyRound,
   Loader2,
+  Pencil,
   Plus,
   Search,
   Upload,
@@ -16,6 +17,13 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 
+import {
+  AccountLockButton,
+  AccountLockDialog,
+  AccountStatusBadge,
+  EditAccountDialog,
+  adminCanManage,
+} from "@/components/shared/account-actions";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -36,6 +44,7 @@ import {
 } from "@/lib/api/endpoints/admin";
 import type { AccountResponse, Role } from "@/lib/api/types";
 import { accountsQueryKey } from "@/lib/query-client";
+import { useAuth } from "@/context/auth-context";
 
 const PAGE_SIZE = 20;
 const ACCOUNT_EMAIL_PATTERN = /^[a-zA-Z0-9._%+-]+@st\.utc2\.edu\.vn$/i;
@@ -422,6 +431,10 @@ export function AccountManagement() {
   const [resetAccount, setResetAccount] = useState<AccountResponse | null>(
     null,
   );
+  const [lockAccount, setLockAccount] = useState<AccountResponse | null>(null);
+  const [editAccount, setEditAccount] = useState<AccountResponse | null>(null);
+  const auth = useAuth();
+  const currentUserId = auth.status === "authenticated" ? auth.user.user_id : undefined;
   const roleId =
     roleFilter === "student" ? 3 : roleFilter === "teacher" ? 2 : undefined;
 
@@ -462,6 +475,16 @@ export function AccountManagement() {
 
   function refreshAccounts() {
     void queryClient.invalidateQueries({ queryKey: accountsQueryKey });
+  }
+
+  // Admin vừa tự sửa mình: header, trang /login... đọc user từ AuthContext/profile cache,
+  // không phải từ bảng, nên phải đồng bộ cả hai.
+  function handleAccountSaved(updated: AccountResponse) {
+    auth.updateCurrentUser(updated.user_id, {
+      full_name: updated.full_name,
+      email: updated.email,
+    });
+    refreshAccounts();
   }
 
   function changeRoleFilter(next: RoleFilter) {
@@ -580,6 +603,7 @@ export function AccountManagement() {
                 <TableHead className="text-white">Họ và tên</TableHead>
                 <TableHead className="text-white">Email UTC2</TableHead>
                 <TableHead className="text-white">Vai trò</TableHead>
+                <TableHead className="text-white">Trạng thái</TableHead>
                 <TableHead className="text-white">Lớp</TableHead>
                 <TableHead className="text-white">MSSV</TableHead>
                 <TableHead className="text-right text-white">
@@ -591,7 +615,7 @@ export function AccountManagement() {
               {accountsQuery.isPending ? (
                 <TableRow>
                   <TableCell
-                    colSpan={7}
+                    colSpan={8}
                     className="py-8 text-center text-slate-500"
                   >
                     <Loader2 className="mr-2 inline size-4 animate-spin" />
@@ -601,7 +625,7 @@ export function AccountManagement() {
               ) : accountsQuery.isError ? (
                 <TableRow>
                   <TableCell
-                    colSpan={7}
+                    colSpan={8}
                     className="py-8 text-center text-rose-700"
                   >
                     {errorMessage(
@@ -620,7 +644,7 @@ export function AccountManagement() {
               ) : filteredAccounts.length === 0 ? (
                 <TableRow>
                   <TableCell
-                    colSpan={7}
+                    colSpan={8}
                     className="py-8 text-center text-slate-500"
                   >
                     {!accounts?.length
@@ -652,17 +676,41 @@ export function AccountManagement() {
                         {roleLabel(account.role_id)}
                       </span>
                     </TableCell>
+                    <TableCell>
+                      <AccountStatusBadge isActive={account.is_active} showActive />
+                    </TableCell>
                     <TableCell>{account.class_id || "—"}</TableCell>
                     <TableCell>{account.student_code || "—"}</TableCell>
                     <TableCell className="text-right">
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={() => setResetAccount(account)}
-                      >
-                        <KeyRound className="size-3.5" />
-                        Đặt lại MK
-                      </Button>
+                      <div className="flex flex-wrap justify-end gap-2">
+                        {/* Admin sửa GV/SV và chính mình; khoá chỉ GV/SV, không tự khoá, không đụng Admin khác. */}
+                        {(adminCanManage(account, currentUserId) ||
+                          account.user_id === currentUserId) && (
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => setEditAccount(account)}
+                            aria-label={`Sửa tài khoản ${account.full_name}`}
+                          >
+                            <Pencil className="size-3.5" />
+                            Sửa
+                          </Button>
+                        )}
+                        {adminCanManage(account, currentUserId) && (
+                          <AccountLockButton
+                            account={account}
+                            onClick={() => setLockAccount(account)}
+                          />
+                        )}
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => setResetAccount(account)}
+                        >
+                          <KeyRound className="size-3.5" />
+                          Đặt lại MK
+                        </Button>
+                      </div>
                     </TableCell>
                   </TableRow>
                 ))
@@ -718,6 +766,16 @@ export function AccountManagement() {
           onCreated={refreshAccounts}
         />
       )}
+      <AccountLockDialog
+        account={lockAccount}
+        onClose={() => setLockAccount(null)}
+        onChanged={refreshAccounts}
+      />
+      <EditAccountDialog
+        account={editAccount}
+        onClose={() => setEditAccount(null)}
+        onSaved={handleAccountSaved}
+      />
       {resetAccount && (
         <ResetPasswordModal
           account={resetAccount}

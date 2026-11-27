@@ -174,6 +174,8 @@ export interface CourseStudent {
   progress_percent: number;
   submission_history: CourseStudentSubmission[];
   class_id?: string | null;
+  /** Trạng thái khoá tài khoản; chỉ Admin/Giáo viên nhận được, Sinh viên nhận `null`. */
+  is_active?: boolean | null;
 }
 
 /**

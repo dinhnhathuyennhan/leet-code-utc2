@@ -7,11 +7,18 @@ import { beforeEach, expect, it, vi } from "vitest";
 import { AccountManagement } from "./account-management";
 import { StudentImport } from "./student-import";
 import * as api from "@/lib/api/endpoints/admin";
+import { AuthContext } from "@/context/auth-context";
 
 vi.mock("@/lib/api/endpoints/admin", () => ({
   listUsers: vi.fn(), createStudent: vi.fn(), createTeacher: vi.fn(),
   importStudents: vi.fn(), resetUserPassword: vi.fn(),
+  lockUser: vi.fn(), unlockUser: vi.fn(), updateUser: vi.fn(),
 }));
+
+const adminAuth = {
+  status: "authenticated",
+  user: { user_id: "a0000000-0000-4000-8000-000000000001", role_id: 1, full_name: "Admin", email: "admin@st.utc2.edu.vn", must_change_password: false },
+} as never;
 
 const uuid = "d7675c0e-924f-4a9f-bf92-1cbe3fc925a8";
 
@@ -22,7 +29,11 @@ beforeEach(() => {
 
 async function openForm() {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
-  render(<QueryClientProvider client={client}><AccountManagement /></QueryClientProvider>);
+  render(
+    <QueryClientProvider client={client}>
+      <AuthContext.Provider value={adminAuth}><AccountManagement /></AuthContext.Provider>
+    </QueryClientProvider>,
+  );
   const user = userEvent.setup();
   await user.click(screen.getByRole("button", { name: "Cấp tài khoản" }));
   return { user, dialog: within(screen.getByRole("dialog")) };

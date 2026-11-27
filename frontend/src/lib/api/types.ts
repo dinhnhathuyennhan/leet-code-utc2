@@ -76,6 +76,20 @@ export interface AccountResponse {
   role_id: Role;
   student_code?: string | null;
   class_id?: string | null;
+  /** `false` = tài khoản đang bị khoá. Thiếu field (dữ liệu cũ) coi như đang hoạt động. */
+  is_active?: boolean;
+}
+
+/**
+ * PATCH /users/{user_id} — mọi field đều tuỳ chọn, field không gửi thì giữ nguyên.
+ * Giáo viên/Admin: `full_name`, `email`. Sinh viên: `full_name`, `student_code`, `class_id`
+ * (email sinh viên tự đổi theo MSSV). Xem docs/api-design-auth.md.
+ */
+export interface UpdateUserRequest {
+  full_name?: string;
+  email?: string;
+  student_code?: string;
+  class_id?: string;
 }
 
 export interface ListUsersParams {

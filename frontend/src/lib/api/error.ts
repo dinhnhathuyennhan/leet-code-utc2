@@ -9,13 +9,16 @@ export class ApiError extends Error {
   readonly status: number;
   readonly detail: string;
   readonly isNetworkError: boolean;
+  /** `error_code` của backend (vd: `ACCOUNT_LOCKED`), nếu body lỗi có. */
+  readonly code: string | null;
 
-  constructor(params: { status: number; detail: string; isNetworkError?: boolean }) {
+  constructor(params: { status: number; detail: string; isNetworkError?: boolean; code?: string | null }) {
     super(params.detail);
     this.name = "ApiError";
     this.status = params.status;
     this.detail = params.detail;
     this.isNetworkError = params.isNetworkError ?? false;
+    this.code = params.code ?? null;
   }
 }
 
@@ -36,4 +39,11 @@ export function isValidationErrorBody(
     value !== null &&
     Array.isArray((value as Record<string, unknown>).detail)
   );
+}
+
+/** Đọc `error_code` từ body lỗi chuẩn của backend (`{"error_code": "...", "message": "..."}`). */
+export function readErrorCode(data: unknown): string | null {
+  if (typeof data !== "object" || data === null) return null;
+  const code = (data as Record<string, unknown>).error_code;
+  return typeof code === "string" && code.trim() !== "" ? code : null;
 }

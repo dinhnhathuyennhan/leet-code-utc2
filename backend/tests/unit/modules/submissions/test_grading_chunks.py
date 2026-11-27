@@ -24,7 +24,7 @@ def _fake_judge(status_of):
     """`_run_judge` giả: trạng thái theo testcase_id, ghi lại số test của mỗi lô."""
     calls: list[int] = []
 
-    def fake(problem, data, testcases, timeout, tokens=None, on_tokens=None, heartbeat=None):
+    def fake(problem, data, testcases, timeout, tokens=None, on_tokens=None, heartbeat=None, marker=None):
         calls.append(len(testcases))
         if on_tokens is not None:
             on_tokens([f"t{tc.testcase_id}" for tc in testcases])
@@ -90,7 +90,7 @@ def test_compile_error_is_not_resubmitted_for_every_chunk(monkeypatch, problem):
 def test_resumes_with_saved_tokens_per_chunk(monkeypatch, problem):
     seen_tokens: list = []
 
-    def fake(problem, data, testcases, timeout, tokens=None, on_tokens=None, heartbeat=None):
+    def fake(problem, data, testcases, timeout, tokens=None, on_tokens=None, heartbeat=None, marker=None):
         seen_tokens.append(tokens)
         return [(SimpleNamespace(time=None), "accepted", None) for _ in testcases]
 
@@ -107,7 +107,7 @@ def test_resumes_with_saved_tokens_per_chunk(monkeypatch, problem):
 def test_heartbeat_is_passed_to_every_chunk(monkeypatch, problem):
     seen: list = []
 
-    def fake(problem, data, testcases, timeout, tokens=None, on_tokens=None, heartbeat=None):
+    def fake(problem, data, testcases, timeout, tokens=None, on_tokens=None, heartbeat=None, marker=None):
         seen.append(heartbeat)
         return [(SimpleNamespace(time=None), "accepted", None) for _ in testcases]
 

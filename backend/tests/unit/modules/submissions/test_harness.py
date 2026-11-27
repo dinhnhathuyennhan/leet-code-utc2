@@ -7,6 +7,7 @@ import pytest
 
 from app.modules.submissions.judge0 import harness
 
+MARKER = harness.new_result_marker()
 PY = "def add(a, b):\n    print('debug')\n    return a + b\n"
 JS = "function add(a, b) { console.log('debug'); return a + b; }\n"
 
@@ -18,16 +19,16 @@ def _run(cmd, source, tmp_path, suffix, stdin):
 
 
 def test_python_harness_ignores_student_prints(tmp_path):
-    source = harness.build_source("python", PY, "add")
+    source = harness.build_source("python", PY, "add", marker=MARKER)
     out = _run([sys.executable], source, tmp_path, ".py", "[1,2]")
-    assert harness.json_outputs_match("3", harness.extract_result(out))
+    assert harness.json_outputs_match("3", harness.extract_result(out, MARKER))
 
 
 @pytest.mark.skipif(shutil.which("node") is None, reason="node không có")
 def test_js_harness_ignores_student_prints(tmp_path):
-    source = harness.build_source("javascript", JS, "add")
+    source = harness.build_source("javascript", JS, "add", marker=MARKER)
     out = _run(["node"], source, tmp_path, ".js", "[1,2]")
-    assert harness.json_outputs_match("3", harness.extract_result(out))
+    assert harness.json_outputs_match("3", harness.extract_result(out, MARKER))
 
 
 def test_invalid_function_name_rejected():
@@ -39,8 +40,8 @@ def test_matchers():
     assert harness.json_outputs_match("[1,2]", "[1, 2]")
     assert not harness.json_outputs_match("[1,2]", None)
     assert harness.text_outputs_match("a b\n", " a b")
-    assert harness.extract_result("noise") is None
-    assert json.loads(harness.extract_result("x" + harness.RESULT_MARKER + "5")) == 5
+    assert harness.extract_result("noise", MARKER) is None
+    assert json.loads(harness.extract_result("x" + MARKER + "5", MARKER)) == 5
 
 def test_json_matcher_float_tolerance():
     assert harness.json_outputs_match("0.3", "0.30000000000000004")

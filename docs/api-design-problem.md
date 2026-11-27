@@ -37,6 +37,13 @@
 
 Khi `function_name` có giá trị, runner gọi hàm/method cùng tên và so sánh kết quả JSON (số thực so sánh có dung sai, các kiểu còn lại so sánh chính xác; xem `api-design-testcase.md`). Function-call hỗ trợ Python và JavaScript (bắt buộc), C và C++ (tùy chọn); Java chỉ chạy ở stdin/stdout mode. Starter C/C++ dùng để suy ra chữ ký hàm: tham số tên `<tên mảng>Size` và con trỏ `returnSize` ở cuối được harness C tự xử lý và không tính là đối số JSON. Khi `function_name` bị bỏ hoặc là `null`, Judge0 nhận nguyên chuỗi testcase `input` làm stdin và kết quả stdout được so sánh sau khi trim khoảng trắng ở hai đầu.
 
+**Đọc kết quả của harness (function-call):**
+
+- Harness gọi hàm của sinh viên trước, rồi in kết quả JSON sau một **dấu mốc ngẫu nhiên** sinh riêng cho mỗi lần chấm (Run, preview, mỗi bài nộp). Output mà sinh viên tự in (`print`, `console.log`, `printf`, `cout`) trong lúc hàm chạy nằm trước dấu mốc nên không ảnh hưởng kết quả.
+- Testcase bị chấm `wrong_answer` khi output không hợp lệ: không có dấu mốc, dấu mốc xuất hiện nhiều hơn một lần, phần sau dấu mốc lớn hơn 1 MB, hoặc không phải đúng một giá trị JSON (ví dụ có dữ liệu in thêm phía sau). Ở Run và admin preview, `stderr` của testcase có thêm ghi chú "Kết quả trả về của hàm không hợp lệ..."; bài nộp chính thức không lưu `stderr` nên chỉ thấy `wrong_answer`. Output hỏng không còn làm cả bài nộp thành `internal_error`.
+- Dấu mốc được lưu ở `submission.result_marker` cùng `judge_tokens`, để worker chấm tiếp token cũ sau khi backend khởi động lại vẫn đọc đúng kết quả. Bài gửi trước khi có cột này (`NULL`) được đọc theo dấu mốc cố định cũ.
+- Giới hạn: code sinh viên vẫn lấy được dấu mốc (đọc chính file nguồn, hoặc soi frame của harness ở Python/JS). Cách này nâng mức khó để in giả kết quả chứ không chặn tuyệt đối; dù vậy in giả vẫn phải tự biết đáp án đúng của testcase ẩn.
+
 `function_name` là metadata để runner biết điểm vào cần gọi; nó không mô tả kiểu tham số hay kiểu trả về. Thứ tự và cấu trúc tham số nằm trong mảng `input`, còn chữ ký đầy đủ thể hiện trong `starter_codes`. Tên phải là identifier ASCII hợp lệ.
 
 ### Lưu trữ trong database

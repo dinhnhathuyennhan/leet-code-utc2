@@ -161,6 +161,9 @@ class Submission(SQLModel, table=True):
     passed_count: int = Field(default=0)
     submitted_datetime: datetime = Field(sa_type=UTCDateTime)
     judge_tokens: list[str] | None = Field(default=None, sa_type=JSON)
+    # Dấu mốc kết quả của harness đã nhúng vào source lúc tạo judge_tokens; cần để chấm
+    # tiếp token cũ sau khi backend khởi động lại. NULL: bài gửi trước khi có cột này.
+    result_marker: str | None = Field(default=None, max_length=64)
     # Kết quả từng testcase: [{"testcase_id", "status", "time"}]; NULL với bài chấm trước
     # khi có cột này (khi đó chỉ biết tổng passed_count).
     testcase_results: list[dict] | None = Field(default=None, sa_type=JSON)
